@@ -1,4 +1,4 @@
-# SkorSiswa
+# SkorSiswa - Course Mark Management Web Application
 
 ## Project setup
 ```
