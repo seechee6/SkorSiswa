@@ -1,4 +1,4 @@
-# course-mark-management
+# SkorSiswa
 
 ## Project setup
 ```
