@@ -1,19 +1,38 @@
--- User roles (Admin, Lecturer, Student, Advisor)
-CREATE TABLE roles (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(50) NOT NULL UNIQUE
-);
+-- -- User roles (Admin, Lecturer, Student, Advisor)
+-- CREATE TABLE roles (
+--     id INT AUTO_INCREMENT PRIMARY KEY,
+--     name VARCHAR(50) NOT NULL UNIQUE
+-- );
 
--- Users table
+-- -- Insert default roles
+-- INSERT INTO roles (name) VALUES
+-- ('Student'),
+-- ('Lecturer'),
+-- ('Advisor'),
+-- ('Admin')
+-- ON DUPLICATE KEY UPDATE name = VALUES(name);
+
+-- -- Users table
+-- CREATE TABLE users (
+--     id INT AUTO_INCREMENT PRIMARY KEY,
+--     name VARCHAR(100) NOT NULL,
+--     matric_no VARCHAR(20) UNIQUE,
+--     email VARCHAR(100) UNIQUE,
+--     password_hash VARCHAR(255) NOT NULL,
+--     role_id INT NOT NULL,
+--     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+--     FOREIGN KEY (role_id) REFERENCES roles(id)
+-- );
+
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    matric_no VARCHAR(20) UNIQUE,
+    matric_no VARCHAR(20) UNIQUE,      -- For students (nullable for staff)
+    staff_no VARCHAR(20) UNIQUE,       -- For staff (nullable for students)
     email VARCHAR(100) UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    role_id INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (role_id) REFERENCES roles(id)
+    role ENUM('Student', 'Lecturer', 'Advisor', 'Admin') NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Courses table

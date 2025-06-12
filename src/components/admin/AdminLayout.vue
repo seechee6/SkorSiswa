@@ -15,35 +15,16 @@
           </button>
         </div>
       </div>
-
-      <div class="dashboard-stats">
-        <div class="stat-card">
-          <h3>Total Users</h3>
-          <p>{{ stats.totalUsers }}</p>
-        </div>
-        <div class="stat-card">
-          <h3>Active Courses</h3>
-          <p>{{ stats.activeCourses }}</p>
-        </div>
-        <div class="stat-card">
-          <h3>Total Enrollments</h3>
-          <p>{{ stats.totalEnrollments }}</p>
-        </div>
-      </div>
-
-      <div class="dashboard-content">
-        <router-view></router-view>
-      </div>
+      <router-view></router-view>
     </div>
   </div>
 </template>
 
 <script>
-import axios from 'axios';
 import AdminSidebar from './AdminSidebar.vue';
 
 export default {
-  name: 'AdminDashboard',
+  name: 'AdminLayout',
   components: {
     AdminSidebar
   },
@@ -51,28 +32,18 @@ export default {
     return {
       isSidebarCollapsed: false,
       notificationCount: 3,
-      pageTitle: 'Dashboard',
-      stats: {
-        totalUsers: 0,
-        activeCourses: 0,
-        totalEnrollments: 0
-      }
+      pageTitle: 'Admin Dashboard'
     }
-  },
-  created() {
-    this.fetchDashboardStats();
   },
   methods: {
     handleSidebarToggle(collapsed) {
       this.isSidebarCollapsed = collapsed;
-    },
-    async fetchDashboardStats() {
-      try {
-        const response = await axios.get('/api/admin/dashboard-stats');
-        this.stats = response.data;
-      } catch (error) {
-        console.error('Error fetching dashboard stats:', error);
-      }
+    }
+  },
+  watch: {
+    '$route'(to) {
+      // Update page title based on route
+      this.pageTitle = to.meta.title || 'Admin Dashboard';
     }
   }
 }
@@ -148,47 +119,10 @@ export default {
   font-size: 0.8rem;
 }
 
-.dashboard-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
-}
-
-.stat-card {
-  background-color: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.stat-card h3 {
-  margin: 0 0 10px 0;
-  color: #666;
-}
-
-.stat-card p {
-  margin: 0;
-  font-size: 24px;
-  font-weight: bold;
-  color: #333;
-}
-
-.dashboard-content {
-  background-color: white;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
 @media (max-width: 768px) {
   .admin-main {
     margin-left: 60px;
     padding: 10px;
-  }
-
-  .dashboard-stats {
-    grid-template-columns: 1fr;
   }
 
   .search-bar input {
