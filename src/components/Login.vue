@@ -7,30 +7,20 @@
           <span class="brand-name">SkorSiswa</span>
         </div>
       </div>
-      
+
       <div class="login-form">
         <h1 class="login-title">Login</h1>
         <p class="login-subtitle">Please enter your credentials</p>
-        
+
         <form @submit.prevent="login" class="form-content">
           <div class="input-group">
-            <input 
-              v-model="matric_no" 
-              placeholder="Matric No / Email" 
-              class="login-input" 
-              type="text"
-            />
+            <input v-model="login_no" placeholder="Matric No / Staff No" class="login-input" type="text" />
           </div>
-          
+
           <div class="input-group">
-            <input 
-              v-model="password" 
-              placeholder="Password" 
-              class="login-input" 
-              type="password"
-            />
+            <input v-model="password" placeholder="Password" class="login-input" type="password" />
           </div>
-          
+
           <div class="form-options">
             <label class="remember-me">
               <input type="checkbox" v-model="rememberMe">
@@ -38,24 +28,24 @@
             </label>
             <a href="#" class="forgot-password">Forgot Password?</a>
           </div>
-          
+
           <button type="submit" class="next-btn">
             Login
             <svg class="arrow-icon" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
+              <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" />
             </svg>
           </button>
         </form>
-        
         <div class="footer-text">
-          <span class="footer-link">Click here</span> if you're a new Client
+          Don't have an account?
+          <router-link to="/register" class="footer-link">Register here</router-link>
         </div>
-        
+
         <div v-if="loginResult && loginResult.error" class="login-error">{{ loginResult.error }}</div>
         <div v-if="loginResult && loginResult.success" class="login-success">Login successful!</div>
       </div>
     </div>
-    
+
     <div class="login-right">
       <div class="background-image"></div>
     </div>
@@ -83,15 +73,17 @@ export default {
           password: this.password
         });
         this.loginResult = response.data;
+        // ...existing code...
         if (response.data.success && response.data.user) {
           localStorage.setItem('user', JSON.stringify(response.data.user));
-          if (response.data.user.role_name === 'Lecturer') {
+          const role = response.data.user.role;
+          if (role === 'Lecturer') {
             this.$router.push('/lecturer');
-          } else if (response.data.user.role_name === 'Student') {
+          } else if (role === 'Student') {
             this.$router.push('/student');
-          } else if (response.data.user.role_name === 'Advisor') {
+          } else if (role === 'Advisor') {
             this.$router.push('/advisor');
-          } else if (response.data.user.role_name === 'Admin') {
+          } else if (role === 'Admin') {
             this.$router.push('/admin');
           }
         }
@@ -316,10 +308,10 @@ export default {
 .background-image {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, 
-    rgba(218, 165, 140, 0.9) 0%, 
-    rgba(201, 137, 118, 0.95) 50%, 
-    rgba(165, 102, 89, 1) 100%);
+  background: linear-gradient(135deg,
+      rgba(218, 165, 140, 0.9) 0%,
+      rgba(201, 137, 118, 0.95) 50%,
+      rgba(165, 102, 89, 1) 100%);
   position: relative;
   display: flex;
   align-items: center;
@@ -362,7 +354,7 @@ export default {
   .login-container {
     padding: 10px;
   }
-  
+
   .login-left {
     width: 100%;
     max-width: 400px;
@@ -371,7 +363,7 @@ export default {
     border-radius: 12px;
     padding: 40px 30px;
   }
-  
+
   .brand-section {
     position: relative;
     top: 0;
@@ -379,20 +371,20 @@ export default {
     margin-bottom: 40px;
     text-align: center;
   }
-  
+
   .login-right {
     display: none;
   }
-  
+
   .login-title {
     font-size: 36px;
     text-align: center;
   }
-  
+
   .login-subtitle {
     text-align: center;
   }
-  
+
   .form-options {
     flex-direction: column;
     gap: 15px;
@@ -404,11 +396,11 @@ export default {
   .login-left {
     padding: 30px 20px;
   }
-  
+
   .login-title {
     font-size: 32px;
   }
-  
+
   .login-form {
     max-width: 280px;
   }

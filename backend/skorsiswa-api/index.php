@@ -4,9 +4,13 @@ require __DIR__ . '/vendor/autoload.php';
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\Factory\AppFactory;
+use App\Models\User;
 
 // Create Slim app
 $app = AppFactory::create();
+
+// Add error middleware
+$app->addErrorMiddleware(true, true, true);
 
 // Add JSON body parsing middleware
 $app->addBodyParsingMiddleware();
@@ -22,7 +26,7 @@ $app->add(function ($request, $handler) {
     return $response
         ->withHeader('Access-Control-Allow-Origin', '*')
         ->withHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Origin, Authorization')
-        ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
 });
 
 // Database connection settings
@@ -345,6 +349,39 @@ $app->delete('/advisor-notes/{id}', function (Request $request, Response $respon
     $stmt->execute([$args['id']]);
     $response->getBody()->write(json_encode(['success' => true]));
     return $response->withHeader('Content-Type', 'application/json');
+});
+
+// Registration endpoint
+$app->post('/register', function (Request $request, Response $response) use ($pdo) {
+    $data = $request->getParsedBody();
+    
+    $user = new User($pdo);
+    
+    // Validate input
+    $errors = $user->validateInput($data);
+    if (!empty($errors)) {
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'errors' => $errors
+        ]));
+        return $response
+            ->withHeader('Content-Type', 'application/json')
+            ->withStatus(400);
+    }
+    
+    // Register user
+    $result = $user->register(
+        $data['name'],
+        $data['matric_no'],
+        $data['email'],
+        $data['password'],
+        $data['role']
+    );
+    
+    $response->getBody()->write(json_encode($result));
+    return $response
+        ->withHeader('Content-Type', 'application/json')
+        ->withStatus($result['success'] ? 201 : 400);
 });
 
 $app->run();
