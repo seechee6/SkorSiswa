@@ -10,26 +10,15 @@ class User {
         $this->db = $db;
     }
 
-    public function register($name, $matric_no, $email, $password, $role) {
+    public function register($name, $matric_no, $staff_no, $email, $password, $role) {
         try {
-            // First check if user already exists
-            $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ? OR matric_no = ?");
-            $stmt->execute([$email, $matric_no]);
+            // Check if user already exists by email, matric_no, or staff_no
+            $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ? OR matric_no = ? OR staff_no = ?");
+            $stmt->execute([$email, $matric_no, $staff_no]);
             if ($stmt->fetch()) {
                 return [
                     'success' => false,
-                    'error' => 'User with this email or matric number already exists'
-                ];
-            }
-
-            // Get role ID from roles table
-            $stmt = $this->db->prepare("SELECT id FROM roles WHERE name = ?");
-            $stmt->execute([ucfirst($role)]);
-            $roleRow = $stmt->fetch();
-            if (!$roleRow) {
-                return [
-                    'success' => false,
-                    'error' => 'Invalid role specified'
+                    'error' => 'User with this email, matric number, or staff number already exists'
                 ];
             }
 
@@ -38,16 +27,17 @@ class User {
 
             // Insert new user
             $stmt = $this->db->prepare(
-                "INSERT INTO users (name, matric_no, email, password_hash, role_id, created_at) 
-                 VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
+                "INSERT INTO users (name, matric_no, staff_no, email, password_hash, role, created_at) 
+                 VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
             );
 
             $stmt->execute([
                 $name,
                 $matric_no,
+                $staff_no,
                 $email,
                 $password_hash,
-                $roleRow['id']
+                $role
             ]);
 
             return [
@@ -70,9 +60,15 @@ class User {
             $errors['name'] = 'Name must be at least 2 characters long';
         }
 
-        // Validate matric number
-        if (empty($data['matric_no']) || !preg_match('/^[A-Za-z0-9]+$/', $data['matric_no'])) {
+        // Validate matric number or staff number
+        if (empty($data['matric_no']) && empty($data['staff_no'])) {
+            $errors['matric_no'] = 'Matric number or staff number is required';
+        }
+        if (!empty($data['matric_no']) && !preg_match('/^[A-Za-z0-9]+$/', $data['matric_no'])) {
             $errors['matric_no'] = 'Invalid matric number format';
+        }
+        if (!empty($data['staff_no']) && !preg_match('/^[A-Za-z0-9]+$/', $data['staff_no'])) {
+            $errors['staff_no'] = 'Invalid staff number format';
         }
 
         // Validate email
@@ -86,8 +82,8 @@ class User {
         }
 
         // Validate role
-        $validRoles = ['student', 'lecturer', 'advisor'];
-        if (empty($data['role']) || !in_array(strtolower($data['role']), $validRoles)) {
+        $validRoles = ['Student', 'Lecturer', 'Advisor', 'Admin'];
+        if (empty($data['role']) || !in_array($data['role'], $validRoles)) {
             $errors['role'] = 'Invalid role selected';
         }
 
@@ -95,12 +91,13 @@ class User {
     }
 
     public function login($login_id, $password) {
-        $stmt = $this->db->prepare("SELECT * FROM users WHERE matric_no = ? OR staff_no = ?");
-        $stmt->execute([$login_id, $login_id]);
+        // Try to find user by matric_no, staff_no, or email
+        $stmt = $this->db->prepare("SELECT * FROM users WHERE matric_no = ? OR staff_no = ? OR email = ?");
+        $stmt->execute([$login_id, $login_id, $login_id]);
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password_hash'])) {
-            // return user info including 'role'
+            unset($user['password_hash']);
             return [
                 'success' => true,
                 'user' => $user
@@ -120,22 +117,15 @@ $app->post('/admin/users', function ($request, $response) use ($db) {
     // Validate and sanitize input...
     $passwordHash = password_hash($data['password'], PASSWORD_DEFAULT);
 
-    // Get role_id from roles table
-    $roleStmt = $db->prepare("SELECT id FROM roles WHERE name = ?");
-    $roleStmt->execute([$data['role']]);
-    $role = $roleStmt->fetch();
-    if (!$role) {
-        return $response->withStatus(400)->withJson(['error' => 'Invalid role']);
-    }
-
-    $stmt = $db->prepare("INSERT INTO users (name, matric_no, email, password_hash, role_id) VALUES (?, ?, ?, ?, ?)");
+    $stmt = $db->prepare("INSERT INTO users (name, matric_no, email, password_hash, staff_no, role) VALUES (?, ?, ?, ?, ?, ?)");
     try {
         $stmt->execute([
             $data['name'],
             $data['matric_no'],
             $data['email'],
             $passwordHash,
-            $role['id']
+            $data['staff_no'],
+            $data['role']
         ]);
         return $response->withJson(['success' => true]);
     } catch (PDOException $e) {

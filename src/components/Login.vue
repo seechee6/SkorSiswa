@@ -14,7 +14,7 @@
 
         <form @submit.prevent="login" class="form-content">
           <div class="input-group">
-            <input v-model="login_no" placeholder="Matric No / Staff No" class="login-input" type="text" />
+            <input v-model="login_id" placeholder="Matric No / Staff No" class="login-input" type="text" />
           </div>
 
           <div class="input-group">
@@ -59,7 +59,7 @@ export default {
   name: 'LoginForm',
   data() {
     return {
-      matric_no: '',
+      login_id: '',
       password: '',
       loginResult: null,
       rememberMe: false
@@ -69,11 +69,10 @@ export default {
     async login() {
       try {
         const response = await api.post('/login', {
-          matric_no: this.matric_no,
+          login_id: this.login_id, // could be matric_no, staff_no, or email
           password: this.password
         });
         this.loginResult = response.data;
-        // ...existing code...
         if (response.data.success && response.data.user) {
           localStorage.setItem('user', JSON.stringify(response.data.user));
           const role = response.data.user.role;

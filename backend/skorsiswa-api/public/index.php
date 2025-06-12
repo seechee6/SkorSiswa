@@ -1,5 +1,5 @@
 <?php
-require __DIR__ . '/vendor/autoload.php';
+require __DIR__ . '/../vendor/autoload.php';
 
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -15,18 +15,19 @@ $app->addErrorMiddleware(true, true, true);
 // Add JSON body parsing middleware
 $app->addBodyParsingMiddleware();
 
-// Handle preflight OPTIONS requests for CORS
-$app->options('/{routes:.+}', function ($request, $response, $args) {
-  return $response;
-});
-
 // CORS middleware
 $app->add(function ($request, $handler) {
     $response = $handler->handle($request);
     return $response
-        ->withHeader('Access-Control-Allow-Origin', '*')
+        ->withHeader('Access-Control-Allow-Origin', 'http://localhost:8080')
         ->withHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Origin, Authorization')
-        ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+        ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        ->withHeader('Access-Control-Allow-Credentials', 'true');
+});
+
+// Handle preflight OPTIONS requests
+$app->options('/{routes:.+}', function ($request, $response, $args) {
+    return $response;
 });
 
 // Database connection settings
@@ -68,20 +69,20 @@ $app->get('/login', function (Request $request, Response $response) {
 // Login endpoint
 $app->post('/login', function (Request $request, Response $response) use ($pdo) {
     $data = $request->getParsedBody();
-    $matric_no = $data['matric_no'] ?? null;
+    $login_id = $data['login_id'] ?? null;
     $password = $data['password'] ?? null;
 
-    if (!$matric_no || !$password) {
-        $response->getBody()->write(json_encode(['error' => 'Matric number and password required.']));
+    if (!$login_id || !$password) {
+        $response->getBody()->write(json_encode(['error' => 'Login ID and password required.']));
         return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
     }
 
-    $stmt = $pdo->prepare('SELECT u.*, r.name AS role_name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.matric_no = ?');
-    $stmt->execute([$matric_no]);
+    // Try to find user by matric_no, staff_no, or email
+    $stmt = $pdo->prepare('SELECT * FROM users WHERE matric_no = ? OR staff_no = ? OR email = ?');
+    $stmt->execute([$login_id, $login_id, $login_id]);
     $user = $stmt->fetch();
 
     if ($user && password_verify($password, $user['password_hash'])) {
-        // Remove sensitive info
         unset($user['password_hash']);
         $response->getBody()->write(json_encode(['success' => true, 'user' => $user]));
         return $response->withHeader('Content-Type', 'application/json');
