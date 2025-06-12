@@ -1,58 +1,101 @@
-&lt;template&gt;
-  &lt;div class="student-sidebar"&gt;
-    &lt;div class="sidebar-header"&gt;Student Panel&lt;/div&gt;
-    &lt;ul class="sidebar-list"&gt;
-      &lt;li&gt;&lt;router-link to="/student/dashboard"&gt;Dashboard&lt;/router-link&gt;&lt;/li&gt;
-      &lt;li&gt;&lt;router-link to="/student/marks"&gt;Mark Breakdown&lt;/router-link&gt;&lt;/li&gt;
-      &lt;li&gt;&lt;router-link to="/student/compare"&gt;Compare with Coursemates&lt;/router-link&gt;&lt;/li&gt;
-      &lt;li&gt;&lt;router-link to="/student/ranking"&gt;Class Ranking&lt;/router-link&gt;&lt;/li&gt;
-      &lt;li&gt;&lt;router-link to="/student/simulator"&gt;What-If Simulator&lt;/router-link&gt;&lt;/li&gt;
-      &lt;li&gt;&lt;router-link to="/student/trends"&gt;Performance Trends&lt;/router-link&gt;&lt;/li&gt;
-      &lt;li&gt;&lt;router-link to="/student/appeals"&gt;Submit Appeal&lt;/router-link&gt;&lt;/li&gt;
-      &lt;li&gt;&lt;router-link to="/student/notifications"&gt;Notifications&lt;/router-link&gt;&lt;/li&gt;
-    &lt;/ul&gt;
-  &lt;/div&gt;
-&lt;/template&gt;
+<template>
+  <nav class="sidebar">
+    <div class="logo">
+      <img src="@/assets/logo.png" alt="SkorSiswa Logo" />
+      <h1>SkorSiswa</h1>
+    </div>
+    <div class="nav-links">
+      <router-link to="/student/dashboard" class="nav-item" active-class="active">
+        <i class="fas fa-home"></i>
+        Dashboard
+      </router-link>
+      <router-link to="/student/marks" class="nav-item" active-class="active">
+        <i class="fas fa-chart-bar"></i>
+        Mark Breakdown
+      </router-link>
+      <router-link to="/student/compare" class="nav-item" active-class="active">
+        <i class="fas fa-users"></i>
+        Compare with Coursemates
+      </router-link>
+      <router-link to="/student/ranking" class="nav-item" active-class="active">
+        <i class="fas fa-trophy"></i>
+        Ranking
+      </router-link>
+      <router-link to="/student/simulator" class="nav-item" active-class="active">
+        <i class="fas fa-calculator"></i>
+        What-If Simulator
+      </router-link>
+      <router-link to="/student/remarks" class="nav-item" active-class="active">
+        <i class="fas fa-comment-alt"></i>
+        Remark Requests
+      </router-link>
+    </div>
+  </nav>
+</template>
 
-&lt;script&gt;
+<script>
 export default {
   name: 'StudentSidebar'
 }
-&lt;/script&gt;
+</script>
 
-&lt;style scoped&gt;
-.student-sidebar {
-  width: 220px;
+<style scoped>
+.sidebar {
+  width: 250px;
   background: #2c3e50;
-  color: #fff;
-  min-height: 100vh;
-  padding-top: 20px;
-  box-shadow: 2px 0 8px rgba(0,0,0,0.04);
+  color: white;
+  padding: 1rem;
+  height: 100vh;
+  position: sticky;
+  top: 0;
 }
-.sidebar-header {
-  font-size: 1.3em;
-  font-weight: bold;
-  padding: 16px 24px;
-  border-bottom: 1px solid #34495e;
-  margin-bottom: 10px;
+
+.logo {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  margin-bottom: 2rem;
 }
-.sidebar-list {
-  list-style: none;
-  padding: 0;
+
+.logo img {
+  width: 40px;
+  height: 40px;
+  margin-right: 1rem;
+}
+
+.logo h1 {
+  font-size: 1.5rem;
   margin: 0;
+  font-weight: 600;
 }
-.sidebar-list li {
-  margin: 0;
+
+.nav-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
-.sidebar-list a {
-  display: block;
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
   color: #ecf0f1;
   text-decoration: none;
-  padding: 12px 24px;
-  transition: background 0.2s;
+  border-radius: 6px;
+  transition: all 0.3s ease;
 }
-.sidebar-list a.router-link-exact-active,
-.sidebar-list a:hover {
-  background: #34495e;
+
+.nav-item i {
+  margin-right: 0.75rem;
+  width: 20px;
 }
-&lt;/style&gt;
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.nav-item.active {
+  background: #3498db;
+  color: white;
+}
+</style>

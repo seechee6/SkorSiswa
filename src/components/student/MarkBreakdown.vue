@@ -1,72 +1,105 @@
-&lt;template&gt;
-  &lt;div class="marks-container"&gt;
-    &lt;h2 class="page-title"&gt;Mark Breakdown&lt;/h2&gt;
-    
-    &lt;div class="course-select"&gt;
-      &lt;select v-model="selectedCourseId" @change="fetchMarks"&gt;
-        &lt;option value=""&gt;Select a Course&lt;/option&gt;
-        &lt;option v-for="course in courses" :key="course.id" :value="course.id"&gt;
+<template>
+  <div class="marks-container">
+    <div class="course-selector">
+      <label for="course">Select Course:</label>
+      <select id="course" v-model="selectedCourseId" @change="fetchCourseMarks">
+        <option value="">Select a course</option>
+        <option v-for="course in courses" :key="course.id" :value="course.id">
           {{ course.code }} - {{ course.name }}
-        &lt;/option&gt;
-      &lt;/select&gt;
-    &lt;/div&gt;
+        </option>
+      </select>
+    </div>
 
-    &lt;div v-if="selectedCourseId" class="marks-content"&gt;
-      &lt;div class="marks-summary"&gt;
-        &lt;div class="summary-card"&gt;
-          &lt;h3&gt;Overall Grade&lt;/h3&gt;
-          &lt;div class="summary-value grade"&gt;{{ overallGrade }}&lt;/div&gt;
-        &lt;/div&gt;
-        &lt;div class="summary-card"&gt;
-          &lt;h3&gt;Total Score&lt;/h3&gt;
-          &lt;div class="summary-value"&gt;{{ totalScore.toFixed(2) }}%&lt;/div&gt;
-        &lt;/div&gt;
-        &lt;div class="summary-card"&gt;
-          &lt;h3&gt;Class Average&lt;/h3&gt;
-          &lt;div class="summary-value"&gt;{{ classAverage.toFixed(2) }}%&lt;/div&gt;
-        &lt;/div&gt;
-      &lt;/div&gt;
+    <div v-if="selectedCourseId && courseDetails" class="course-details">
+      <div class="course-header">
+        <h2>{{ courseDetails.code }} - {{ courseDetails.name }}</h2>
+        <div class="grade-badge" :class="getGradeClass(courseDetails.currentGrade)">
+          {{ courseDetails.currentGrade || 'IP' }}
+        </div>
+      </div>
 
-      &lt;div class="marks-table"&gt;
-        &lt;table&gt;
-          &lt;thead&gt;
-            &lt;tr&gt;
-              &lt;th&gt;Component&lt;/th&gt;
-              &lt;th&gt;Weight&lt;/th&gt;
-              &lt;th&gt;Your Score&lt;/th&gt;
-              &lt;th&gt;Max Score&lt;/th&gt;
-              &lt;th&gt;Weighted Score&lt;/th&gt;
-              &lt;th&gt;Class Average&lt;/th&gt;
-            &lt;/tr&gt;
-          &lt;/thead&gt;
-          &lt;tbody&gt;
-            &lt;tr v-for="component in components" :key="component.id"&gt;
-              &lt;td&gt;{{ component.name }}&lt;/td&gt;
-              &lt;td&gt;{{ component.weight }}%&lt;/td&gt;
-              &lt;td&gt;{{ component.score }}&lt;/td&gt;
-              &lt;td&gt;{{ component.max_score }}&lt;/td&gt;
-              &lt;td&gt;{{ ((component.score / component.max_score) * component.weight).toFixed(2) }}%&lt;/td&gt;
-              &lt;td&gt;{{ component.classAverage.toFixed(2) }}&lt;/td&gt;
-            &lt;/tr&gt;
-          &lt;/tbody&gt;
-          &lt;tfoot&gt;
-            &lt;tr&gt;
-              &lt;td colspan="4"&gt;&lt;strong&gt;Total&lt;/strong&gt;&lt;/td&gt;
-              &lt;td&gt;&lt;strong&gt;{{ totalScore.toFixed(2) }}%&lt;/strong&gt;&lt;/td&gt;
-              &lt;td&gt;&lt;strong&gt;{{ classAverage.toFixed(2) }}%&lt;/strong&gt;&lt;/td&gt;
-            &lt;/tr&gt;
-          &lt;/tfoot&gt;
-        &lt;/table&gt;
-      &lt;/div&gt;
-    &lt;/div&gt;
+      <div class="overall-progress">
+        <h3>Overall Progress</h3>
+        <div class="progress-bar">
+          <div 
+            :style="{ width: courseDetails.overallProgress + '%' }" 
+            class="progress-fill">
+            {{ courseDetails.overallProgress }}%
+          </div>
+        </div>
+      </div>
 
-    &lt;div v-if="error" class="error-message"&gt;
-      {{ error }}
-    &lt;/div&gt;
-  &lt;/div&gt;
-&lt;/template&gt;
+      <div class="assessment-breakdown">
+        <h3>Assessment Components</h3>
+        <div class="components-grid">
+          <div v-for="component in courseDetails.components" 
+               :key="component.id" 
+               class="component-card">
+            <div class="component-header">
+              <h4>{{ component.name }}</h4>
+              <span class="weight">{{ component.weight }}%</span>
+            </div>
+            <div class="marks-section">
+              <div class="marks-row">
+                <span>Your Score:</span>
+                <span class="score">{{ component.obtainedMarks || 'N/A' }}/{{ component.maxMarks }}</span>
+              </div>
+              <div class="marks-row">
+                <span>Class Average:</span>
+                <span>{{ component.classAverage || 'N/A' }}</span>
+              </div>
+            </div>
+            <div class="progress-bar">
+              <div 
+                :style="{ width: (component.obtainedMarks / component.maxMarks * 100) + '%' }" 
+                class="progress-fill">
+              </div>
+            </div>
+            <button 
+              v-if="!component.remarkRequested && !component.isUpcoming" 
+              @click="requestRemark(component)"
+              class="remark-btn">
+              Request Remark
+            </button>
+            <span v-if="component.remarkRequested" class="remark-status">
+              Remark Requested
+            </span>
+            <span v-if="component.isUpcoming" class="upcoming-badge">
+              Upcoming
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
 
-&lt;script&gt;
+    <!-- Remark Request Modal -->
+    <div v-if="showRemarkModal" class="modal">
+      <div class="modal-content">
+        <h3>Request Remark</h3>
+        <p>Component: {{ selectedComponent?.name }}</p>
+        <div class="form-group">
+          <label for="justification">Justification:</label>
+          <textarea 
+            id="justification" 
+            v-model="remarkJustification" 
+            rows="4"
+            placeholder="Please provide your justification for the remark request">
+          </textarea>
+        </div>
+        <div class="modal-actions">
+          <button @click="submitRemarkRequest" :disabled="!remarkJustification">
+            Submit Request
+          </button>
+          <button @click="closeRemarkModal" class="cancel-btn">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
 import api from '../../api'
 
 export default {
@@ -75,194 +108,255 @@ export default {
     return {
       courses: [],
       selectedCourseId: '',
-      components: [],
-      error: '',
-      classAverage: 0,
-      totalScore: 0,
-      overallGrade: ''
+      courseDetails: null,
+      showRemarkModal: false,
+      selectedComponent: null,
+      remarkJustification: '',
     }
   },
   methods: {
+    getGradeClass(grade) {
+      const gradeClasses = {
+        'A': 'excellent',
+        'B': 'good',
+        'C': 'average',
+        'D': 'poor',
+        'F': 'fail'
+      }
+      return gradeClasses[grade] || 'in-progress'
+    },
     async fetchCourses() {
       try {
         const user = JSON.parse(localStorage.getItem('user'))
         const response = await api.get(`/users/${user.id}/courses`)
         this.courses = response.data
-        
-        // If course ID is in URL params, select it
-        const urlParams = new URLSearchParams(window.location.search)
-        const courseId = urlParams.get('course')
-        if (courseId) {
-          this.selectedCourseId = courseId
-          this.fetchMarks()
-        }
       } catch (error) {
-        this.error = 'Failed to load courses'
-        console.error('Error fetching courses:', error)
+        console.error('Failed to fetch courses:', error)
       }
     },
-    async fetchMarks() {
+    async fetchCourseMarks() {
       if (!this.selectedCourseId) return
       
       try {
         const user = JSON.parse(localStorage.getItem('user'))
-        const enrollment = await api.get(`/courses/${this.selectedCourseId}/enrollment/${user.id}`)
-        const enrollmentId = enrollment.data.id
-
-        // Get marks and components
-        const [marksRes, componentsRes] = await Promise.all([
-          api.get(`/enrollments/${enrollmentId}/marks`),
-          api.get(`/courses/${this.selectedCourseId}/components`)
-        ])
-
-        // Calculate scores and averages
-        this.processMarksData(marksRes.data, componentsRes.data)
+        const response = await api.get(
+          `/users/${user.id}/courses/${this.selectedCourseId}/marks`
+        )
+        this.courseDetails = response.data
       } catch (error) {
-        this.error = 'Failed to load marks'
-        console.error('Error fetching marks:', error)
+        console.error('Failed to fetch course marks:', error)
       }
     },
-    processMarksData(marks, components) {
-      this.components = components.map(comp => {
-        const mark = marks.find(m => m.component_id === comp.id)
-        return {
-          ...comp,
-          score: mark ? mark.mark : 0,
-          classAverage: marks.reduce((sum, m) => 
-            m.component_id === comp.id ? sum + m.mark : sum, 0) / 
-            marks.filter(m => m.component_id === comp.id).length || 0
-        }
-      })
-
-      // Calculate total score
-      this.totalScore = this.components.reduce((sum, comp) => 
-        sum + ((comp.score / comp.max_score) * comp.weight), 0)
-
-      // Calculate class average
-      this.classAverage = this.components.reduce((sum, comp) => sum + comp.classAverage, 0) / 
-        (this.components.length || 1)
-
-      // Determine grade
-      this.overallGrade = this.calculateGrade(this.totalScore)
+    requestRemark(component) {
+      this.selectedComponent = component
+      this.showRemarkModal = true
     },
-    calculateGrade(score) {
-      if (score >= 80) return 'A'
-      if (score >= 70) return 'B'
-      if (score >= 60) return 'C'
-      if (score >= 50) return 'D'
-      return 'F'
+    async submitRemarkRequest() {
+      try {
+        const user = JSON.parse(localStorage.getItem('user'))
+        await api.post('/remark-requests', {
+          userId: user.id,
+          componentId: this.selectedComponent.id,
+          justification: this.remarkJustification
+        })
+        
+        // Update the UI to show remark requested
+        const component = this.courseDetails.components.find(
+          c => c.id === this.selectedComponent.id
+        )
+        if (component) {
+          component.remarkRequested = true
+        }
+        
+        this.closeRemarkModal()
+      } catch (error) {
+        console.error('Failed to submit remark request:', error)
+      }
+    },
+    closeRemarkModal() {
+      this.showRemarkModal = false
+      this.selectedComponent = null
+      this.remarkJustification = ''
     }
   },
   mounted() {
     this.fetchCourses()
+    
+    // If course ID is provided in query params, select it
+    const courseId = this.$route.query.course
+    if (courseId) {
+      this.selectedCourseId = courseId
+      this.fetchCourseMarks()
+    }
   }
 }
-&lt;/script&gt;
+</script>
 
-&lt;style scoped&gt;
+<style scoped>
 .marks-container {
   max-width: 1200px;
   margin: 0 auto;
+  padding: 2rem;
 }
 
-.page-title {
-  font-size: 32px;
-  font-weight: 300;
-  margin-bottom: 32px;
-  color: #2c3e50;
+.course-selector {
+  margin-bottom: 2rem;
 }
 
-.course-select {
-  margin-bottom: 32px;
-}
-
-.course-select select {
+select {
   width: 100%;
   max-width: 400px;
-  padding: 12px;
+  padding: 0.75rem;
   border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 16px;
-  color: #2c3e50;
-  background: white;
+  border-radius: 4px;
+  font-size: 1rem;
+  margin-top: 0.5rem;
 }
 
-.marks-summary {
+.course-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.grade-badge {
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+.overall-progress {
+  margin-bottom: 2rem;
+}
+
+.progress-bar {
+  height: 8px;
+  background: #ecf0f1;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #3498db;
+  transition: width 0.3s ease;
+}
+
+.components-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 24px;
-  margin-bottom: 32px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
 }
 
-.summary-card {
+.component-card {
   background: white;
   border-radius: 8px;
-  padding: 24px;
-  text-align: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-.summary-card h3 {
-  font-size: 14px;
+.component-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.weight {
   color: #7f8c8d;
-  margin: 0 0 12px 0;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-size: 0.9rem;
 }
 
-.summary-value {
-  font-size: 28px;
+.marks-section {
+  margin: 1rem 0;
+}
+
+.marks-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.score {
   font-weight: 500;
-  color: #2c3e50;
 }
 
-.summary-value.grade {
-  font-size: 36px;
-  color: #3498db;
-}
-
-.marks-table {
-  background: white;
-  border-radius: 8px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-  overflow-x: auto;
-}
-
-table {
+.remark-btn {
   width: 100%;
-  border-collapse: collapse;
+  padding: 0.75rem;
+  margin-top: 1rem;
+  background: transparent;
+  border: 1px solid #3498db;
+  color: #3498db;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s;
 }
 
-th, td {
-  padding: 12px;
-  text-align: left;
-  border-bottom: 1px solid #ecf0f1;
+.remark-btn:hover {
+  background: #3498db;
+  color: white;
 }
 
-th {
-  font-weight: 500;
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 500px;
+}
+
+textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-top: 0.5rem;
+  resize: vertical;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.cancel-btn {
+  background: #95a5a6;
+}
+
+.remark-status {
+  display: block;
+  text-align: center;
+  color: #e67e22;
+  margin-top: 1rem;
+}
+
+.upcoming-badge {
+  display: block;
+  text-align: center;
   color: #7f8c8d;
-  text-transform: uppercase;
-  font-size: 12px;
-  letter-spacing: 0.5px;
+  margin-top: 1rem;
 }
 
-td {
-  color: #2c3e50;
-}
-
-tfoot td {
-  border-bottom: none;
-  font-weight: 500;
-}
-
-.error-message {
-  margin-top: 16px;
-  padding: 12px;
-  background: #fee;
-  color: #e74c3c;
-  border-radius: 6px;
-  border-left: 4px solid #e74c3c;
-}
-&lt;/style&gt;
+.excellent { background: #e3fcef; color: #27ae60; }
+.good { background: #e3f2fc; color: #3498db; }
+.average { background: #ffeeba; color: #f1c40f; }
+.poor { background: #ffe3e3; color: #e74c3c; }
+.fail { background: #fee; color: #c0392b; }
+.in-progress { background: #f0f3f6; color: #7f8c8d; }
+</style>

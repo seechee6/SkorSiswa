@@ -12,7 +12,13 @@ import FullMarkBreakdown from '../components/lecturer/FullMarkBreakdown.vue'
 import LecturerAnalytics from '../components/lecturer/Analytics.vue'
 import TrendGraphs from '../components/lecturer/TrendGraphs.vue'
 import LecturerNotifications from '../components/lecturer/Notifications.vue'
+import StudentLayout from '../components/student/StudentLayout.vue'
 import StudentDashboard from '../components/student/StudentDashboard.vue'
+import MarkBreakdown from '../components/student/MarkBreakdown.vue'
+import CompareWithCoursemates from '../components/student/CompareWithCoursemates.vue'
+import Ranking from '../components/student/Ranking.vue'
+import WhatIfSimulator from '../components/student/WhatIfSimulator.vue'
+import PerformanceTrends from '../components/student/PerformanceTrends.vue'
 import AdvisorDashboard from '../components/advisor/AdvisorDashboard.vue'
 import AdminDashboard from '../components/admin/AdminDashboard.vue'
 import Login from '../components/Login.vue'
@@ -37,8 +43,20 @@ const routes = [
       { path: 'trend-graphs', component: TrendGraphs },
       { path: 'notifications', component: LecturerNotifications }
     ]
+  },  {
+    path: '/student',
+    component: StudentLayout,
+    children: [
+      { path: '', redirect: '/student/dashboard' },
+      { path: 'dashboard', component: StudentDashboard },
+      { path: 'marks', component: MarkBreakdown },
+      { path: 'compare', component: CompareWithCoursemates },
+      { path: 'ranking', component: Ranking },
+      { path: 'simulator', component: WhatIfSimulator },
+      { path: 'performance', component: PerformanceTrends },
+      { path: 'remarks', component: MarkBreakdown }
+    ]
   },
-  { path: '/student', component: StudentDashboard },
   { path: '/advisor', component: AdvisorDashboard },
   { path: '/admin', component: AdminDashboard },
   { path: '/:pathMatch(.*)*', redirect: '/' }
