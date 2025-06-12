@@ -19,7 +19,6 @@ import Login from '../components/Login.vue'
 
 const routes = [
   { path: '/', component: Login },
-  { path: '/register', component: () => import('@/components/RegisterForm.vue') },
   {
     path: '/lecturer',
     component: LecturerLayout,
