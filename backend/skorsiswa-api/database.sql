@@ -19,7 +19,7 @@ CREATE TABLE courses (
     code VARCHAR(20) NOT NULL UNIQUE,
     name VARCHAR(100) NOT NULL,
     semester VARCHAR(10),
-    year INT,
+    year VARCHAR(10),  -- Changed from INT to VARCHAR(10) to support "2024/2025" format
     lecturer_id INT NOT NULL,
     FOREIGN KEY (lecturer_id) REFERENCES users(id)
 );
@@ -132,9 +132,9 @@ INSERT INTO users (matric_no, staff_id, full_name, email, password_hash, role_id
 
 -- Insert sample courses
 INSERT INTO courses (code, name, semester, year, lecturer_id) VALUES
-('CS101', 'Introduction to Computer Science', 'Fall', 2024, 2),
-('CS102', 'Data Structures and Algorithms', 'Spring', 2024, 2),
-('MATH201', 'Calculus II', 'Fall', 2024, 3);
+('CS101', 'Introduction to Computer Science', 'Fall', '2024/2025', 2),
+('CS102', 'Data Structures and Algorithms', 'Spring', '2024/2025', 2),
+('MATH201', 'Calculus II', 'Fall', '2024/2025', 3);
 
 -- Insert sample enrollments
 INSERT INTO enrollments (student_id, course_id) VALUES
