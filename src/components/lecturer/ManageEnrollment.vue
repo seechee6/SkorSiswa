@@ -1,77 +1,231 @@
 <template>
-  <div class="manage-enrollment">
+  <!-- Only show the main enrollment page when not used as modal -->
+  <div v-if="!isModalOnly" class="manage-enrollment">
     <!-- Header Section -->
     <div class="header-section">
       <h3>Manage Student Enrollment</h3>
     </div>
 
-    <!-- Course Selection Card -->
-    <div class="card course-selection-card">
+    <!-- Course Management Card -->
+    <div class="card course-management-card">
       <div class="card-header">
         <div class="card-title">
           <svg class="card-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
           </svg>
-          Select Course
-        </div>
-        <div class="course-info" v-if="selectedCourseId">
-          <span class="course-badge">{{ selectedCourseName }}</span>
+          Course Management
         </div>
       </div>
-      
-      <div class="course-selector">
-        <select 
-          v-model="selectedCourseId" 
-          @change="onCourseChange" 
-          class="course-select"
-          :class="{ 'has-selection': selectedCourseId }"
-        >
-          <option value="">Choose a course to manage enrollments...</option>
-          <option v-for="course in lecturerCourses" :key="course.id" :value="course.id">
-            {{ course.code }} - {{ course.name }} ({{ course.semester }}, {{ course.year }})
-          </option>
-        </select>
+
+      <!-- Filters Section -->
+      <div class="filters-section">
+        <div class="filter-group">
+          <div class="filter-item">
+            <label>Semester</label>
+            <select v-model="semesterFilter" class="filter-select">
+              <option value="">All Semesters</option>
+              <option value="1">Semester 1</option>
+              <option value="2">Semester 2</option>
+              <option value="3">Semester 3</option>
+            </select>
+          </div>
+          
+          <div class="filter-item">
+            <label>Year</label>
+            <select v-model="yearFilter" class="filter-select">
+              <option value="">All Years</option>
+              <option v-for="year in availableYears" :key="year" :value="year">
+                {{ year }}
+              </option>
+            </select>
+          </div>
+          
+          <div class="filter-item search-filter">
+            <label>Search Course</label>
+            <div class="search-container">
+              <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+              </svg>
+              <input 
+                v-model="courseSearchTerm" 
+                placeholder="Search by code or name..."
+                class="search-input"
+              />
+            </div>
+          </div>
+          
+          <div class="filter-actions">
+            <button @click="clearFilters" class="action-btn-small secondary">
+              <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+              </svg>
+              Clear Filters
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Courses Table -->
+      <div class="table-container">
+        <table class="courses-table" v-if="filteredCourses.length > 0">
+          <thead>
+            <tr>
+              <th class="sortable" @click="sortCoursesBy('code')">
+                Course Code
+                <svg v-if="courseSortField === 'code'" class="sort-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+                </svg>
+              </th>
+              <th class="sortable" @click="sortCoursesBy('name')">
+                Course Name
+                <svg v-if="courseSortField === 'name'" class="sort-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+                </svg>
+              </th>
+              <th>Semester</th>
+              <th>Year</th>
+              <th>Enrolled Students</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="course in paginatedCourses" :key="course.id" class="course-row">
+              <td>
+                <span class="course-code-badge">{{ course.code }}</span>
+              </td>
+              <td>
+                <div class="course-name">{{ course.name }}</div>
+              </td>
+              <td>
+                <span class="semester-badge">Semester {{ course.semester }}</span>
+              </td>
+              <td>
+                <span class="year-text">{{ course.year }}</span>
+              </td>
+              <td>
+                <div class="enrollment-count">
+                  <svg class="count-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 919.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                  </svg>
+                  {{ getCourseEnrollmentCount(course.id) }} students
+                </div>
+              </td>
+              <td>
+                <span class="status-badge active">Active</span>
+              </td>
+              <td>
+                <div class="action-buttons">
+                  <button 
+                    @click="openEnrollModal(course)" 
+                    class="action-btn-small primary"
+                    title="Enroll Student"
+                  >
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
+                    </svg>
+                  </button>
+                  <button 
+                    @click="openBulkEnrollModal(course)" 
+                    class="action-btn-small secondary"
+                    title="Bulk Enroll"
+                  >
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 919.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                    </svg>
+                  </button>
+                  <button 
+                    @click="viewCourseEnrollments(course)" 
+                    class="action-btn-small info"
+                    title="View Enrolled Students"
+                  >
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Empty State for Courses -->
+        <div v-else class="empty-state-table">
+          <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+          </svg>
+          <h4>No Courses Found</h4>
+          <p>{{ hasActiveFilters ? 'No courses match your current filters.' : 'You have no courses assigned yet.' }}</p>
+        </div>
+      </div>
+
+      <!-- Courses Pagination -->
+      <div class="pagination-container" v-if="coursesTotalPages > 1">
+        <div class="pagination-info">
+          Showing {{ coursesStartIndex + 1 }}-{{ coursesEndIndex }} of {{ filteredCourses.length }} courses
+        </div>
+        <div class="pagination">
+          <button 
+            @click="coursesCurrentPage = 1" 
+            :disabled="coursesCurrentPage === 1"
+            class="pagination-btn"
+          >
+            First
+          </button>
+          <button 
+            @click="coursesCurrentPage--" 
+            :disabled="coursesCurrentPage === 1"
+            class="pagination-btn"
+          >
+            Previous
+          </button>
+          <span class="page-numbers">
+            <button 
+              v-for="page in coursesVisiblePages"
+              :key="page"
+              @click="coursesCurrentPage = page"
+              class="page-btn"
+              :class="{ active: coursesCurrentPage === page }"
+            >
+              {{ page }}
+            </button>
+          </span>
+          <button 
+            @click="coursesCurrentPage++" 
+            :disabled="coursesCurrentPage === coursesTotalPages"
+            class="pagination-btn"
+          >
+            Next
+          </button>
+          <button 
+            @click="coursesCurrentPage = coursesTotalPages" 
+            :disabled="coursesCurrentPage === coursesTotalPages"
+            class="pagination-btn"
+          >
+            Last
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- Quick Actions Card -->
-    <div class="card quick-actions-card" v-if="selectedCourseId">
+    <!-- Enrolled Students Management (shown when viewing a specific course) -->
+    <div class="card enrollments-card" v-if="selectedCourseId && showEnrollmentView">
       <div class="card-header">
         <div class="card-title">
           <svg class="card-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 515.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 919.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
           </svg>
-          Enrollment Actions
-        </div>
-      </div>
-      
-      <div class="quick-actions-grid">
-        <button @click="showEnrollModal = true" class="action-btn primary">
-          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
-          </svg>
-          Enroll Student
-        </button>
-        
-        <button @click="showBulkEnrollModal = true" class="action-btn secondary">
-          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
-          </svg>
-          Bulk Enroll
-        </button>
-      </div>
-    </div>
-
-    <!-- Enrolled Students Management -->
-    <div class="card enrollments-card" v-if="selectedCourseId">
-      <div class="card-header">
-        <div class="card-title">
-          <svg class="card-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
-          </svg>
-          Enrolled Students
+          Enrolled Students - {{ selectedCourseName }}
         </div>
         <div class="card-actions">
+          <button @click="showEnrollmentView = false" class="action-btn-small secondary">
+            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+            </svg>
+            Back to Courses
+          </button>
+          
           <div class="search-container">
             <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
@@ -82,46 +236,10 @@
               class="search-input"
             />
           </div>
-          <div class="view-controls">
-            <button 
-              @click="viewMode = 'table'" 
-              class="view-btn"
-              :class="{ active: viewMode === 'table' }"
-            >
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
-              </svg>
-            </button>
-            <button 
-              @click="viewMode = 'grid'" 
-              class="view-btn"
-              :class="{ active: viewMode === 'grid' }"
-            >
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
-              </svg>
-            </button>
-          </div>
         </div>
       </div>
 
-      <!-- Batch Actions Bar -->
-      <div class="batch-actions" v-if="selectedStudents.length > 0">
-        <div class="batch-buttons">
-          <button @click="bulkRemoveStudents" class="batch-btn danger">
-            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-            </svg>
-            Remove Selected
-          </button>
-          <button @click="clearSelection" class="batch-btn secondary">
-            Clear Selection
-          </button>
-        </div>
-      </div>
-
-      <!-- Table View -->
-      <div class="table-container" v-if="viewMode === 'table'">
+      <div class="table-container">
         <table class="enrollment-table" v-if="filteredEnrollments.length > 0">
           <thead>
             <tr>
@@ -170,10 +288,7 @@
                 <span class="matric-badge">{{ enrollment.matric_no }}</span>
               </td>
               <td>
-                <div class="student-info">
-                  <div class="student-name">{{ enrollment.student_name }}</div>
-                  <div class="student-id">ID: {{ enrollment.student_id }}</div>
-                </div>
+                <div class="student-name">{{ enrollment.student_name }}</div>
               </td>
               <td>
                 <span class="email">{{ enrollment.email || 'N/A' }}</span>
@@ -211,65 +326,17 @@
           </tbody>
         </table>
 
-        <!-- Empty State for Table -->
+        <!-- Empty State for Enrollments -->
         <div v-else class="empty-state-table">
           <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 515.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 919.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
           </svg>
           <h4>No Students Enrolled</h4>
           <p>{{ enrollmentSearchTerm ? 'No students match your search criteria.' : 'This course has no enrolled students yet.' }}</p>
-          <button @click="showEnrollModal = true" class="action-btn primary">
-            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
-            </svg>
-            Enroll First Student
-          </button>
         </div>
       </div>
 
-      <!-- Grid View -->
-      <div class="grid-container" v-else-if="viewMode === 'grid'">
-        <div class="student-grid">
-          <div v-for="enrollment in paginatedEnrollments" :key="enrollment.id" class="student-card">
-            <div class="student-card-header">
-              <input 
-                type="checkbox" 
-                v-model="selectedStudents"
-                :value="enrollment.id"
-                class="checkbox-input"
-              />
-              <div class="student-avatar">
-                {{ enrollment.student_name.charAt(0).toUpperCase() }}
-              </div>
-            </div>
-            <div class="student-card-body">
-              <h4 class="student-card-name">{{ enrollment.student_name }}</h4>
-              <p class="student-card-matric">{{ enrollment.matric_no }}</p>
-              <p class="student-card-email">{{ enrollment.email || 'N/A' }}</p>
-              <p class="student-card-date">Enrolled: {{ formatDate(enrollment.created_at) }}</p>
-            </div>
-            <div class="student-card-actions">
-              <button @click="viewStudentDetails(enrollment)" class="card-action-btn info">
-                Details
-              </button>
-              <button @click="removeEnrollment(enrollment.id, enrollment.student_name)" class="card-action-btn danger">
-                Remove
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Empty State for Grid -->
-        <div v-if="filteredEnrollments.length === 0" class="empty-state-grid">
-          <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
-          </svg>
-          <h4>No Students Found</h4>
-          <p>{{ enrollmentSearchTerm ? 'No students match your search criteria.' : 'This course has no enrolled students yet.' }}</p>
-        </div>
-      </div>
-
-      <!-- Pagination -->
+      <!-- Enrollments Pagination -->
       <div class="pagination-container" v-if="totalPages > 1">
         <div class="pagination-info">
           Showing {{ startIndex + 1 }}-{{ endIndex }} of {{ filteredEnrollments.length }} students
@@ -317,322 +384,95 @@
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Empty State when no course selected -->
-    <div class="card empty-state" v-else>
-      <div class="empty-content">
-        <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-        </svg>
-        <h4>Select a Course</h4>
-        <p>Choose a course from the dropdown above to view and manage student enrollments.</p>
+  <!-- Enrollment Modal Component (always available) -->
+  <div v-if="showEnrollmentModal" class="modal-overlay" @click.self="closeEnrollmentModal">
+    <div class="modal-content enrollment-modal">
+      <div class="modal-header">
+        <h4>Enroll Students - {{ selectedCourseName }}</h4>
+        <button @click="closeEnrollmentModal" class="close-btn">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
       </div>
-    </div>
-
-    <!-- Single Student Enrollment Modal -->
-    <div v-if="showEnrollModal" class="modal" @click.self="closeEnrollModal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h4>Enroll Student</h4>
-          <button @click="closeEnrollModal" class="close-btn">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
-          </button>
-        </div>
-        
-        <div class="modal-body">
-          <form @submit.prevent="enrollStudent" class="enroll-form">
-            <div class="form-group">
-              <label>Select Student</label>
-              <div class="student-search-dropdown" :class="{ 'dropdown-open': showStudentDropdown }">
-                <div class="search-input-container">
-                  <svg class="search-icon-input" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                  </svg>
-                  <input 
-                    v-model="studentSearchTerm" 
-                    @input="onStudentSearch"
-                    @focus="showStudentDropdown = true"
-                    @blur="onStudentInputBlur"
-                    placeholder="Search by name or matric number..." 
-                    class="student-search-input"
-                    autocomplete="off"
-                  />
-                  <button 
-                    type="button"
-                    @click="toggleStudentDropdown"
-                    class="dropdown-toggle"
-                    :class="{ 'rotated': showStudentDropdown }"
-                  >
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                  </button>
-                </div>
-                
-                <div v-if="showStudentDropdown" class="dropdown-results">
-                  <div v-if="isSearching" class="dropdown-loading">
-                    <div class="loading-spinner"></div>
-                    <span>Searching students...</span>
-                  </div>
-                  <div v-else-if="filteredStudents.length > 0" class="student-options">
-                    <div 
-                      v-for="student in filteredStudents" 
-                      :key="student.id"
-                      @mousedown="selectStudent(student)"
-                      class="student-option"
-                      :class="{ selected: selectedStudentId === student.id }"
-                    >
-                      <div class="student-avatar-small">
-                        {{ student.full_name.charAt(0).toUpperCase() }}
-                      </div>
-                      <div class="student-info-compact">
-                        <div class="student-name-compact">{{ student.full_name }}</div>
-                        <div class="student-matric-compact">{{ student.matric_no }}</div>
-                      </div>
-                      <div class="selection-indicator" v-if="selectedStudentId === student.id">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                  <div v-else class="no-students-found">
-                    <svg class="no-results-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                    </svg>
-                    <span>{{ studentSearchTerm ? 'No students found matching your search' : 'Start typing to search for students' }}</span>
-                  </div>
-                </div>
+      
+      <div class="modal-body">
+        <!-- Student Search Section -->
+        <div class="search-section">
+          <label class="search-label">Search and Select Students</label>
+          <div class="student-search-container">
+            <div class="search-input-wrapper">
+              <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+              </svg>
+              <input 
+                v-model="modalStudentSearchTerm" 
+                @input="onModalStudentSearch"
+                placeholder="Search by student name or matric number..." 
+                class="search-input-field"
+                autocomplete="off"
+              />
+            </div>
+            
+            <!-- Student List (replaces dropdown) -->
+            <div class="student-list-container">
+              <div v-if="isModalSearching" class="loading-state">
+                <div class="loading-spinner"></div>
+                <span>Searching students...</span>
               </div>
-            </div>
-
-            <div class="form-group">
-              <label>Target Course</label>
-              <select v-model="enrollmentCourseId" required class="form-select">
-                <option value="">Select course to enroll student...</option>
-                <option v-for="course in lecturerCourses" :key="course.id" :value="course.id">
-                  {{ course.code }} - {{ course.name }}
-                </option>
-              </select>
-            </div>
-
-            <div class="selected-student-preview" v-if="selectedStudentId">
-              <h5>Selected Student:</h5>
-              <div class="student-preview-card">
-                <div class="student-avatar">
-                  {{ selectedStudentName.charAt(0).toUpperCase() }}
-                </div>
-                <div class="student-preview-info">
-                  <div class="student-name">{{ selectedStudentName }}</div>
-                  <div class="student-matric">{{ selectedStudentMatric }}</div>
-                </div>
-              </div>
-            </div>
-          </form>
-        </div>
-
-        <div class="modal-actions">
-          <button 
-            @click="enrollStudent" 
-            :disabled="!selectedStudentId || !enrollmentCourseId || isEnrolling"
-            class="action-btn primary"
-          >
-            <svg class="btn-icon" v-if="!isEnrolling" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
-            </svg>
-            <div v-else class="spinner"></div>
-            {{ isEnrolling ? 'Enrolling...' : 'Enroll Student' }}
-          </button>
-          <button @click="closeEnrollModal" class="action-btn secondary">
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Bulk Enrollment Modal -->
-    <div v-if="showBulkEnrollModal" class="modal" @click.self="closeBulkEnrollModal">
-      <div class="modal-content large">
-        <div class="modal-header">
-          <h4>Bulk Enroll Students</h4>
-          <button @click="closeBulkEnrollModal" class="close-btn">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
-          </button>
-        </div>
-        
-        <div class="modal-body">
-          <div class="bulk-enroll-tabs">
-            <button 
-              @click="bulkEnrollTab = 'select'" 
-              class="tab-btn"
-              :class="{ active: bulkEnrollTab === 'select' }"
-            >
-              Select Students
-            </button>
-            <button 
-              @click="bulkEnrollTab = 'upload'" 
-              class="tab-btn"
-              :class="{ active: bulkEnrollTab === 'upload' }"
-            >
-              Upload CSV
-            </button>
-          </div>
-
-          <!-- Select Students Tab -->
-          <div v-if="bulkEnrollTab === 'select'" class="bulk-select-content">
-            <div class="form-group">
-              <label>Target Course</label>
-              <select v-model="bulkEnrollCourseId" class="form-select">
-                <option value="">Select course...</option>
-                <option v-for="course in lecturerCourses" :key="course.id" :value="course.id">
-                  {{ course.code }} - {{ course.name }}
-                </option>
-              </select>
-            </div>
-
-            <div class="available-students" v-if="bulkEnrollCourseId">
-              <div class="students-header">
-                <h5>Available Students</h5>
-                <div class="bulk-actions">
-                  <button @click="selectAllAvailable" class="action-btn-small secondary">
-                    Select All
-                  </button>
-                  <button @click="clearBulkSelection" class="action-btn-small secondary">
-                    Clear All
-                  </button>
-                </div>
-              </div>
-              
-              <div class="students-list">
+              <div v-else-if="modalFilteredStudents.length > 0" class="students-grid">
                 <div 
-                  v-for="student in availableStudents" 
+                  v-for="student in modalFilteredStudents" 
                   :key="student.id"
-                  class="student-item"
-                  :class="{ selected: bulkSelectedStudents.includes(student.id) }"
-                  @click="toggleBulkStudent(student.id)"
+                  @click="selectModalStudent(student)"
+                  class="student-card"
+                  :class="{ selected: modalBulkSelectedStudents.includes(student.id) }"
                 >
-                  <input 
-                    type="checkbox" 
-                    :checked="bulkSelectedStudents.includes(student.id)"
-                    @change="toggleBulkStudent(student.id)"
-                    class="checkbox-input"
-                  />
-                  <div class="student-avatar-small">
-                    {{ student.full_name.charAt(0).toUpperCase() }}
-                  </div>
                   <div class="student-details">
                     <div class="student-name">{{ student.full_name }}</div>
                     <div class="student-matric">{{ student.matric_no }}</div>
                   </div>
+                  <div class="selection-checkbox">
+                    <input 
+                      type="checkbox" 
+                      :checked="modalBulkSelectedStudents.includes(student.id)"
+                      @click.stop="selectModalStudent(student)"
+                      class="checkbox-input"
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <!-- Upload CSV Tab -->
-          <div v-if="bulkEnrollTab === 'upload'" class="bulk-upload-content">
-            <div class="upload-area">
-              <input 
-                type="file" 
-                ref="csvFileInput"
-                @change="handleCSVUpload"
-                accept=".csv"
-                class="file-input"
-                id="csvUpload"
-              />
-              <label for="csvUpload" class="upload-label">
-                <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+              <div v-else class="empty-state">
+                <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 515.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 919.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
                 </svg>
-                <span>{{ csvFile ? csvFile.name : 'Click to upload CSV file' }}</span>
-                <small>CSV format: matric_no, full_name, email</small>
-              </label>
-            </div>
-            
-            <div v-if="csvPreview.length > 0" class="csv-preview">
-              <h5>Preview ({{ csvPreview.length }} students):</h5>
-              <div class="preview-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Matric No</th>
-                      <th>Full Name</th>
-                      <th>Email</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(student, index) in csvPreview.slice(0, 5)" :key="index">
-                      <td>{{ student.matric_no }}</td>
-                      <td>{{ student.full_name }}</td>
-                      <td>{{ student.email }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div v-if="csvPreview.length > 5" class="more-indicator">
-                  ... and {{ csvPreview.length - 5 }} more students
-                </div>
+                <span v-if="allStudents.length === 0">All students are already enrolled in this course</span>
+                <span v-else>{{ modalStudentSearchTerm ? `No students found matching "${modalStudentSearchTerm}"` : 'Start typing to search for students' }}</span>
               </div>
             </div>
           </div>
         </div>
-
-        <div class="modal-actions">
-          <button 
-            @click="bulkEnrollStudents" 
-            :disabled="(bulkEnrollTab === 'select' && bulkSelectedStudents.length === 0) || (bulkEnrollTab === 'upload' && csvPreview.length === 0)"
-            class="action-btn primary"
-          >
-            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
-            </svg>
-            Enroll {{ bulkEnrollTab === 'select' ? bulkSelectedStudents.length : csvPreview.length }} Students
-          </button>
-          <button @click="closeBulkEnrollModal" class="action-btn secondary">
-            Cancel
-          </button>
-        </div>
       </div>
-    </div>
 
-    <!-- Confirmation Modals -->
-    <div v-if="showRemoveModal" class="modal" @click.self="closeRemoveModal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h4>Confirm Removal</h4>
-        </div>
-        <div class="modal-body">
-          <div class="warning-icon">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
-            </svg>
-          </div>
-          <p>Are you sure you want to remove <strong>{{ studentToRemove.name }}</strong> from this course?</p>
-          <p class="warning-text">This action will remove all associated data for this student in this course.</p>
-        </div>
-        <div class="modal-actions">
-          <button @click="confirmRemoveEnrollment" class="action-btn danger">
-            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-            </svg>
-            Yes, Remove Student
-          </button>
-          <button @click="closeRemoveModal" class="action-btn secondary">
-            Cancel
-          </button>
-        </div>
+      <!-- Modal Actions -->
+      <div class="modal-footer">
+        <button @click="closeEnrollmentModal" class="cancel-btn">
+          Cancel
+        </button>
+        <button 
+          @click="enrollModalStudents" 
+          :disabled="modalBulkSelectedStudents.length === 0 || isModalEnrolling"
+          class="enroll-btn"
+        >
+          <div v-if="isModalEnrolling" class="btn-spinner"></div>
+          <svg v-else class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
+          </svg>
+          {{ isModalEnrolling ? 'Enrolling...' : modalBulkSelectedStudents.length > 0 ? `Enroll ${modalBulkSelectedStudents.length} Student${modalBulkSelectedStudents.length > 1 ? 's' : ''}` : 'Enroll Students' }}
+        </button>
       </div>
-    </div>
-
-    <!-- Success/Error Messages -->
-    <div v-if="successMessage" class="floating-message success">
-      {{ successMessage }}
-    </div>
-    <div v-if="errorMessage" class="floating-message error">
-      {{ errorMessage }}
     </div>
   </div>
 </template>
@@ -641,13 +481,21 @@
 import api from '../../api'
 
 export default {
-  name: 'ManageEnrollment',
+  props: {
+    isModalOnly: {
+      type: Boolean,
+      default: false
+    },
+    selectedCourse: {
+      type: Object,
+      default: null
+    }
+  },
   data() {
     return {
       lecturerCourses: [],
       enrollments: [],
       allStudents: [],
-      searchResults: [],
       selectedCourseId: '',
       enrollmentCourseId: '',
       selectedStudentId: '',
@@ -670,389 +518,493 @@ export default {
       sortField: '',
       sortDirection: 'asc',
       isEnrolling: false,
+      loading: false,
       
-      // Bulk enrollment
-      bulkEnrollTab: 'select',
-      bulkEnrollCourseId: '',
-      bulkSelectedStudents: [],
-      csvFile: null,
-      csvPreview: [],
-      isSearching: false
+      // Course table filters and pagination
+      semesterFilter: '',
+      yearFilter: '',
+      courseSearchTerm: '',
+      coursesCurrentPage: 1,
+      coursesItemsPerPage: 8,
+      courseSortField: '',
+      courseSortDirection: 'asc',
+      showEnrollmentView: false,
+      
+      // Modal enrollment data
+      showEnrollmentModal: false,
+      modalSelectedCourseId: null,
+      modalStudentSearchTerm: '',
+      modalBulkSelectedStudents: [],
+      isModalSearching: false,
+      isModalEnrolling: false,
+      showModalStudentDropdown: false,
+      modalSearchTimeout: null,
+      dataLoaded: false
     }
   },
+  
   computed: {
+    // Modal computed properties
+    modalFilteredStudents() {
+      if (!this.allStudents || this.allStudents.length === 0) {
+        console.log('No students available for filtering')
+        return []
+      }
+      
+      let students = [...this.allStudents]
+      console.log('Available unenrolled students for enrollment:', students.length)
+      
+      // Filter by search term if provided
+      if (this.modalStudentSearchTerm && this.modalStudentSearchTerm.length >= 1) {
+        const term = this.modalStudentSearchTerm.toLowerCase()
+        students = students.filter(student => 
+          (student.full_name && student.full_name.toLowerCase().includes(term)) ||
+          (student.name && student.name.toLowerCase().includes(term)) ||
+          (student.matric_no && student.matric_no.toLowerCase().includes(term))
+        )
+        console.log('Students after search filter:', students.length)
+      }
+      
+      // Show all available students (no limit for scrollable list)
+      console.log('Final filtered unenrolled students:', students.length)
+      return students
+    },
+
+    availableYears() {
+      const currentYear = new Date().getFullYear()
+      return Array.from({length: 5}, (_, i) => currentYear + i - 2)
+    },
+
+    filteredCourses() {
+      let courses = [...this.lecturerCourses]
+      
+      if (this.semesterFilter) {
+        courses = courses.filter(c => c.semester == this.semesterFilter)
+      }
+      
+      if (this.yearFilter) {
+        courses = courses.filter(c => c.year == this.yearFilter)
+      }
+      
+      if (this.courseSearchTerm) {
+        const term = this.courseSearchTerm.toLowerCase()
+        courses = courses.filter(c => 
+          c.code.toLowerCase().includes(term) ||
+          c.name.toLowerCase().includes(term)
+        )
+      }
+      
+      // Apply sorting
+      if (this.courseSortField) {
+        courses.sort((a, b) => {
+          let valueA = a[this.courseSortField]
+          let valueB = b[this.courseSortField]
+          
+          if (typeof valueA === 'string') {
+            valueA = valueA.toLowerCase()
+            valueB = b[this.courseSortField].toLowerCase()
+          }
+          
+          const modifier = this.courseSortDirection === 'asc' ? 1 : -1
+          return valueA > valueB ? modifier : -modifier
+        })
+      }
+      
+      return courses
+    },
+
+    paginatedCourses() {
+      const start = (this.coursesCurrentPage - 1) * this.coursesItemsPerPage
+      return this.filteredCourses.slice(start, start + this.coursesItemsPerPage)
+    },
+
+    coursesTotalPages() {
+      return Math.ceil(this.filteredCourses.length / this.coursesItemsPerPage)
+    },
+
+    coursesStartIndex() {
+      return (this.coursesCurrentPage - 1) * this.coursesItemsPerPage
+    },
+
+    coursesEndIndex() {
+      return Math.min(this.coursesStartIndex + this.coursesItemsPerPage, this.filteredCourses.length)
+    },
+
+    coursesVisiblePages() {
+      const totalPages = this.coursesTotalPages
+      const current = this.coursesCurrentPage
+      const visible = []
+      
+      const start = Math.max(1, current - 2)
+      const end = Math.min(totalPages, current + 2)
+      
+      for (let i = start; i <= end; i++) {
+        visible.push(i)
+      }
+      
+      return visible
+    },
+
     selectedCourseName() {
-      const course = this.lecturerCourses.find(c => c.id == this.selectedCourseId)
+      if (this.selectedCourse) {
+        return `${this.selectedCourse.code} - ${this.selectedCourse.name}`
+      }
+      const course = this.lecturerCourses.find(c => c.id == this.modalSelectedCourseId || c.id == this.selectedCourseId)
       return course ? `${course.code} - ${course.name}` : ''
     },
-    
+
     filteredEnrollments() {
+      if (!this.enrollments) return []
+      
       let filtered = [...this.enrollments]
       
       if (this.enrollmentSearchTerm) {
         const term = this.enrollmentSearchTerm.toLowerCase()
-        filtered = filtered.filter(enrollment => 
-          enrollment.student_name.toLowerCase().includes(term) ||
-          enrollment.matric_no.toLowerCase().includes(term) ||
-          (enrollment.email && enrollment.email.toLowerCase().includes(term))
+        filtered = filtered.filter(e => 
+          e.student_name.toLowerCase().includes(term) ||
+          e.matric_no.toLowerCase().includes(term) ||
+          (e.email && e.email.toLowerCase().includes(term))
         )
       }
       
       // Apply sorting
       if (this.sortField) {
         filtered.sort((a, b) => {
-          let aVal = a[this.sortField]
-          let bVal = b[this.sortField]
+          let valueA = a[this.sortField]
+          let valueB = b[this.sortField]
           
-          if (typeof aVal === 'string') {
-            aVal = aVal.toLowerCase()
-            bVal = bVal.toLowerCase()
+          if (typeof valueA === 'string') {
+            valueA = valueA.toLowerCase()
+            valueB = b[this.sortField].toLowerCase()
           }
           
-          if (this.sortDirection === 'asc') {
-            return aVal > bVal ? 1 : -1
-          } else {
-            return aVal < bVal ? 1 : -1
-          }
+          const modifier = this.sortDirection === 'asc' ? 1 : -1
+          return valueA > valueB ? modifier : -modifier
         })
       }
       
       return filtered
     },
-    
+
     paginatedEnrollments() {
       const start = (this.currentPage - 1) * this.itemsPerPage
-      const end = start + this.itemsPerPage
-      return this.filteredEnrollments.slice(start, end)
+      return this.filteredEnrollments.slice(start, start + this.itemsPerPage)
     },
-    
+
     totalPages() {
       return Math.ceil(this.filteredEnrollments.length / this.itemsPerPage)
     },
-    
+
     startIndex() {
       return (this.currentPage - 1) * this.itemsPerPage
     },
-    
+
     endIndex() {
       return Math.min(this.startIndex + this.itemsPerPage, this.filteredEnrollments.length)
     },
-    
+
     visiblePages() {
-      const range = 5
-      const start = Math.max(1, this.currentPage - Math.floor(range / 2))
-      const end = Math.min(this.totalPages, start + range - 1)
-      const pages = []
+      const totalPages = this.totalPages
+      const current = this.currentPage
+      const visible = []
+      
+      const start = Math.max(1, current - 2)
+      const end = Math.min(totalPages, current + 2)
+      
       for (let i = start; i <= end; i++) {
-        pages.push(i)
+        visible.push(i)
       }
-      return pages
+      
+      return visible
     },
-    
-    availableStudents() {
-      if (!this.bulkEnrollCourseId) return []
-      
-      // Get students who are not already enrolled in the selected course
-      const enrolledStudentIds = this.enrollments
-        .filter(e => e.course_id == this.bulkEnrollCourseId)
-        .map(e => e.student_id)
-      
-      return this.allStudents.filter(student => 
-        !enrolledStudentIds.includes(student.id)
-      )
-    },
-    
-    filteredStudents() {
-      let students = [...this.allStudents]
-      
-      // Filter out already enrolled students
-      if (this.enrollmentCourseId || this.selectedCourseId) {
-        const courseId = this.enrollmentCourseId || this.selectedCourseId
-        const enrolledStudentIds = this.enrollments
-          .filter(e => e.course_id == courseId)
-          .map(e => e.student_id)
-        
-        students = students.filter(student => !enrolledStudentIds.includes(student.id))
-      }
-      
-      // Filter by search term
-      if (this.studentSearchTerm && this.studentSearchTerm.length > 0) {
-        const term = this.studentSearchTerm.toLowerCase()
-        students = students.filter(student => 
-          student.full_name.toLowerCase().includes(term) ||
-          student.matric_no.toLowerCase().includes(term)
-        )
-      }
-      
-      // Limit results to 10 for performance
-      return students.slice(0, 10)
+
+    hasActiveFilters() {
+      return this.semesterFilter || this.yearFilter || this.courseSearchTerm
     }
   },
   
   methods: {
-    async fetchLecturerCourses() {
+    async fetchData() {
       try {
+        this.loading = true
+        console.log('Fetching all data...')
         const user = JSON.parse(localStorage.getItem('user'))
-        const res = await api.get('/courses')
-        this.lecturerCourses = res.data.filter(c => c.lecturer_id === user.id)
-      } catch (e) {
-        this.showError('Failed to load courses.')
+        
+        if (!user || !user.id) {
+          this.errorMessage = 'User session expired. Please login again.'
+          return
+        }
+        
+        // Always load courses and enrollments for the main page
+        const [coursesRes, enrollmentsRes] = await Promise.all([
+          api.get('/courses'),
+          api.get('/enrollments')
+        ])
+        
+        // Filter courses for current lecturer
+        this.lecturerCourses = coursesRes.data.filter(c => c.lecturer_id == user.id)
+        this.enrollments = enrollmentsRes.data || []
+        
+        // Only load ALL students if we're NOT in modal mode or no specific course is selected
+        if (!this.isModalOnly && !this.modalSelectedCourseId) {
+          try {
+            const studentsRes = await api.get('/students')
+            this.allStudents = studentsRes.data || []
+          } catch (e) {
+            console.warn('Failed to fetch all students:', e)
+            this.allStudents = []
+          }
+        }
+        
+        this.dataLoaded = true
+        
+        console.log('Data fetched - Courses:', this.lecturerCourses.length, 'Students:', this.allStudents.length, 'Enrollments:', this.enrollments.length)
+        
+        this.clearMessages()
+      } catch (error) {
+        console.error('Failed to fetch data:', error)
+        this.errorMessage = error.response?.data?.error || 'Failed to load data. Please try again.'
+      } finally {
+        this.loading = false
       }
     },
-    
-    async fetchAllStudents() {
-      try {
-        const res = await api.get('/admin/users')
-        this.allStudents = res.data.filter(user => user.role_name === 'student')
-      } catch (e) {
-        console.warn('Failed to load all students, trying alternative endpoint')
-        // Try alternative endpoint or use mock data
-        this.generateMockStudents()
-      }
-    },
-    
-    generateMockStudents() {
-      // Generate mock students for demonstration
-      this.allStudents = []
-      for (let i = 1; i <= 50; i++) {
-        this.allStudents.push({
-          id: i + 1000,
-          full_name: `Student ${i}`,
-          matric_no: `A${String(i).padStart(6, '0')}`,
-          email: `student${i}@university.edu`,
-          role_name: 'student'
-        })
-      }
-    },
-    
+
     async fetchEnrollments() {
-      if (!this.selectedCourseId) {
-        this.enrollments = []
-        return
-      }
+      if (!this.selectedCourseId) return
       
       try {
-        const res = await api.get(`/courses/${this.selectedCourseId}/enrollments`)
-        this.enrollments = res.data
-        this.currentPage = 1
-        this.selectedStudents = []
-        this.selectAll = false
-      } catch (e) {
-        console.warn('Failed to load enrollments, generating mock data')
-        this.generateMockEnrollments()
+        this.loading = true
+        const response = await api.get(`/courses/${this.selectedCourseId}/enrollments`)
+        this.enrollments = response.data || []
+        this.clearMessages()
+      } catch (error) {
+        console.error('Failed to fetch enrollments:', error)
+        this.errorMessage = error.response?.data?.error || 'Failed to load enrollment data. Please try again.'
+      } finally {
+        this.loading = false
       }
     },
-    
-    generateMockEnrollments() {
-      // Generate mock enrollments for demonstration
-      this.enrollments = []
-      const numEnrollments = Math.floor(Math.random() * 15) + 5 // 5-20 students
+
+    async openEnrollmentModal(course) {
+      console.log('Opening enrollment modal for course:', course)
+      this.modalSelectedCourseId = course.id
+      this.showEnrollmentModal = true
+      this.resetModalData()
       
-      for (let i = 0; i < numEnrollments; i++) {
-        const studentIndex = Math.floor(Math.random() * 20) + 1
-        this.enrollments.push({
-          id: i + 1,
-          student_id: studentIndex + 3,
-          course_id: this.selectedCourseId,
-          student_name: `Student ${studentIndex}`,
-          matric_no: `A${String(studentIndex).padStart(6, '0')}`,
-          email: `student${studentIndex}@university.edu`,
-          created_at: new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000).toISOString()
-        })
+      // Load unenrolled students for this specific course AFTER setting the course ID
+      await this.loadUnenrolledStudentsForCourse(course.id)
+      
+      console.log('Modal opened with unenrolled students:', this.allStudents.length)
+    },
+
+    closeEnrollmentModal() {
+      this.showEnrollmentModal = false
+      this.resetModalData()
+      this.$emit('enrollment-closed')
+    },
+
+    resetModalData() {
+      this.modalStudentSearchTerm = ''
+      this.showModalStudentDropdown = false
+      this.modalBulkSelectedStudents = []
+      this.isModalSearching = false
+      if (this.modalSearchTimeout) {
+        clearTimeout(this.modalSearchTimeout)
+        this.modalSearchTimeout = null
       }
     },
-    
-    onCourseChange() {
-      this.fetchEnrollments()
-      this.enrollmentCourseId = this.selectedCourseId
+
+    onModalStudentSearch() {
+      if (this.modalSearchTimeout) {
+        clearTimeout(this.modalSearchTimeout)
+      }
+      
+      this.showModalStudentDropdown = true
+      
+      if (this.modalStudentSearchTerm.length >= 2) {
+        this.isModalSearching = true
+        this.modalSearchTimeout = setTimeout(() => {
+          this.isModalSearching = false
+        }, 300)
+      } else if (this.modalStudentSearchTerm.length === 0) {
+        // Show all available students when search is empty
+        this.isModalSearching = false
+      }
     },
-    
-    onStudentSearch() {
-      this.isSearching = true
-      setTimeout(() => {
-        this.isSearching = false
-      }, 500)
+
+    selectModalStudent(student) {
+      const index = this.modalBulkSelectedStudents.indexOf(student.id)
+      if (index === -1) {
+        this.modalBulkSelectedStudents.push(student.id)
+      } else {
+        this.modalBulkSelectedStudents.splice(index, 1)
+      }
+      console.log('Selected students:', this.modalBulkSelectedStudents)
     },
-    
-    onStudentInputBlur() {
+
+    onModalStudentInputBlur() {
       setTimeout(() => {
-        this.showStudentDropdown = false
+        this.showModalStudentDropdown = false
       }, 200)
     },
-    
-    searchStudents() {
-      if (this.studentSearchTerm.length < 2) {
-        this.searchResults = []
-        return
+
+    clearSelectedModalStudents() {
+      this.modalBulkSelectedStudents = []
+    },
+
+    removeSelectedStudent(studentId) {
+      const index = this.modalBulkSelectedStudents.indexOf(studentId)
+      if (index !== -1) {
+        this.modalBulkSelectedStudents.splice(index, 1)
       }
-      
-      const term = this.studentSearchTerm.toLowerCase()
-      this.searchResults = this.allStudents
-        .filter(student => 
-          student.full_name.toLowerCase().includes(term) ||
-          student.matric_no.toLowerCase().includes(term) ||
-          student.email.toLowerCase().includes(term)
-        )
-        .slice(0, 10) // Limit to 10 results
     },
-    
-    selectStudent(student) {
-      this.selectedStudentId = student.id
-      this.selectedStudentName = student.full_name
-      this.selectedStudentMatric = student.matric_no
-      this.studentSearchTerm = `${student.full_name} (${student.matric_no})`
-      this.searchResults = []
-      this.showStudentDropdown = false
-    },
-    
-    toggleStudentDropdown() {
-      this.showStudentDropdown = !this.showStudentDropdown
-    },
-    
-    async enrollStudent() {
-      if (!this.selectedStudentId || !this.enrollmentCourseId) {
-        this.showError('Please select both a student and a course.')
-        return
-      }
-      
-      this.isEnrolling = true
-      this.clearMessages()
+
+    async enrollModalStudents() {
+      if (this.modalBulkSelectedStudents.length === 0) return
       
       try {
-        await api.post('/enrollments', {
-          student_id: this.selectedStudentId,
-          course_id: this.enrollmentCourseId
+        this.isModalEnrolling = true
+        const user = JSON.parse(localStorage.getItem('user'))
+        
+        if (!user || !user.id) {
+          throw new Error('User session expired')
+        }
+        
+        let response
+        if (this.modalBulkSelectedStudents.length === 1) {
+          // Single enrollment
+          response = await api.post('/enrollments', {
+            course_id: parseInt(this.modalSelectedCourseId),
+            student_id: parseInt(this.modalBulkSelectedStudents[0]),
+            lecturer_id: user.id
+          })
+        } else {
+          // Bulk enrollment
+          response = await api.post('/enrollments/bulk', {
+            course_id: parseInt(this.modalSelectedCourseId),
+            student_ids: this.modalBulkSelectedStudents.map(id => parseInt(id)),
+            lecturer_id: user.id
+          })
+        }
+        
+        const enrolledCount = response.data.enrolled_count || this.modalBulkSelectedStudents.length
+        const alreadyEnrolled = response.data.already_enrolled || []
+        
+        let message = `Successfully enrolled ${enrolledCount} student(s)!`
+        if (alreadyEnrolled.length > 0) {
+          message += ` (${alreadyEnrolled.length} students were already enrolled)`
+        }
+        
+        this.successMessage = message
+        
+        // Close modal immediately
+        this.showEnrollmentModal = false
+        this.resetModalData()
+        
+        // Emit success event to parent with immediate close instruction
+        this.$emit('enrollment-success', {
+          message: message,
+          enrolledCount: enrolledCount,
+          courseId: this.modalSelectedCourseId,
+          needsRefresh: true,
+          closeModal: true
         })
         
-        this.showSuccess('Student enrolled successfully!')
-        this.closeEnrollModal()
+        // Also emit modal closed event
+        this.$emit('enrollment-closed')
         
-        // Refresh enrollments if viewing the same course
-        if (this.selectedCourseId == this.enrollmentCourseId) {
-          this.fetchEnrollments()
+        console.log('Enrollment successful, modal closed, events emitted')
+        
+        // Refresh local data for the modal
+        await this.fetchData()
+        
+        // If viewing enrollments, refresh them too
+        if (this.showEnrollmentView && this.selectedCourseId) {
+          await this.fetchEnrollments()
         }
         
-      } catch (e) {
-        this.showError(e.response?.data?.error || 'Failed to enroll student. Student may already be enrolled.')
+      } catch (error) {
+        console.error('Failed to enroll students:', error)
+        const errorMsg = error.response?.data?.error || 'Failed to enroll students. Please try again.'
+        this.errorMessage = errorMsg
+        this.$emit('enrollment-error', errorMsg)
       } finally {
-        this.isEnrolling = false
+        this.isModalEnrolling = false
       }
     },
-    
-    async bulkEnrollStudents() {
-      let studentsToEnroll = []
-      
-      if (this.bulkEnrollTab === 'select') {
-        if (this.bulkSelectedStudents.length === 0) {
-          this.showError('Please select at least one student.')
-          return
-        }
-        studentsToEnroll = this.bulkSelectedStudents
-      } else if (this.bulkEnrollTab === 'upload') {
-        if (this.csvPreview.length === 0) {
-          this.showError('Please upload a valid CSV file.')
-          return
-        }
-        // For CSV upload, we'd need to create users first, then enroll them
-        // This is a simplified version
-        studentsToEnroll = this.csvPreview.map(s => s.id || Math.random())
-      }
-      
-      let successCount = 0
-      let errorCount = 0
-      
-      for (const studentId of studentsToEnroll) {
-        try {
-          await api.post('/enrollments', {
-            student_id: studentId,
-            course_id: this.bulkEnrollCourseId || this.selectedCourseId
-          })
-          successCount++
-        } catch (e) {
-          errorCount++
-        }
-      }
-      
-      if (successCount > 0) {
-        this.showSuccess(`Successfully enrolled ${successCount} students.`)
-      }
-      if (errorCount > 0) {
-        this.showError(`Failed to enroll ${errorCount} students.`)
-      }
-      
-      this.closeBulkEnrollModal()
-      this.fetchEnrollments()
-    },
-    
-    removeEnrollment(id, studentName) {
-      this.studentToRemove = { id, name: studentName }
-      this.showRemoveModal = true
-    },
-    
-    async confirmRemoveEnrollment() {
+
+    async enrollSingleStudent(student) {
       try {
-        await api.delete(`/enrollments/${this.studentToRemove.id}`)
-        this.showSuccess('Student removed from course successfully!')
-        this.fetchEnrollments()
-      } catch (e) {
-        this.showError('Failed to remove enrollment.')
-      } finally {
-        this.closeRemoveModal()
-      }
-    },
-    
-    bulkRemoveStudents() {
-      if (this.selectedStudents.length === 0) {
-        this.showError('Please select students to remove.')
-        return
-      }
-      
-      this.studentToRemove = { 
-        id: 'bulk', 
-        name: `${this.selectedStudents.length} selected students` 
-      }
-      this.showRemoveModal = true
-    },
-    
-    async confirmBulkRemoval() {
-      let successCount = 0
-      let errorCount = 0
-      
-      for (const enrollmentId of this.selectedStudents) {
-        try {
-          await api.delete(`/enrollments/${enrollmentId}`)
-          successCount++
-        } catch (e) {
-          errorCount++
+        this.isModalEnrolling = true
+        const user = JSON.parse(localStorage.getItem('user'))
+        
+        if (!user || !user.id) {
+          throw new Error('User session expired')
         }
+        
+        await api.post('/enrollments', {
+          course_id: parseInt(this.modalSelectedCourseId),
+          student_id: parseInt(student.id),
+          lecturer_id: user.id
+        })
+        
+        this.successMessage = `Successfully enrolled ${student.full_name}!`
+        await this.fetchData()
+        
+        // If viewing enrollments, refresh them too
+        if (this.showEnrollmentView && this.selectedCourseId) {
+          await this.fetchEnrollments()
+        }
+        
+        this.$emit('enrollment-success', this.successMessage)
+      } catch (error) {
+        console.error('Failed to enroll student:', error)
+        const errorMsg = error.response?.data?.error || 'Failed to enroll student. Please try again.'
+        this.errorMessage = errorMsg
+        this.$emit('enrollment-error', this.errorMessage)
+      } finally {
+        this.isModalEnrolling = false
       }
-      
-      if (successCount > 0) {
-        this.showSuccess(`Successfully removed ${successCount} students.`)
-      }
-      if (errorCount > 0) {
-        this.showError(`Failed to remove ${errorCount} students.`)
-      }
-      
-      this.fetchEnrollments()
-      this.closeRemoveModal()
     },
-    
-    // Selection methods
-    toggleSelectAll() {
-      if (this.selectAll) {
-        this.selectedStudents = this.paginatedEnrollments.map(e => e.id)
+
+    getStudentById(studentId) {
+      return this.allStudents.find(student => student.id == studentId)
+    },
+
+    getCourseEnrollmentCount(courseId) {
+      return this.enrollments.filter(e => e.course_id == courseId).length
+    },
+
+    clearFilters() {
+      this.semesterFilter = ''
+      this.yearFilter = ''
+      this.courseSearchTerm = ''
+      this.coursesCurrentPage = 1
+    },
+
+    sortCoursesBy(field) {
+      if (this.courseSortField === field) {
+        this.courseSortDirection = this.courseSortDirection === 'asc' ? 'desc' : 'asc'
       } else {
-        this.selectedStudents = []
+        this.courseSortField = field
+        this.courseSortDirection = 'asc'
       }
     },
-    
-    clearSelection() {
-      this.selectedStudents = []
-      this.selectAll = false
+
+    openEnrollModal(course) {
+      this.openEnrollmentModal(course)
     },
-    
-    // Sorting
+
+    openBulkEnrollModal(course) {
+      this.openEnrollmentModal(course)
+    },
+
+    viewCourseEnrollments(course) {
+      this.selectedCourseId = course.id
+      this.showEnrollmentView = true
+      this.fetchEnrollments()
+    },
+
     sortBy(field) {
       if (this.sortField === field) {
         this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc'
@@ -1061,186 +1013,210 @@ export default {
         this.sortDirection = 'asc'
       }
     },
-    
-    // Bulk enrollment methods
-    toggleBulkStudent(studentId) {
-      const index = this.bulkSelectedStudents.indexOf(studentId)
-      if (index > -1) {
-        this.bulkSelectedStudents.splice(index, 1)
+
+    toggleSelectAll() {
+      if (this.selectAll) {
+        this.selectedStudents = this.paginatedEnrollments.map(e => e.enrollment_id || e.id)
       } else {
-        this.bulkSelectedStudents.push(studentId)
+        this.selectedStudents = []
       }
     },
-    
-    selectAllAvailable() {
-      this.bulkSelectedStudents = [...this.availableStudents.map(s => s.id)]
-    },
-    
-    clearBulkSelection() {
-      this.bulkSelectedStudents = []
-    },
-    
-    handleCSVUpload(event) {
-      const file = event.target.files[0]
-      if (!file) return
-      
-      this.csvFile = file
-      const reader = new FileReader()
-      
-      reader.onload = (e) => {
-        const csv = e.target.result
-        const lines = csv.split('\n')
-        
-        this.csvPreview = []
-        for (let i = 1; i < lines.length; i++) {
-          if (lines[i].trim()) {
-            const values = lines[i].split(',').map(v => v.trim())
-            this.csvPreview.push({
-              matric_no: values[0] || '',
-              full_name: values[1] || '',
-              email: values[2] || ''
-            })
-          }
-        }
-      }
-      
-      reader.readAsText(file)
-    },
-    
-    // Modal methods
-    closeEnrollModal() {
-      this.showEnrollModal = false
-      this.selectedStudentId = ''
-      this.selectedStudentName = ''
-      this.selectedStudentMatric = ''
-      this.studentSearchTerm = ''
-      this.searchResults = []
-      this.enrollmentCourseId = this.selectedCourseId
-    },
-    
-    closeBulkEnrollModal() {
-      this.showBulkEnrollModal = false
-      this.bulkEnrollTab = 'select'
-      this.bulkEnrollCourseId = ''
-      this.bulkSelectedStudents = []
-      this.csvFile = null
-      this.csvPreview = []
-    },
-    
-    closeRemoveModal() {
-      this.showRemoveModal = false
-      this.studentToRemove = { id: null, name: '' }
-    },
-    
-    // Utility methods
+
     viewStudentDetails(enrollment) {
-      this.showSuccess(`Viewing details for ${enrollment.student_name}`)
-      // In a real app, this would open a detailed view or navigate to student profile
+      // Navigate to student details view or show modal
+      console.log('View student details:', enrollment)
+      // You could implement: this.$router.push(`/lecturer/students/${enrollment.student_id}`)
     },
-    
-    exportEnrollments() {
-      this.showSuccess('Enrollment list exported successfully!')
-      // In a real app, this would generate and download a CSV/Excel file
-    },
-    
-    sendNotification() {
-      if (this.selectedStudents.length === 0) {
-        this.showError('Please select students to send notification.')
+
+    async removeEnrollment(enrollmentId, studentName) {
+      if (!confirm(`Are you sure you want to remove ${studentName} from this course?`)) {
         return
       }
-      this.showSuccess(`Notification sent to ${this.selectedStudents.length} students!`)
+      
+      try {
+        await api.delete(`/enrollments/${enrollmentId}`)
+        this.successMessage = `${studentName} has been removed from the course successfully!`
+        
+        // Refresh both enrollments and main data
+        await Promise.all([
+          this.fetchEnrollments(),
+          this.fetchData()
+        ])
+      } catch (error) {
+        console.error('Failed to remove enrollment:', error)
+        this.errorMessage = error.response?.data?.error || 'Failed to remove student from course. Please try again.'
+      }
     },
-    
+
     formatDate(dateString) {
       if (!dateString) return 'N/A'
-      return new Date(dateString).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      })
+      
+      try {
+        // Handle different date formats
+        let date
+        if (dateString.includes('T')) {
+          date = new Date(dateString)
+        } else {
+          // Assume it's in YYYY-MM-DD format
+          date = new Date(dateString + 'T00:00:00')
+        }
+        
+        if (isNaN(date.getTime())) {
+          return 'N/A'
+        }
+        
+        return date.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        })
+      } catch (error) {
+        console.error('Date formatting error:', error)
+        return 'N/A'
+      }
     },
-    
-    showSuccess(message) {
-      this.successMessage = message
-      this.errorMessage = ''
-      setTimeout(() => {
-        this.successMessage = ''
-      }, 5000)
-    },
-    
-    showError(message) {
-      this.errorMessage = message
-      this.successMessage = ''
-      setTimeout(() => {
-        this.errorMessage = ''
-      }, 5000)
-    },
-    
+
     clearMessages() {
       this.successMessage = ''
       this.errorMessage = ''
+    },
+
+    // New method to load unenrolled students for a specific course
+    async loadUnenrolledStudentsForCourse(courseId) {
+      try {
+        console.log('Loading unenrolled students for course:', courseId)
+        const response = await api.get(`/courses/${courseId}/unenrolled-students`)
+        this.allStudents = response.data || []
+        this.dataLoaded = true
+        console.log('Loaded unenrolled students:', this.allStudents.length)
+      } catch (error) {
+        console.error('Failed to load unenrolled students:', error)
+        this.errorMessage = 'Failed to load available students for enrollment.'
+        this.allStudents = [] // Set to empty array if API fails
+        this.$emit('enrollment-error', this.errorMessage)
+      }
+    },
+
+    // Improved method for loading students for modal
+    async loadStudentsForModal() {
+      try {
+        console.log('Loading students for modal...')
+        // If we have a selected course, load unenrolled students for that course
+        if (this.modalSelectedCourseId) {
+          await this.loadUnenrolledStudentsForCourse(this.modalSelectedCourseId)
+        } else {
+          // Otherwise load all students and enrollments for manual filtering
+          const [enrollmentsRes, studentsRes] = await Promise.all([
+            api.get('/enrollments'),
+            api.get('/students')
+          ])
+          this.enrollments = enrollmentsRes.data || []
+          this.allStudents = studentsRes.data || []
+          this.dataLoaded = true
+          console.log('Loaded for modal - Students:', this.allStudents.length, 'Enrollments:', this.enrollments.length)
+        }
+      } catch (error) {
+        console.error('Failed to load students for modal:', error)
+        this.errorMessage = 'Failed to load student data for enrollment.'
+        this.$emit('enrollment-error', this.errorMessage)
+      }
     }
   },
-  
-  mounted() {
-    this.fetchLecturerCourses()
-    this.fetchAllStudents()
-  },
-  
+
   watch: {
-    enrollmentSearchTerm() {
-      this.currentPage = 1
+    selectedCourse: {
+      handler(newCourse) {
+        if (newCourse && this.isModalOnly) {
+          console.log('Selected course changed:', newCourse)
+          this.modalSelectedCourseId = newCourse.id
+          this.openEnrollmentModal(newCourse)
+        }
+      },
+      immediate: true
     },
-    
-    selectedStudents() {
-      this.selectAll = this.selectedStudents.length === this.paginatedEnrollments.length && this.paginatedEnrollments.length > 0
+
+    // Watch for when the modal opens to ensure data is loaded
+    showEnrollmentModal: {
+      handler(isOpen) {
+        if (isOpen) {
+          console.log('Modal opened, checking data...', {
+            studentsLoaded: this.allStudents.length,
+            dataLoaded: this.dataLoaded
+          })
+          
+          if (!this.dataLoaded || this.allStudents.length === 0) {
+            console.log('Data not loaded, loading now...')
+            this.loadStudentsForModal()
+          }
+        }
+      }
     },
+
+    // Clear messages after some time
+    successMessage(newVal) {
+      if (newVal) {
+        setTimeout(() => {
+          this.successMessage = ''
+        }, 5000)
+      }
+    },
+
+    errorMessage(newVal) {
+      if (newVal) {
+        setTimeout(() => {
+          this.errorMessage = ''
+        }, 8000)
+      }
+    }
+  },
+
+  async mounted() {
+    console.log('ManageEnrollment mounted', {
+      isModalOnly: this.isModalOnly,
+      selectedCourse: this.selectedCourse
+    })
     
-    bulkEnrollCourseId() {
-      this.bulkSelectedStudents = []
+    if (!this.isModalOnly) {
+      await this.fetchData()
+    } else if (this.selectedCourse) {
+      // Load necessary data for modal operation
+      await this.fetchData()
+    } else {
+      // Always load students data for modal use
+      await this.loadStudentsForModal()
     }
   }
 }
 </script>
 
 <style scoped>
+/* Main container styles */
 .manage-enrollment {
-  padding: 0;
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 0 auto;
+  padding: 20px;
 }
 
-/* Header Section */
+/* Header styles */
 .header-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   margin-bottom: 32px;
-  padding-bottom: 20px;
-  border-bottom: 2px solid #f1f3f4;
 }
 
 .header-section h3 {
   margin: 0;
   color: #1D3557;
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
 }
 
-/* Card Styles */
+/* Card styles */
 .card {
   background: white;
-  border-radius: 16px;
-  padding: 32px;
-  margin-bottom: 32px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   border: 1px solid #f1f3f4;
-  transition: all 0.3s ease;
-}
-
-.card:hover {
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-  transform: translateY(-2px);
 }
 
 .card-header {
@@ -1248,7 +1224,7 @@ export default {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
-  padding-bottom: 16px;
+  padding-bottom: 12px;
   border-bottom: 1px solid #f1f3f4;
 }
 
@@ -1256,180 +1232,224 @@ export default {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 18px;
-  font-weight: 700;
   color: #1D3557;
+  font-size: 20px;
+  font-weight: 600;
 }
 
 .card-icon {
   width: 24px;
   height: 24px;
-  color: #457B9D;
 }
 
-.course-info {
-  display: flex;
-  align-items: center;
+/* Filter styles */
+.filters-section {
+  margin-bottom: 24px;
 }
 
-.course-badge {
-  background: linear-gradient(135deg, #457B9D, #1D3557);
-  color: white;
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 600;
-  box-shadow: 0 2px 8px rgba(69, 123, 157, 0.3);
-}
-
-/* Course Selection */
-.course-selector {
-  margin-top: 16px;
-}
-
-.course-select {
-  width: 100%;
-  padding: 16px 20px;
-  border: 2px solid #e1e5e9;
-  border-radius: 12px;
-  font-size: 16px;
-  background: white;
-  color: #495057;
-  transition: all 0.3s ease;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-  background-position: right 16px center;
-  background-repeat: no-repeat;
-  background-size: 16px;
-  padding-right: 48px;
-}
-
-.course-select:focus {
-  outline: none;
-  border-color: #457B9D;
-  box-shadow: 0 0 0 4px rgba(69, 123, 157, 0.1);
-}
-
-.course-select.has-selection {
-  border-color: #457B9D;
-  background-color: #f8fcff;
-}
-
-/* Quick Actions */
-.quick-actions-grid {
+.filter-group {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 16px;
+  align-items: end;
 }
 
-.action-btn {
+.filter-item {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 16px 24px;
-  border: none;
-  border-radius: 12px;
+  flex-direction: column;
+}
+
+.filter-item label {
+  margin-bottom: 4px;
   font-weight: 600;
+  color: #1D3557;
   font-size: 14px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  text-decoration: none;
-  position: relative;
-  overflow: hidden;
 }
 
-.action-btn:before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-  transition: left 0.5s;
+.filter-select {
+  padding: 12px;
+  border: 1px solid #e1e5e9;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s ease;
 }
 
-.action-btn:hover:before {
-  left: 100%;
+.filter-select:focus {
+  outline: none;
+  border-color: #457B9D;
+  box-shadow: 0 0 0 3px rgba(69, 123, 157, 0.1);
 }
 
-.action-btn.primary {
-  background: linear-gradient(135deg, #27ae60, #2ecc71);
-  color: white;
-  box-shadow: 0 4px 16px rgba(46, 204, 113, 0.3);
-}
-
-.action-btn.primary:hover {
-  background: linear-gradient(135deg, #229954, #27ae60);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(46, 204, 113, 0.4);
-}
-
-.action-btn.secondary {
-  background: linear-gradient(135deg, #3498db, #2980b9);
-  color: white;
-  box-shadow: 0 4px 16px rgba(52, 152, 219, 0.3);
-}
-
-.action-btn.secondary:hover {
-  background: linear-gradient(135deg, #2980b9, #21618c);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
-}
-
-.action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none !important;
-  box-shadow: none !important;
-}
-
-.btn-icon {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-}
-
-/* Card Actions */
-.card-actions {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+.search-filter {
+  grid-column: span 2;
 }
 
 .search-container {
   position: relative;
-  display: flex;
-  align-items: center;
 }
 
 .search-icon {
   position: absolute;
-  left: 16px;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 18px;
   height: 18px;
   color: #6c757d;
-  z-index: 1;
 }
 
 .search-input {
-  padding: 12px 16px 12px 48px;
-  border: 2px solid #e1e5e9;
-  border-radius: 12px;
+  width: 100%;
+  padding: 12px 12px 12px 44px;
+  border: 1px solid #e1e5e9;
+  border-radius: 8px;
   font-size: 14px;
-  width: 300px;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
 .search-input:focus {
   outline: none;
   border-color: #457B9D;
-  box-shadow: 0 0 0 4px rgba(69, 123, 157, 0.1);
+  box-shadow: 0 0 0 3px rgba(69, 123, 157, 0.1);
 }
 
-/* Modal Styles */
-.modal {
+/* Table styles */
+.table-container {
+  overflow-x: auto;
+}
+
+.courses-table, .enrollment-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.courses-table th, .enrollment-table th {
+  background: #f8f9fa;
+  color: #495057;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 16px 12px;
+  text-align: left;
+  border-bottom: 2px solid #e9ecef;
+}
+
+.courses-table td, .enrollment-table td {
+  padding: 16px 12px;
+  border-bottom: 1px solid #f1f3f4;
+  vertical-align: middle;
+}
+
+.course-row:hover, .enrollment-row:hover {
+  background: #f8f9fa;
+}
+
+/* Button styles */
+.action-btn-small {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-btn-small svg {
+  width: 14px;
+  height: 14px;
+}
+
+.action-btn-small.primary {
+  background: linear-gradient(135deg, #457B9D, #1D3557);
+  color: white;
+  box-shadow: 0 2px 6px rgba(69, 123, 157, 0.3);
+}
+
+.action-btn-small.primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(69, 123, 157, 0.4);
+}
+
+.action-btn-small.secondary {
+  background: linear-gradient(135deg, #6c757d, #495057);
+  color: white;
+  box-shadow: 0 2px 6px rgba(108, 117, 125, 0.3);
+}
+
+.action-btn-small.secondary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(108, 117, 125, 0.4);
+}
+
+.action-btn-small.info {
+  background: linear-gradient(135deg, #17a2b8, #138496);
+  color: white;
+  box-shadow: 0 2px 6px rgba(23, 162, 184, 0.3);
+}
+
+.action-btn-small.info:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(23, 162, 184, 0.4);
+}
+
+.action-btn-small.danger {
+  background: linear-gradient(135deg, #dc3545, #c82333);
+  color: white;
+  box-shadow: 0 2px 6px rgba(220, 53, 69, 0.3);
+}
+
+.action-btn-small.danger:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+}
+
+.action-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+/* Badge styles */
+.course-code-badge {
+  background: #e8f4f8;
+  color: #457B9D;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.semester-badge {
+  background: #f8f9fa;
+  color: #1D3557;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-badge.active {
+  background: #d4edda;
+  color: #155724;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.matric-badge {
+  background: #e8f4f8;
+  color: #457B9D;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* **CRITICAL MODAL STYLES** */
+.modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -1439,9 +1459,9 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  animation: fadeIn 0.3s ease;
+  z-index: 9999;
   backdrop-filter: blur(4px);
+  animation: fadeIn 0.3s ease;
 }
 
 @keyframes fadeIn {
@@ -1451,26 +1471,22 @@ export default {
 
 .modal-content {
   background: white;
-  border-radius: 20px;
-  padding: 32px;
+  border-radius: 16px;
+  padding: 0;
   min-width: 500px;
   max-width: 90vw;
   max-height: 90vh;
-  overflow-y: auto;
+  overflow: hidden;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  animation: slideUp 0.3s ease;
+  animation: modalSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
+  z-index: 10000;
 }
 
-.modal-content.large {
-  min-width: 700px;
-  max-width: 1000px;
-}
-
-@keyframes slideUp {
+@keyframes modalSlideIn {
   from {
     opacity: 0;
-    transform: translateY(40px) scale(0.95);
+    transform: translateY(-30px) scale(0.95);
   }
   to {
     opacity: 1;
@@ -1478,20 +1494,25 @@ export default {
   }
 }
 
+.enrollment-modal {
+  min-width: 600px;
+  max-width: 700px;
+}
+
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 2px solid #f1f3f4;
+  padding: 24px 28px;
+  border-bottom: 1px solid #f1f3f4;
+  background: #f8f9fa;
 }
 
 .modal-header h4 {
   margin: 0;
   color: #1D3557;
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 600;
 }
 
 .close-btn {
@@ -1502,37 +1523,33 @@ export default {
   border-radius: 8px;
   color: #6c757d;
   transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .close-btn:hover {
-  background: #f8f9fa;
+  background: #e9ecef;
   color: #495057;
-  transform: scale(1.1);
 }
 
 .close-btn svg {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
 }
 
 .modal-body {
+  padding: 24px 28px;
+  max-height: calc(90vh - 140px);
+  overflow-y: auto;
+}
+
+/* Search Section */
+.search-section {
   margin-bottom: 24px;
 }
 
-.modal-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  padding-top: 24px;
-  border-top: 1px solid #f1f3f4;
-}
-
-/* Form Styles */
-.form-group {
-  margin-bottom: 24px;
-}
-
-.form-group label {
+.search-label {
   display: block;
   margin-bottom: 8px;
   font-weight: 600;
@@ -1540,537 +1557,257 @@ export default {
   font-size: 14px;
 }
 
-.student-search-dropdown {
+.student-search-container {
   position: relative;
 }
 
-.search-input-container {
-  display: flex;
-  align-items: center;
-  border: 2px solid #e1e5e9;
-  border-radius: 12px;
-  padding: 8px 12px;
-  background: white;
-  transition: all 0.3s ease;
+.search-input-wrapper {
+  position: relative;
+  max-width: 400px; /* Shorter search box */
 }
 
-.student-search-input {
-  flex: 1;
-  border: none;
-  outline: none;
-  font-size: 14px;
-  color: #495057;
-}
-
-.dropdown-toggle {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 8px;
-  color: #6c757d;
-  transition: all 0.2s ease;
-}
-
-.dropdown-toggle:hover {
-  background: #f8f9fa;
-  color: #495057;
-}
-
-.dropdown-toggle.rotated svg {
-  transform: rotate(180deg);
-}
-
-.dropdown-toggle svg {
-  width: 16px;
-  height: 16px;
-}
-
-.dropdown-results {
+.search-icon {
   position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: white;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  color: #6c757d;
+  z-index: 2;
+}
+
+.search-input-field {
+  width: 100%;
+  padding: 12px 16px 12px 44px; /* Reduced padding */
   border: 2px solid #e1e5e9;
-  border-top: none;
-  border-radius: 0 0 12px 12px;
-  max-height: 300px;
-  overflow-y: auto;
-  z-index: 100;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-}
-
-.student-options {
-  padding: 8px;
-}
-
-.student-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  cursor: pointer;
+  border-radius: 8px; /* Smaller border radius */
+  font-size: 14px;
   transition: all 0.2s ease;
-  border-bottom: 1px solid #f1f3f4;
+  background: white;
 }
 
-.student-option:hover {
-  background: #f8f9fa;
+.search-input-field:focus {
+  outline: none;
+  border-color: #457B9D;
+  box-shadow: 0 0 0 3px rgba(69, 123, 157, 0.1);
 }
 
-.student-option.selected {
-  background: linear-gradient(135deg, #e8f4f8, #f1faee);
-  border-left: 4px solid #457B9D;
+/* Student List Container - replaces dropdown */
+.student-list-container {
+  margin-top: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #e1e5e9;
+  border-radius: 8px;
+  background: white;
 }
 
-.student-avatar-small {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #457B9D, #1D3557);
-  color: white;
+.loading-state {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 600;
-  font-size: 12px;
-  flex-shrink: 0;
-}
-
-.student-info-compact {
-  flex: 1;
-}
-
-.student-name-compact {
-  font-weight: 600;
-  color: #1D3557;
-  margin-bottom: 2px;
-}
-
-.student-matric-compact {
-  font-size: 12px;
-  color: #457B9D;
-}
-
-.selection-indicator {
-  color: #27ae60;
-}
-
-.selection-indicator svg {
-  width: 16px;
-  height: 16px;
-}
-
-.no-students-found {
-  padding: 8px;
-  text-align: center;
-  color: #6c757d;
-  font-style: italic;
-}
-
-.no-results-icon {
-  width: 24px;
-  height: 24px;
-  margin-bottom: 8px;
-  color: #6c757d;
-}
-
-.dropdown-loading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  text-align: center;
+  gap: 12px;
+  padding: 32px;
   color: #6c757d;
 }
 
 .loading-spinner {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   border: 2px solid #e1e5e9;
-  border-top: 2px solid #457B9D;
+  border-top-color: #457B9D;
   border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+  animation: spin 1s linear infinite;
 }
 
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Empty State when no course selected */
-.card.empty-state {
-  text-align: center;
-  padding: 48px 32px;
-  background: linear-gradient(135deg, #f8fcff, #f1faee);
-  border: 2px dashed #e1e5e9;
-}
-
-.empty-content {
-  max-width: 400px;
-  margin: 0 auto;
-}
-
-.empty-content .empty-icon {
-  width: 48px;
-  height: 48px;
-  color: #6c757d;
-  margin: 0 auto 16px;
-  display: block;
-}
-
-.empty-content h4 {
-  color: #1D3557;
-  font-size: 20px;
-  font-weight: 600;
-  margin: 0 0 12px 0;
-}
-
-.empty-content p {
-  color: #6c757d;
-  font-size: 14px;
-  line-height: 1.5;
-  margin: 0;
-}
-
-/* Table Container */
-.table-container {
-  background: white;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  border: 1px solid #f1f3f4;
-}
-
-/* Enhanced Table Styles */
-.enrollment-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-  background: white;
-}
-
-.enrollment-table thead {
-  background: linear-gradient(135deg, #f8fcff, #f1faee);
-  border-bottom: 2px solid #e1e5e9;
-}
-
-.enrollment-table thead th {
-  padding: 16px 20px;
-  text-align: left;
-  font-weight: 700;
-  color: #1D3557;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-bottom: 2px solid #e1e5e9;
-  white-space: nowrap;
-}
-
-.enrollment-table thead th.checkbox-column {
-  width: 50px;
-  text-align: center;
-  padding: 16px 12px;
-}
-
-.enrollment-table thead th.sortable {
-  cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
-  padding-right: 40px;
-}
-
-.enrollment-table thead th.sortable:hover {
-  background: linear-gradient(135deg, #e8f4f8, #e8f5e8);
-  color: #457B9D;
-}
-
-.sort-icon {
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
-  color: #457B9D;
-}
-
-.enrollment-table tbody tr {
-  border-bottom: 1px solid #f8f9fa;
-  transition: all 0.2s ease;
-}
-
-.enrollment-table tbody tr:hover {
-  background: linear-gradient(135deg, #fefffe, #f8fcff);
-  transform: translateX(4px);
-  box-shadow: 0 2px 12px rgba(69, 123, 157, 0.08);
-}
-
-.enrollment-table tbody tr:last-child {
-  border-bottom: none;
-}
-
-.enrollment-table tbody td {
-  padding: 16px 20px;
-  vertical-align: middle;
-  color: #495057;
-  line-height: 1.4;
-}
-
-.enrollment-table tbody td.checkbox-column {
-  width: 50px;
-  text-align: center;
-  padding: 16px 12px;
-}
-
-.checkbox-input {
-  width: 16px;
-  height: 16px;
-  accent-color: #457B9D;
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-.matric-badge {
-  background: linear-gradient(135deg, #457B9D, #1D3557);
-  color: white;
-  padding: 6px 12px;
-  border-radius: 16px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  box-shadow: 0 2px 8px rgba(69, 123, 157, 0.2);
-}
-
-.student-info {
+.students-grid {
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+}
+
+.student-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.student-card:hover {
+  background: #e9ecef;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.student-card.selected {
+  background: rgba(69, 123, 157, 0.1);
+  border-color: #457B9D;
+  box-shadow: 0 0 0 2px rgba(69, 123, 157, 0.2);
+}
+
+.student-details {
+  flex: 1;
 }
 
 .student-name {
   font-weight: 600;
+  font-size: 14px;
   color: #1D3557;
-  font-size: 15px;
+  margin-bottom: 2px;
 }
 
-.student-id {
-  font-size: 12px;
-  color: #6c757d;
-  font-weight: 500;
-}
-
-.email {
-  color: #457B9D;
+.student-matric {
   font-size: 13px;
-  font-weight: 500;
-}
-
-.date {
   color: #6c757d;
-  font-size: 13px;
-  font-weight: 500;
 }
 
-.status-badge {
-  padding: 6px 12px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.status-badge.active {
-  background: linear-gradient(135deg, #d4edda, #c3e6cb);
-  color: #155724;
-  border: 1px solid #c3e6cb;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.action-btn-small {
-  padding: 8px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
+.selection-checkbox {
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
-  overflow: hidden;
+  margin-left: auto;
 }
 
-.action-btn-small:before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-  transition: left 0.3s;
+.checkbox-input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #457B9D;
+  border-radius: 4px;
 }
 
-.action-btn-small:hover:before {
-  left: 100%;
+.checkbox-input:checked {
+  background-color: #457B9D;
+  border-color: #457B9D;
 }
 
-.action-btn-small svg {
+/* Table checkbox styles */
+.checkbox-column {
+  width: 50px;
+  text-align: center;
+}
+
+.checkbox-column .checkbox-input {
   width: 16px;
   height: 16px;
 }
 
-.action-btn-small.info {
-  background: linear-gradient(135deg, #3498db, #2980b9);
-  color: white;
-  box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
-}
-
-.action-btn-small.info:hover {
-  background: linear-gradient(135deg, #2980b9, #21618c);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
-}
-
-.action-btn-small.danger {
-  background: linear-gradient(135deg, #e74c3c, #c0392b);
-  color: white;
-  box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3);
-}
-
-.action-btn-small.danger:hover {
-  background: linear-gradient(135deg, #c0392b, #a93226);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
-}
-
-/* Empty State for Table */
-.empty-state-table {
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 20px;
   text-align: center;
-  padding: 48px 32px;
-  background: linear-gradient(135deg, #f8fcff, #f1faee);
-  border-radius: 12px;
-  margin: 16px;
+  color: #6c757d;
 }
 
-.empty-state-table .empty-icon {
+.empty-icon {
   width: 48px;
   height: 48px;
-  color: #6c757d;
-  margin: 0 auto 16px;
-  display: block;
+  opacity: 0.5;
 }
 
-.empty-state-table h4 {
-  color: #1D3557;
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0 0 8px 0;
-}
-
-.empty-state-table p {
-  color: #6c757d;
-  font-size: 14px;
-  line-height: 1.5;
-  margin: 0 0 24px 0;
-}
-
-/* View Controls */
-.view-controls {
-  display: flex;
-  gap: 4px;
-  background: #f8f9fa;
-  padding: 4px;
-  border-radius: 8px;
-}
-
-.view-btn {
-  padding: 8px 12px;
-  border: none;
-  background: transparent;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: #6c757d;
-}
-
-.view-btn:hover {
-  background: white;
-  color: #495057;
-}
-
-.view-btn.active {
-  background: white;
-  color: #457B9D;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.view-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* Batch Actions */
-.batch-actions {
-  background: linear-gradient(135deg, #fff3cd, #ffeaa7);
-  border: 1px solid #ffeaa7;
-  border-radius: 12px;
-  padding: 16px 20px;
-  margin-bottom: 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.batch-buttons {
+/* Modal Footer */
+.modal-footer {
   display: flex;
   gap: 12px;
+  justify-content: flex-end;
+  padding: 20px 28px;
+  border-top: 1px solid #f1f3f4;
+  background: #f8f9fa;
 }
 
-.batch-btn {
+.cancel-btn {
+  background: #6c757d;
+  color: white;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.cancel-btn:hover {
+  background: #5a6268;
+}
+
+.enroll-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  background: linear-gradient(135deg, #457B9D, #1D3557);
+  color: white;
+  padding: 12px 24px;
   border: none;
   border-radius: 8px;
-  font-weight: 600;
-  font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(69, 123, 157, 0.3);
 }
 
-.batch-btn.danger {
-  background: linear-gradient(135deg, #e74c3c, #c0392b);
-  color: white;
-  box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3);
+.enroll-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(69, 123, 157, 0.4);
 }
 
-.batch-btn.danger:hover {
-  background: linear-gradient(135deg, #c0392b, #a93226);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+.enroll-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
-.batch-btn.secondary {
-  background: #6c757d;
-  color: white;
+.btn-icon {
+  width: 16px;
+  height: 16px;
 }
 
-.batch-btn.secondary:hover {
-  background: #5a6268;
-  transform: translateY(-2px);
+.btn-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .modal-content {
+    margin: 20px;
+    min-width: 0;
+    max-width: calc(100vw - 40px);
+  }
+  
+  .enrollment-modal {
+    min-width: 0;
+    max-width: calc(100vw - 40px);
+  }
+  
+  .modal-header, .modal-body, .modal-footer {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  
+  .modal-footer {
+    flex-direction: column-reverse;
+  }
+  
+  .enroll-btn, .cancel-btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 </style>

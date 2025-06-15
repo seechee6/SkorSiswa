@@ -28,6 +28,7 @@ CREATE TABLE enrollments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     student_id INT NOT NULL,
     course_id INT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (student_id, course_id),
     FOREIGN KEY (student_id) REFERENCES users(id),
     FOREIGN KEY (course_id) REFERENCES courses(id)
