@@ -777,6 +777,20 @@ $app->post('/enrollments/{enrollment_id}/final-mark', function (Request $request
     return $response->withHeader('Content-Type', 'application/json');
 });
 
+// Get final exam mark for enrollment
+$app->get('/enrollments/{enrollment_id}/final-mark', function (Request $request, Response $response, $args) use ($pdo) {
+    $stmt = $pdo->prepare('SELECT * FROM final_exam_marks WHERE enrollment_id = ?');
+    $stmt->execute([$args['enrollment_id']]);
+    $finalMark = $stmt->fetch();
+    
+    if ($finalMark) {
+        $response->getBody()->write(json_encode($finalMark));
+    } else {
+        $response->getBody()->write(json_encode(null));
+    }
+    return $response->withHeader('Content-Type', 'application/json');
+});
+
 // Bulk upload marks via CSV (simplified - would need CSV parsing library)
 $app->post('/courses/{course_id}/bulk-upload-marks', function (Request $request, Response $response, $args) use ($pdo) {
     $data = $request->getParsedBody();
