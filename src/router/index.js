@@ -19,6 +19,7 @@ import CompareWithCoursemates from '../components/student/CompareWithCoursemates
 import Ranking from '../components/student/Ranking.vue'
 import WhatIfSimulator from '../components/student/WhatIfSimulator.vue'
 import PerformanceTrends from '../components/student/PerformanceTrends.vue'
+import RemarkRequests from '../components/student/RemarkRequests.vue'
 import AdvisorDashboard from '../components/advisor/AdvisorDashboard.vue'
 import AdminDashboard from '../components/admin/AdminDashboard.vue'
 import Login from '../components/Login.vue'
@@ -47,14 +48,13 @@ const routes = [
     path: '/student',
     component: StudentLayout,
     children: [
-      { path: '', redirect: '/student/dashboard' },
-      { path: 'dashboard', component: StudentDashboard },
+      { path: '', redirect: '/student/dashboard' },      { path: 'dashboard', component: StudentDashboard },
       { path: 'marks', component: MarkBreakdown },
       { path: 'compare', component: CompareWithCoursemates },
       { path: 'ranking', component: Ranking },
       { path: 'simulator', component: WhatIfSimulator },
       { path: 'performance', component: PerformanceTrends },
-      { path: 'remarks', component: MarkBreakdown }
+      { path: 'remarks', component: RemarkRequests }
     ]
   },
   { path: '/advisor', component: AdvisorDashboard },

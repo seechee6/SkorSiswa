@@ -50,4 +50,55 @@ api.interceptors.response.use(
     }
 );
 
+// Student API methods
+export const studentApi = {
+    // Get student dashboard data
+    getDashboard(studentId) {
+        return api.get(`/student/dashboard/${studentId}`);
+    },
+    
+    // Get mark breakdown for a course
+    getMarkBreakdown(studentId, courseId) {
+        return api.get(`/student/marks/${studentId}/${courseId}`);
+    },
+    
+    // Get comparison with coursemates
+    getComparison(studentId, courseId) {
+        return api.get(`/student/compare/${studentId}/${courseId}`);
+    },
+    
+    // Get ranking information
+    getRanking(studentId, courseId) {
+        return api.get(`/student/ranking/${studentId}/${courseId}`);
+    },
+    
+    // Get what-if simulator data
+    getSimulatorData(studentId, courseId) {
+        return api.get(`/student/simulator/${studentId}/${courseId}`);
+    },
+    
+    // Get performance trends
+    getPerformanceTrends(studentId) {
+        return api.get(`/student/trends/${studentId}`);
+    },
+    
+    // Get remark requests
+    getRemarkRequests(studentId) {
+        return api.get(`/student/remarks/${studentId}`);
+    },
+    
+    // Submit new remark request
+    submitRemarkRequest(requestData) {
+        return api.post('/student/remarks', requestData);
+    },
+    
+    // Update or cancel remark request
+    updateRemarkRequest(requestId, requestData) {
+        return api.put(`/student/remarks/${requestId}`, requestData);
+    }
+};
+
+// Attach studentApi to the main api object
+api.student = studentApi;
+
 export default api;
