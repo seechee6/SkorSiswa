@@ -19,7 +19,16 @@ import CompareWithCoursemates from '../components/student/CompareWithCoursemates
 import Ranking from '../components/student/Ranking.vue'
 import WhatIfSimulator from '../components/student/WhatIfSimulator.vue'
 import PerformanceTrends from '../components/student/PerformanceTrends.vue'
+import AdvisorLayout from '../components/advisor/AdvisorLayout.vue'
 import AdvisorDashboard from '../components/advisor/AdvisorDashboard.vue'
+import AdviseeList from '../components/advisor/AdviseeList.vue'
+import AdvisorMarkBreakdown from '../components/advisor/MarkBreakdown.vue'
+import AtRiskStudents from '../components/advisor/AtRiskStudents.vue'
+import MeetingNotes from '../components/advisor/MeetingNotes.vue'
+import AdviseeReports from '../components/advisor/AdviseeReports.vue'
+import CoursePerformance from '../components/advisor/CoursePerformance.vue'
+import PerformanceAnalytics from '../components/advisor/PerformanceAnalytics.vue'
+import AdvisorPerformanceTrends from '../components/advisor/PerformanceTrends.vue'
 import AdminDashboard from '../components/admin/AdminDashboard.vue'
 import Login from '../components/Login.vue'
 
@@ -57,7 +66,21 @@ const routes = [
       { path: 'remarks', component: MarkBreakdown }
     ]
   },
-  { path: '/advisor', component: AdvisorDashboard },
+  {
+    path: '/advisor',
+    component: AdvisorLayout,
+    children: [
+      { path: '', redirect: '/advisor/dashboard' },
+      { path: 'dashboard', component: AdvisorDashboard },
+      { path: 'advisee-list', component: AdviseeList },
+      { path: 'mark-breakdown', component: AdvisorMarkBreakdown },
+      { path: 'at-risk-students', component: AtRiskStudents },      { path: 'meeting-notes', component: MeetingNotes },
+      { path: 'advisee-reports', component: AdviseeReports },
+      { path: 'course-performance', component: CoursePerformance },
+      { path: 'performance-analytics', component: PerformanceAnalytics },
+      { path: 'performance-trends', component: AdvisorPerformanceTrends }
+    ]
+  },
   { path: '/admin', component: AdminDashboard },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
