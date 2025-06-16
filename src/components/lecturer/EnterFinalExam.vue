@@ -1,8 +1,8 @@
 <template>
   <div>
     <div class="header-section">
-      <h3>Enter Final Exam Marks (30%)</h3>
-      <p class="subtitle">Enter final examination marks for your courses</p>
+      <h3>Enter Assessment Marks</h3>
+      <p class="subtitle">Enter assessment marks for your courses</p>
     </div>
     
     <!-- Courses Table -->
@@ -19,7 +19,7 @@
               <th>No.</th>
               <th>Course Details</th>
               <th>Enrolled Students</th>
-              <th>Grading Progress</th>
+              <th>Graded Assessment Progress</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -56,11 +56,11 @@
                 </div>
               </td>
               <td class="actions-cell">
-                <button @click="openStudentsModal(course)" class="action-btn primary">
+                <button @click="openAssessmentsModal(course)" class="action-btn primary">
                   <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 2 002 2h8a2 2 2 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 2 002-2M9 5a2 2 0 012-2h2a2 2 2 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
                   </svg>
-                  View Students
+                  View Assessments
                 </button>
               </td>
             </tr>
@@ -78,11 +78,125 @@
       </div>
     </div>
 
+    <!-- Assessments Modal -->
+    <div v-if="showAssessmentsModal" class="modal-overlay" @click.self="closeAssessmentsModal">
+      <div class="modal-content assessments-modal">
+        <div class="modal-header">
+          <h4>{{ selectedCourse?.code }} - Assessments & Final Exam</h4>
+          <button @click="closeAssessmentsModal" class="close-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Assessment Instructions -->
+        <div class="instructions-section">
+          <div class="instruction-header">
+            <svg class="info-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <h5>Assessment Overview</h5>
+          </div>
+          <ul class="instruction-list">
+            <li>View grading progress for all assessments and final exam</li>
+            <li>Click "Enter Marks" to grade individual assessments</li>
+            <li>Final exam carries <strong>30%</strong> of the total course grade</li>
+            <li>All assessments combined carry <strong>70%</strong> of the total grade</li>
+          </ul>
+        </div>
+
+        <!-- Assessments Table -->
+        <div class="table-wrapper">
+          <table class="assessments-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Weight (%)</th>
+                <th>Grading Progress</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="assessment in courseAssessments" :key="assessment.id" class="assessment-row">
+                <td>
+                  <div class="assessment-title">{{ assessment.title }}</div>
+                </td>
+                <td>
+                  <span class="weight-text">{{ assessment.weight }}%</span>
+                </td>
+                <td>
+                  <div class="progress-display">
+                    <div class="progress-stats">
+                      <span class="progress-text">{{ assessment.gradedCount || 0 }} / {{ selectedCourse?.enrolledCount || 0 }} graded</span>
+                      <span class="progress-percentage">{{ getAssessmentProgressPercentage(assessment) }}%</span>
+                    </div>
+                    <div class="progress-bar-small">
+                      <div 
+                        class="progress-fill-small" 
+                        :style="{ width: getAssessmentProgressPercentage(assessment) + '%' }"
+                        :class="getProgressClass({ gradedCount: assessment.gradedCount, enrolledCount: selectedCourse?.enrolledCount })"
+                      ></div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <button @click="openStudentsModal(selectedCourse, assessment)" class="action-btn primary">
+                    <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 2 00-2 2v11a2 2 2 002 2h11a2 2 2 002-2v-5m-1.414-9.414a2 2 2 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                    Enter Marks
+                  </button>
+                </td>
+              </tr>
+              <!-- Final Exam Row -->
+              <tr class="final-exam-row">
+                <td>
+                  <div class="assessment-title">Final Examination</div>
+                </td>
+                <td>
+                  <span class="weight-text">30%</span>
+                </td>
+                <td>
+                  <div class="progress-display">
+                    <div class="progress-stats">
+                      <span class="progress-text">{{ finalExamProgress.gradedCount || 0 }} / {{ selectedCourse?.enrolledCount || 0 }} graded</span>
+                      <span class="progress-percentage">{{ getAssessmentProgressPercentage(finalExamProgress) }}%</span>
+                    </div>
+                    <div class="progress-bar-small">
+                      <div 
+                        class="progress-fill-small" 
+                        :style="{ width: getAssessmentProgressPercentage(finalExamProgress) + '%' }"
+                        :class="getProgressClass({ gradedCount: finalExamProgress.gradedCount, enrolledCount: selectedCourse?.enrolledCount })"
+                      ></div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <button @click="openStudentsModal(selectedCourse, { type: 'Final Exam', id: 'final' })" class="action-btn primary">
+                    <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 2 00-2 2v11a2 2 2 002 2h11a2 2 2 002-2v-5m-1.414-9.414a2 2 2 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                    Enter Marks
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- Students Modal -->
     <div v-if="showStudentsModal" class="modal-overlay" @click.self="closeStudentsModal">
       <div class="modal-content students-modal">
         <div class="modal-header">
-          <h4>{{ selectedCourse?.code }} - Final Exam Marks</h4>
+          <h4 v-if="selectedAssessment && selectedAssessment.id !== 'final'">
+            {{ selectedCourse?.code }} - {{ selectedAssessment.title || selectedAssessment.name }} Marks
+          </h4>
+          <h4 v-else>
+            {{ selectedCourse?.code }} - Final Exam Marks
+          </h4>
           <button @click="closeStudentsModal" class="close-btn">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -90,15 +204,22 @@
           </button>
         </div>
 
-        <!-- Final Exam Instructions -->
+        <!-- Assessment/Final Exam Instructions -->
         <div class="instructions-section">
           <div class="instruction-header">
             <svg class="info-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
             </svg>
-            <h5>Final Exam Guidelines</h5>
+            <h5 v-if="selectedAssessment && selectedAssessment.id !== 'final'">Assessment Guidelines</h5>
+            <h5 v-else>Final Exam Guidelines</h5>
           </div>
-          <ul class="instruction-list">
+          <ul class="instruction-list" v-if="selectedAssessment && selectedAssessment.id !== 'final'">
+            <li>Assessment: <strong>{{ selectedAssessment.title || selectedAssessment.name }}</strong></li>
+            <li>Weight: <strong>{{ selectedAssessment.weight }}%</strong> of the total course grade</li>
+            <li>Enter marks out of <strong>{{ selectedAssessment.max_mark || 100 }}</strong></li>
+            <li>Students will be notified automatically when marks are entered</li>
+          </ul>
+          <ul class="instruction-list" v-else>
             <li>Final exam carries <strong>30%</strong> of the total course grade</li>
             <li>Enter marks out of <strong>100</strong> (will be automatically weighted)</li>
             <li>Use inline editing or batch upload for efficiency</li>
@@ -133,7 +254,7 @@
               :disabled="filteredStudents.length === 0"
             >
               <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 2 002-2V5a2 2 2 002-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 1 01.293.707V19a2 2 2 002-2z"></path>
               </svg>
               Batch Entry
             </button>
@@ -171,8 +292,11 @@
               <tr>
                 <th>Matric No</th>
                 <th>Student Name</th>
-                <th>Final Exam Mark</th>
-                <th>Weighted (30%)</th>
+                <th v-if="selectedAssessment && selectedAssessment.id !== 'final'">
+                  {{ selectedAssessment.title || selectedAssessment.name }} Mark
+                </th>
+                <th v-else>Final Exam Mark</th>
+                <th>Weighted</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -190,22 +314,22 @@
                 <td>
                   <div class="mark-input-wrapper">
                     <input 
-                      v-model.number="student.final_mark"
+                      v-model.number="student.assessment_mark"
                       @input="onMarkChange(student)"
                       type="number" 
                       step="0.1" 
                       min="0" 
-                      max="100" 
+                      :max="selectedAssessment && selectedAssessment.id !== 'final' ? selectedAssessment.max_mark || 100 : 100"
                       class="mark-input"
                       :class="{ 
-                        'has-error': getMarkError(student.final_mark),
+                        'has-error': getMarkError(student.assessment_mark),
                         'has-changes': pendingMarks[student.enrollment_id] !== undefined
                       }"
                       placeholder="0.0"
                     />
-                    <span class="mark-suffix">/ 100</span>
-                    <div v-if="getMarkError(student.final_mark)" class="input-error">
-                      {{ getMarkError(student.final_mark) }}
+                    <span class="mark-suffix">/ {{ selectedAssessment && selectedAssessment.id !== 'final' ? selectedAssessment.max_mark || 100 : 100 }}</span>
+                    <div v-if="getMarkError(student.assessment_mark)" class="input-error">
+                      {{ getMarkError(student.assessment_mark) }}
                     </div>
                   </div>
                 </td>
@@ -368,6 +492,9 @@ export default {
       students: [],
       selectedCourse: null,
       showStudentsModal: false,
+      showAssessmentsModal: false, // Add showAssessmentsModal
+      courseAssessments: [], // Add courseAssessments
+      finalExamProgress: {}, // Add finalExamProgress
       searchTerm: '',
       pendingMarks: {},
       showBatchModal: false,
@@ -376,21 +503,22 @@ export default {
       itemsPerPage: 15,
       success: '',
       error: '',
-      filterStatus: 'all' // Add filter status
+      filterStatus: 'all', // Add filter status
+      selectedAssessment: null // Add selectedAssessment
     }
   },
   computed: {
     filteredStudents() {
       let filtered = this.students;
 
-      // Filter by grading status
+      // Filter by grading status - use assessment_mark instead of final_mark
       if (this.filterStatus === 'graded') {
         filtered = filtered.filter(student => 
-          student.final_mark !== null && student.final_mark !== ''
+          student.assessment_mark !== null && student.assessment_mark !== ''
         );
       } else if (this.filterStatus === 'ungraded') {
         filtered = filtered.filter(student => 
-          student.final_mark === null || student.final_mark === ''
+          student.assessment_mark === null || student.assessment_mark === ''
         );
       }
 
@@ -414,7 +542,7 @@ export default {
       return Math.ceil(this.filteredStudents.length / this.itemsPerPage);
     },
     gradedCount() {
-      return this.students.filter(s => s.final_mark !== null && s.final_mark !== '').length;
+      return this.students.filter(s => s.assessment_mark !== null && s.assessment_mark !== '').length;
     },
     hasUnsavedChanges() {
       return Object.keys(this.pendingMarks).length > 0;
@@ -451,9 +579,77 @@ export default {
       }
     },
 
+    async fetchAssessments(courseId) {
+      try {
+        // Fetch assessments from the actual API endpoint
+        const assessmentsRes = await api.get(`/courses/${courseId}/assessments`);
+        const assessments = assessmentsRes.data || [];
+        
+        // Fetch enrollments for the course
+        const enrollmentsRes = await api.get(`/courses/${courseId}/enrollments`);
+        const enrollments = enrollmentsRes.data || [];
+        
+        // Calculate grading progress for each assessment using the marks API
+        const assessmentsWithProgress = await Promise.all(assessments.map(async (assessment) => {
+          let gradedCount = 0;
+          
+          // Get all marks for this course to count graded assessments
+          try {
+            const marksRes = await api.get(`/courses/${courseId}/marks`);
+            const assessmentMarks = marksRes.data.assessment_marks || [];
+            
+            // Count how many students have marks for this specific assessment
+            gradedCount = assessmentMarks.filter(mark => 
+              mark.assessment_id === assessment.id && 
+              mark.mark !== null && 
+              mark.mark !== undefined
+            ).length;
+          } catch (e) {
+            console.warn(`Failed to fetch marks for assessment ${assessment.id}:`, e);
+            gradedCount = 0;
+          }
+          
+          return {
+            ...assessment,
+            title: assessment.name,
+            weight: assessment.weight,
+            gradedCount: gradedCount
+          };
+        }));
+
+        this.courseAssessments = assessmentsWithProgress;
+
+        // Calculate final exam progress
+        let finalExamGradedCount = 0;
+        for (const enrollment of enrollments) {
+          try {
+            const finalMarkRes = await api.get(`/enrollments/${enrollment.id}/final-mark`);
+            if (finalMarkRes.data && finalMarkRes.data.mark !== null) {
+              finalExamGradedCount++;
+            }
+          } catch (e) {
+            // Student doesn't have final exam mark yet
+          }
+        }
+        
+        this.finalExamProgress = { gradedCount: finalExamGradedCount };
+
+      } catch (e) {
+        console.error('Error fetching assessments:', e);
+        this.courseAssessments = [];
+        this.finalExamProgress = { gradedCount: 0 };
+        this.showError('Failed to load assessments.');
+      }
+    },
+
     getProgressPercentage(course) {
       if (!course.enrolledCount) return 0;
       return Math.round((course.gradedCount / course.enrolledCount) * 100);
+    },
+
+    getAssessmentProgressPercentage(assessment) {
+      if (!this.selectedCourse?.enrolledCount) return 0;
+      return Math.round((assessment.gradedCount / this.selectedCourse.enrolledCount) * 100);
     },
 
     getProgressClass(course) {
@@ -464,20 +660,40 @@ export default {
       return 'pending';
     },
 
-    async openStudentsModal(course) {
+    async openAssessmentsModal(course) {
       this.selectedCourse = course;
+      await this.fetchAssessments(course.id);
+      this.showAssessmentsModal = true;
+    },
+
+    closeAssessmentsModal() {
+      this.showAssessmentsModal = false;
+      this.selectedCourse = null;
+      this.courseAssessments = [];
+      this.finalExamProgress = {};
+    },
+
+    async openStudentsModal(course, assessment = null) {
+      this.selectedCourse = course;
+      // Store the selected assessment for future use (assessment-specific marking)
+      this.selectedAssessment = assessment;
       await this.fetchStudents(course.id);
       this.showStudentsModal = true;
     },
 
     closeStudentsModal() {
       this.showStudentsModal = false;
-      this.selectedCourse = null;
+      this.selectedAssessment = null;
       this.students = [];
       this.pendingMarks = {};
       this.searchTerm = '';
       this.filterStatus = 'all'; // Reset filter
       this.currentPage = 1;
+      
+      // Refresh assessments data when returning to assessments modal
+      if (this.showAssessmentsModal && this.selectedCourse) {
+        this.fetchAssessments(this.selectedCourse.id);
+      }
     },
 
     closeBatchModal() {
@@ -490,30 +706,74 @@ export default {
         const enrollmentsRes = await api.get(`/courses/${courseId}/enrollments`);
         const enrollments = enrollmentsRes.data || [];
         
-        // Fetch final exam marks for each enrollment
-        this.students = await Promise.all(enrollments.map(async (enrollment) => {
-          try {
-            // Fetch final exam marks from the database
-            const finalMarkRes = await api.get(`/enrollments/${enrollment.id}/final-mark`);
-            const finalMarkData = finalMarkRes.data;
-            const finalMark = finalMarkData ? parseFloat(finalMarkData.mark) : null;
-            
-            return {
-              ...enrollment,
-              final_mark: finalMark,
-              original_mark: finalMark,
-              weighted_mark: finalMark ? (finalMark * 0.3).toFixed(1) : '0.0'
-            };
-          } catch (e) {
-            // If final exam mark doesn't exist, return with null values
-            return {
-              ...enrollment,
-              final_mark: null,
-              original_mark: null,
-              weighted_mark: '0.0'
-            };
-          }
-        }));
+        // Check if we're handling assessment marks or final exam marks
+        if (this.selectedAssessment && this.selectedAssessment.id !== 'final') {
+          // Fetch assessment marks for each enrollment
+          this.students = await Promise.all(enrollments.map(async (enrollment) => {
+            try {
+              // Get marks for this course to find the specific assessment mark
+              const marksRes = await api.get(`/courses/${courseId}/students/${enrollment.student_id}/marks`);
+              const assessmentMarks = marksRes.data.assessment_marks || [];
+              const assessmentMark = assessmentMarks.find(mark => mark.assessment_id === this.selectedAssessment.id);
+              const mark = assessmentMark ? parseFloat(assessmentMark.mark) : null;
+              
+              // Calculate initial weighted mark display
+              let weightedDisplay;
+              if (mark !== null && mark !== '') {
+                const weightedMark = (mark * this.selectedAssessment.weight / 100).toFixed(1);
+                weightedDisplay = `${weightedMark}% (${this.selectedAssessment.weight}%)`;
+              } else {
+                weightedDisplay = `0.0% (${this.selectedAssessment.weight}%)`;
+              }
+              
+              return {
+                ...enrollment,
+                assessment_mark: mark,
+                original_mark: mark,
+                weighted_mark: weightedDisplay
+              };
+            } catch (e) {
+              return {
+                ...enrollment,
+                assessment_mark: null,
+                original_mark: null,
+                weighted_mark: `0.0% (${this.selectedAssessment.weight}%)`
+              };
+            }
+          }));
+        } else {
+          // Fetch final exam marks for each enrollment
+          this.students = await Promise.all(enrollments.map(async (enrollment) => {
+            try {
+              const finalMarkRes = await api.get(`/enrollments/${enrollment.id}/final-mark`);
+              const finalMarkData = finalMarkRes.data;
+              const finalMark = finalMarkData ? parseFloat(finalMarkData.mark) : null;
+              
+              // Calculate initial weighted mark display for final exam
+              let weightedDisplay;
+              if (finalMark !== null && finalMark !== '') {
+                const weightedMark = (finalMark * 0.3).toFixed(1);
+                weightedDisplay = `${weightedMark}% (30%)`;
+              } else {
+                weightedDisplay = '0.0% (30%)';
+              }
+              
+              return {
+                ...enrollment,
+                assessment_mark: finalMark,
+                original_mark: finalMark,
+                weighted_mark: weightedDisplay
+              };
+            } catch (e) {
+              return {
+                ...enrollment,
+                assessment_mark: null,
+                original_mark: null,
+                weighted_mark: '0.0% (30%)'
+              };
+            }
+          }));
+        }
         
         this.pendingMarks = {};
         this.currentPage = 1;
@@ -524,15 +784,32 @@ export default {
     },
     
     onMarkChange(student) {
-      // Update weighted mark when final mark changes
-      student.weighted_mark = student.final_mark ? (student.final_mark * 0.3).toFixed(1) : '0.0';
+      // Update weighted mark based on assessment type
+      if (this.selectedAssessment && this.selectedAssessment.id !== 'final') {
+        // For regular assessments, calculate weighted mark based on assessment weight
+        if (student.assessment_mark !== null && student.assessment_mark !== '') {
+          const weightedMark = (student.assessment_mark * this.selectedAssessment.weight / 100).toFixed(1);
+          student.weighted_mark = `${weightedMark}% (${this.selectedAssessment.weight}%)`;
+        } else {
+          student.weighted_mark = `0.0% (${this.selectedAssessment.weight}%)`;
+        }
+      } else {
+        // For final exam, apply 30% weighting
+        if (student.assessment_mark !== null && student.assessment_mark !== '') {
+          const weightedMark = (student.assessment_mark * 0.3).toFixed(1);
+          student.weighted_mark = `${weightedMark}% (30%)`;
+        } else {
+          student.weighted_mark = '0.0% (30%)';
+        }
+      }
       
-      if (student.final_mark !== student.original_mark) {
-        this.pendingMarks[student.enrollment_id] = student.final_mark;
+      if (student.assessment_mark !== student.original_mark) {
+        this.pendingMarks[student.enrollment_id] = student.assessment_mark;
       } else {
         delete this.pendingMarks[student.enrollment_id];
       }
     },
+
     getMarkError(mark) {
       if (mark === null || mark === '' || mark === undefined) return '';
       if (isNaN(mark)) return 'Invalid number';
@@ -540,6 +817,7 @@ export default {
       if (mark > 100) return 'Mark cannot exceed 100';
       return '';
     },
+
     getStatus(student) {
       if (this.pendingMarks[student.enrollment_id] !== undefined) {
         return 'Unsaved';
@@ -549,6 +827,7 @@ export default {
       }
       return 'Pending';
     },
+
     getStatusClass(student) {
       const status = this.getStatus(student);
       return {
@@ -557,29 +836,52 @@ export default {
         'status-pending': status === 'Pending'
       };
     },
+
     async saveIndividualMark(student) {
       try {
-        await api.post(`/enrollments/${student.enrollment_id}/final-mark`, {
-          mark: student.final_mark
-        });
+        if (this.selectedAssessment && this.selectedAssessment.id !== 'final') {
+          // Save assessment mark
+          await api.post(`/enrollments/${student.enrollment_id}/assessment-marks`, {
+            assessment_id: this.selectedAssessment.id,
+            mark: student.assessment_mark
+          });
+        } else {
+          // Save final exam mark
+          await api.post(`/enrollments/${student.enrollment_id}/final-mark`, {
+            mark: student.assessment_mark
+          });
+        }
         
-        student.original_mark = student.final_mark;
+        student.original_mark = student.assessment_mark;
         delete this.pendingMarks[student.enrollment_id];
         this.showSuccess('Mark saved successfully!');
         
-        // Update course stats
+        // Update course stats and assessments progress
         await this.fetchCourseStats(this.selectedCourse);
+        if (this.showAssessmentsModal) {
+          await this.fetchAssessments(this.selectedCourse.id);
+        }
         
       } catch (e) {
         this.showError('Failed to save mark.');
       }
     },
+
     async submitAllMarks() {
       if (Object.keys(this.pendingMarks).length === 0) return;
 
       try {
         const promises = Object.entries(this.pendingMarks).map(([enrollmentId, mark]) => {
-          return api.post(`/enrollments/${enrollmentId}/final-mark`, { mark });
+          if (this.selectedAssessment && this.selectedAssessment.id !== 'final') {
+            // Submit assessment marks
+            return api.post(`/enrollments/${enrollmentId}/assessment-marks`, {
+              assessment_id: this.selectedAssessment.id,
+              mark: mark
+            });
+          } else {
+            // Submit final exam marks
+            return api.post(`/enrollments/${enrollmentId}/final-mark`, { mark });
+          }
         });
 
         await Promise.all(promises);
@@ -587,24 +889,29 @@ export default {
         // Update original marks
         this.students.forEach(student => {
           if (this.pendingMarks[student.enrollment_id] !== undefined) {
-            student.original_mark = student.final_mark;
+            student.original_mark = student.assessment_mark;
           }
         });
 
         this.pendingMarks = {};
         this.showSuccess(`${promises.length} marks submitted successfully!`);
 
-        // Update course stats
+        // Update course stats and assessments progress
         await this.fetchCourseStats(this.selectedCourse);
+        if (this.showAssessmentsModal) {
+          await this.fetchAssessments(this.selectedCourse.id);
+        }
 
       } catch (e) {
         this.showError('Failed to submit some marks. Please try again.');
       }
     },
+
     resetMark(student) {
-      student.final_mark = student.original_mark;
+      student.assessment_mark = student.original_mark;
       delete this.pendingMarks[student.enrollment_id];
     },
+
     applyBatchMarks() {
       try {
         const marks = this.batchMarks.split(',').map(mark => {
@@ -617,14 +924,19 @@ export default {
           return;
         }
 
+        // Validate marks based on assessment type
+        const maxMark = this.selectedAssessment && this.selectedAssessment.id !== 'final' 
+          ? this.selectedAssessment.max_mark || 100 
+          : 100;
+
         marks.forEach((mark, index) => {
-          if (mark !== null && (isNaN(mark) || mark < 0 || mark > 100)) {
-            throw new Error(`Invalid mark at position ${index + 1}: ${mark}`);
+          if (mark !== null && (isNaN(mark) || mark < 0 || mark > maxMark)) {
+            throw new Error(`Invalid mark at position ${index + 1}: ${mark}. Must be between 0 and ${maxMark}`);
           }
         });
 
         this.filteredStudents.forEach((student, index) => {
-          student.final_mark = marks[index];
+          student.assessment_mark = marks[index];
           this.onMarkChange(student);
         });
 
@@ -932,7 +1244,12 @@ export default {
 }
 
 .students-modal {
-  width: 1200px;
+  width: 1000px;
+  max-width: 95vw;
+}
+
+.assessments-modal {
+  width: 800px;
   max-width: 95vw;
 }
 
@@ -1747,5 +2064,84 @@ export default {
     width: 100%;
     justify-content: center;
   }
+}
+
+/* Assessments Table */
+.assessments-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.assessments-table th {
+  background: #f8f9fa;
+  color: #495057;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.assessments-table td {
+  padding: 12px;
+  border-bottom: 1px solid #f1f3f4;
+  vertical-align: middle;
+}
+
+.assessment-row:hover {
+  background: #f8f9fa;
+}
+
+.final-exam-row {
+  background: rgba(29, 53, 87, 0.05);
+}
+
+.final-exam-row:hover {
+  background: rgba(29, 53, 87, 0.1);
+}
+
+.assessment-type-badge {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.assessment-type-badge.type-assignment {
+  background: #E8F4FD;
+  color: #1976D2;
+}
+
+.assessment-type-badge.type-quiz {
+  background: #FFF3E0;
+  color: #F57C00;
+}
+
+.assessment-type-badge.type-project {
+  background: #E8F5E8;
+  color: #388E3C;
+}
+
+.assessment-type-badge.final-exam {
+  background: #F3E5F5;
+  color: #7B1FA2;
+}
+
+.assessment-title {
+  font-weight: 600;
+  color: #1D3557;
+  font-size: 14px;
+}
+
+.weight-text {
+  font-weight: 600;
+  color: #457B9D;
+  font-size: 14px;
+}
+
+.due-date {
+  color: #6c757d;
+  font-size: 13px;
 }
 </style>
