@@ -1,51 +1,67 @@
 <template>
   <div class="login-container">
-    <div class="login-left">
-      <div class="brand-section">
-        <div class="brand-logo">
-          <div class="logo-square"></div>
-          <span class="brand-name">SkorSiswa</span>
+    <div class="login-card">
+      <div class="login-header">
+        <div class="university-logo">
+          <div class="logo-circle">
+            <span class="logo-text">SS</span>
+          </div>
+          <div class="brand-info">
+            <h1 class="brand-title">SkorSiswa</h1>
+            <p class="brand-subtitle">Academic Management System</p>
+          </div>
         </div>
       </div>
 
       <div class="login-form">
         <h1 class="login-title">Login</h1>
         <p class="login-subtitle">Please enter your credentials</p>
-
+        
         <form @submit.prevent="login" class="form-content">
           <div class="input-group">
-            <input v-model="login_id" placeholder="Matric No / Staff No" class="login-input" type="text" />
+            <input 
+              v-model="matric_no" 
+              placeholder="Matric No / Email" 
+              class="login-input" 
+              type="text"
+            />
           </div>
 
           <div class="input-group">
-            <input v-model="password" placeholder="Password" class="login-input" type="password" />
+            <input 
+              v-model="password" 
+              placeholder="Password" 
+              class="login-input" 
+              type="password"
+            />
           </div>
 
           <div class="form-options">
-            <label class="remember-me">
+            <label class="remember-check">
               <input type="checkbox" v-model="rememberMe">
+              <span class="checkmark"></span>
               Remember me
             </label>
-            <a href="#" class="forgot-password">Forgot Password?</a>
+            <a href="#" class="forgot-link">Forgot Password?</a>
           </div>
-
+          
           <button type="submit" class="next-btn">
             Login
             <svg class="arrow-icon" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" />
+              <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
             </svg>
           </button>
         </form>
+        
         <div class="footer-text">
-          Don't have an account?
-          <router-link to="/register" class="footer-link">Register here</router-link>
+          <span class="footer-link">Click here</span> if you're a new Client
         </div>
-
+        
         <div v-if="loginResult && loginResult.error" class="login-error">{{ loginResult.error }}</div>
         <div v-if="loginResult && loginResult.success" class="login-success">Login successful!</div>
       </div>
     </div>
-
+    
     <div class="login-right">
       <div class="background-image"></div>
     </div>
@@ -56,38 +72,45 @@
 import api from '../api';
 
 export default {
-  name: 'LoginForm',
+  name: 'UserLogin',
   data() {
     return {
-      login_id: '',
+      matric_no: '',
       password: '',
+      rememberMe: false,
       loginResult: null,
-      rememberMe: false
+      isLoading: false
     };
   },
   methods: {
     async login() {
+      this.isLoading = true;
+      this.loginResult = null;
+      
       try {
         const response = await api.post('/login', {
-          login_id: this.login_id, // could be matric_no, staff_no, or email
+          matric_no: this.matric_no,
           password: this.password
         });
+        
         this.loginResult = response.data;
+        
         if (response.data.success && response.data.user) {
           localStorage.setItem('user', JSON.stringify(response.data.user));
-          const role = response.data.user.role;
-          if (role === 'Lecturer') {
+          if (response.data.user.role_name === 'Lecturer') {
             this.$router.push('/lecturer');
-          } else if (role === 'Student') {
+          } else if (response.data.user.role_name === 'Student') {
             this.$router.push('/student');
-          } else if (role === 'Advisor') {
+          } else if (response.data.user.role_name === 'Advisor') {
             this.$router.push('/advisor');
-          } else if (role === 'Admin') {
+          } else if (response.data.user.role_name === 'Admin') {
             this.$router.push('/admin');
           }
         }
       } catch (error) {
-        this.loginResult = error.response ? error.response.data : { error: 'Network error' };
+        this.loginResult = error.response ? error.response.data : { error: 'Network error occurred' };
+      } finally {
+        this.isLoading = false;
       }
     }
   }
@@ -95,6 +118,8 @@ export default {
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
 * {
   margin: 0;
   padding: 0;
@@ -103,196 +128,261 @@ export default {
 
 .login-container {
   min-height: 100vh;
+  background: linear-gradient(135deg, #F1FAEE 0%, #E8F4F8 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f5f5f5;
   padding: 20px;
+  font-family: 'Roboto', sans-serif;
+  position: relative;
+  overflow: hidden;
 }
 
-.login-left {
-  width: 420px;
-  height: 600px;
-  padding: 50px 40px;
+.login-card {
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(29, 53, 87, 0.1);
+  width: 100%;
+  max-width: 420px;
+  padding: 40px;
+  position: relative;
+  z-index: 10;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.university-logo {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  background: white;
-  border-radius: 12px 0 0 12px;
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
-  position: relative;
+  align-items: center;
+  gap: 16px;
 }
 
-.brand-section {
-  position: absolute;
-  top: 30px;
-  left: 40px;
-}
-
-.brand-logo {
+.logo-circle {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, #1D3557 0%, #457B9D 100%);
+  border-radius: 50%;
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-
-.logo-square {
-  width: 24px;
-  height: 24px;
-  background: #000;
-  border-radius: 3px;
-}
-
-.brand-name {
-  font-size: 16px;
-  font-weight: 500;
-  color: #000;
-  letter-spacing: 0.5px;
-}
-
-.login-form {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
   justify-content: center;
-  max-width: 320px;
-  margin: 0 auto;
+  box-shadow: 0 8px 16px rgba(29, 53, 87, 0.3);
 }
 
-.login-title {
-  font-size: 42px;
-  font-weight: 300;
-  color: #2c3e50;
-  margin: 0 0 16px 0;
-  line-height: 1.1;
-  letter-spacing: -1px;
+.logo-text {
+  color: white;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 2px;
 }
 
-.login-subtitle {
-  font-size: 16px;
-  color: #7f8c8d;
-  margin: 0 0 40px 0;
-  font-weight: 300;
+.brand-info {
+  text-align: center;
 }
 
-.form-content {
-  margin-bottom: 0;
+.brand-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1D3557;
+  margin-bottom: 4px;
+  letter-spacing: -0.5px;
 }
 
-.input-group {
-  margin-bottom: 30px;
-  position: relative;
-}
-
-.login-input {
-  width: 100%;
-  border: none;
-  border-bottom: 1px solid #ecf0f1;
-  padding: 16px 0;
-  font-size: 16px;
-  background: transparent;
-  outline: none;
-  color: #2c3e50;
-  transition: border-color 0.3s ease;
+.brand-subtitle {
+  font-size: 14px;
+  color: #457B9D;
   font-weight: 400;
 }
 
-.login-input::placeholder {
-  color: #bdc3c7;
-  font-weight: 300;
+.login-form {
+  margin-bottom: 30px;
 }
 
-.login-input:focus {
-  border-bottom-color: #2c3e50;
+.form-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1D3557;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.form-subtitle {
+  font-size: 16px;
+  color: #6c757d;
+  text-align: center;
+  margin-bottom: 32px;
+  font-weight: 400;
+}
+
+.input-group {
+  position: relative;
+  margin-bottom: 24px;
+}
+
+.input-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6c757d;
+  z-index: 2;
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 16px 16px 16px 50px;
+  border: 2px solid #e9ecef;
+  border-radius: 12px;
+  font-size: 16px;
+  background: #f8f9fa;
+  transition: all 0.3s ease;
+  outline: none;
+  font-family: 'Roboto', sans-serif;
+}
+
+.form-input:focus {
+  border-color: #457B9D;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(69, 123, 157, 0.1);
+}
+
+.form-input::placeholder {
+  color: #6c757d;
+  font-weight: 400;
 }
 
 .form-options {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 40px;
+  margin-bottom: 32px;
   font-size: 14px;
 }
 
-.remember-me {
+.remember-check {
   display: flex;
   align-items: center;
-  color: #7f8c8d;
   cursor: pointer;
-  transition: color 0.3s ease;
-}
-
-.remember-me:hover {
-  color: #2c3e50;
-}
-
-.remember-me input[type="checkbox"] {
-  margin-right: 8px;
-  transform: scale(0.9);
-}
-
-.forgot-password {
-  color: #7f8c8d;
-  text-decoration: none;
-  transition: color 0.3s ease;
+  color: #495057;
   font-weight: 400;
 }
 
-.forgot-password:hover {
-  color: #2c3e50;
-  text-decoration: underline;
+.remember-check input[type="checkbox"] {
+  margin-right: 8px;
+  transform: scale(1.1);
 }
 
-.next-btn {
-  background: #000;
-  color: white;
-  border: none;
-  padding: 16px 32px;
-  font-size: 16px;
-  cursor: pointer;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  transition: all 0.3s ease;
-  font-weight: 500;
-  letter-spacing: 0.5px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-}
-
-.next-btn:hover {
-  background: #333;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-}
-
-.arrow-icon {
-  width: 16px;
-  height: 16px;
-  transition: transform 0.3s ease;
-}
-
-.next-btn:hover .arrow-icon {
-  transform: translateX(3px);
-}
-
-.footer-text {
-  font-size: 13px;
-  color: #95a5a6;
-  text-align: center;
-  margin-top: 30px;
-  font-weight: 300;
-}
-
-.footer-link {
-  color: #2c3e50;
+.forgot-link {
+  color: #457B9D;
   text-decoration: none;
   font-weight: 500;
   transition: color 0.3s ease;
 }
 
+.forgot-link:hover {
+  color: #1D3557;
+  text-decoration: underline;
+}
+
+.login-btn {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, #1D3557 0%, #457B9D 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(29, 53, 87, 0.3);
+  font-family: 'Roboto', sans-serif;
+}
+
+.login-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(29, 53, 87, 0.4);
+}
+
+.login-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.loading-spinner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.alert {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.alert-error {
+  background: rgba(230, 57, 70, 0.1);
+  color: #E63946;
+  border: 1px solid rgba(230, 57, 70, 0.2);
+}
+
+.alert-success {
+  background: rgba(40, 167, 69, 0.1);
+  color: #28a745;
+  border: 1px solid rgba(40, 167, 69, 0.2);
+}
+
+.alert-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.login-footer {
+  text-align: center;
+  padding-top: 20px;
+  border-top: 1px solid #e9ecef;
+}
+
+.footer-text {
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.footer-link {
+  color: #457B9D;
+  text-decoration: none;
+  font-weight: 500;
+}
+
 .footer-link:hover {
-  color: #000;
   text-decoration: underline;
 }
 
@@ -307,10 +397,10 @@ export default {
 .background-image {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg,
-      rgba(218, 165, 140, 0.9) 0%,
-      rgba(201, 137, 118, 0.95) 50%,
-      rgba(165, 102, 89, 1) 100%);
+  background: linear-gradient(135deg, 
+    rgba(218, 165, 140, 0.9) 0%, 
+    rgba(201, 137, 118, 0.95) 50%, 
+    rgba(165, 102, 89, 1) 100%);
   position: relative;
   display: flex;
   align-items: center;
@@ -324,36 +414,43 @@ export default {
   left: 0;
   right: 0;
   bottom: 0;
-  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><circle cx="100" cy="100" r="60" fill="rgba(255,255,255,0.1)"/><circle cx="300" cy="150" r="80" fill="rgba(255,255,255,0.08)"/><circle cx="200" cy="300" r="70" fill="rgba(255,255,255,0.06)"/></svg>') no-repeat center;
-  background-size: cover;
-  opacity: 0.7;
+  pointer-events: none;
+  overflow: hidden;
 }
 
-.login-error {
-  color: #e74c3c;
-  margin-top: 16px;
-  font-size: 13px;
-  padding: 10px 12px;
-  background: rgba(231, 76, 60, 0.1);
-  border-radius: 4px;
-  border-left: 3px solid #e74c3c;
+.decoration-circle {
+  position: absolute;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(29, 53, 87, 0.05) 0%, rgba(69, 123, 157, 0.05) 100%);
 }
 
-.login-success {
-  color: #27ae60;
-  margin-top: 16px;
-  font-size: 13px;
-  padding: 10px 12px;
-  background: rgba(39, 174, 96, 0.1);
-  border-radius: 4px;
-  border-left: 3px solid #27ae60;
+.circle-1 {
+  width: 300px;
+  height: 300px;
+  top: -150px;
+  right: -150px;
+}
+
+.circle-2 {
+  width: 200px;
+  height: 200px;
+  bottom: -100px;
+  left: -100px;
+}
+
+.circle-3 {
+  width: 150px;
+  height: 150px;
+  top: 20%;
+  left: -75px;
+  background: linear-gradient(135deg, rgba(230, 57, 70, 0.05) 0%, rgba(69, 123, 157, 0.05) 100%);
 }
 
 @media (max-width: 768px) {
   .login-container {
     padding: 10px;
   }
-
+  
   .login-left {
     width: 100%;
     max-width: 400px;
@@ -362,7 +459,7 @@ export default {
     border-radius: 12px;
     padding: 40px 30px;
   }
-
+  
   .brand-section {
     position: relative;
     top: 0;
@@ -370,20 +467,20 @@ export default {
     margin-bottom: 40px;
     text-align: center;
   }
-
+  
   .login-right {
     display: none;
   }
-
+  
   .login-title {
     font-size: 36px;
     text-align: center;
   }
-
+  
   .login-subtitle {
     text-align: center;
   }
-
+  
   .form-options {
     flex-direction: column;
     gap: 15px;
@@ -395,11 +492,11 @@ export default {
   .login-left {
     padding: 30px 20px;
   }
-
+  
   .login-title {
     font-size: 32px;
   }
-
+  
   .login-form {
     max-width: 280px;
   }

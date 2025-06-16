@@ -1,11 +1,10 @@
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: 'http://localhost:8000',
-    headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    }
+  baseURL: 'http://localhost:8080', // Your Slim API base URL
+  headers: {
+    'Content-Type': 'application/json'
+  }
 });
 
 // Add a request interceptor to include auth token
