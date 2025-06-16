@@ -85,7 +85,7 @@
             <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"></path>
             <path fill-rule="evenodd" d="M4 5a2 2 0 012-2v1a1 1 0 00-1 1v6a1 1 0 001 1v1a2 2 0 01-2-2V5zM15 5a2 2 0 00-2-2v1a1 1 0 011 1v6a1 1 0 01-1 1v1a2 2 0 002-2V5z" clip-rule="evenodd"></path>
           </svg>
-          Enter Final Marks
+          Manage Marks
         </router-link>
 
         <router-link to="/lecturer/manage-assessments" class="action-btn">

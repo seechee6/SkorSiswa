@@ -1,5 +1,5 @@
 <?php
-require __DIR__ . '/vendor/autoload.php';
+require __DIR__ . '/../vendor/autoload.php';
 
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -15,22 +15,17 @@ $app->addErrorMiddleware(true, true, true);
 // Add JSON body parsing middleware
 $app->addBodyParsingMiddleware();
 
-// Handle preflight OPTIONS requests for CORS
-$app->options('/{routes:.+}', function ($request, $response, $args) {
-  return $response;
-});
-
 // CORS middleware
 $app->add(function ($request, $handler) {
     $response = $handler->handle($request);
     return $response
-        ->withHeader('Access-Control-Allow-Origin', 'http://localhost:8080')
+        ->withHeader('Access-Control-Allow-Origin', '*')
         ->withHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Origin, Authorization')
         ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        ->withHeader('Access-Control-Allow-Credentials', 'true');
+        ->withHeader('Access-Control-Allow-Credentials', 'false');
 });
 
-// Handle preflight OPTIONS requests
+// Handle preflight OPTIONS requests for CORS
 $app->options('/{routes:.+}', function ($request, $response, $args) {
     return $response;
 });
@@ -79,16 +74,17 @@ $app->get('/login', function (Request $request, Response $response) {
 // Login endpoint - supports both matric_no and staff_id
 $app->post('/login', function (Request $request, Response $response) use ($pdo) {
     $data = $request->getParsedBody();
-    $matric_no = $data['matric_no'] ?? null;
+    $identifier = $data['matric_no'] ?? null;
     $password = $data['password'] ?? null;
 
-    if (!$matric_no || !$password) {
-        $response->getBody()->write(json_encode(['error' => 'Matric number and password required.']));
+    if (!$identifier || !$password) {
+        $response->getBody()->write(json_encode(['error' => 'Matric number/Staff ID and password required.']));
         return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
     }
 
-    $stmt = $pdo->prepare('SELECT u.*, r.name AS role_name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.matric_no = ?');
-    $stmt->execute([$matric_no]);
+    // Try to find user by matric_no first (for students), then by staff_id (for lecturers/staff)
+    $stmt = $pdo->prepare('SELECT u.*, r.name AS role_name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.matric_no = ? OR u.staff_id = ?');
+    $stmt->execute([$identifier, $identifier]);
     $user = $stmt->fetch();
 
     if ($user && password_verify($password, $user['password_hash'])) {
@@ -884,6 +880,22 @@ $app->delete('/advisor-notes/{id}', function (Request $request, Response $respon
     $stmt->execute([$args['id']]);
     $response->getBody()->write(json_encode(['success' => true]));
     return $response->withHeader('Content-Type', 'application/json');
+});
+
+// Add this test endpoint to debug the database
+$app->get('/debug/users', function (Request $request, Response $response) use ($pdo) {
+    try {
+        $stmt = $pdo->query('SELECT u.id, u.full_name, u.matric_no, u.staff_id, u.email, r.name as role_name FROM users u JOIN roles r ON u.role_id = r.id LIMIT 10');
+        $users = $stmt->fetchAll();
+        $response->getBody()->write(json_encode([
+            'total_users' => count($users),
+            'users' => $users
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
 });
 
 $app->run();

@@ -1,284 +1,218 @@
 <template>
-  <div>
-    <h3>Export Marks as CSV</h3>
-    
-    <!-- Course Selection -->
-    <div class="card course-selection">
-      <h4>Select Course</h4>
-      <select v-model="selectedCourseId" @change="fetchCourseData" class="course-select">
-        <option value="">Select a course...</option>
-        <option v-for="course in lecturerCourses" :key="course.id" :value="course.id">
-          {{ course.code }} - {{ course.name }}
-        </option>
-      </select>
-    </div>
-
-    <!-- Export Options -->
-    <div class="card export-options" v-if="selectedCourseId">
-      <h4>Export Configuration</h4>
-      
-      <div class="options-grid">
-        <div class="option-group">
-          <h5>Export Format</h5>
-          <div class="radio-group">
-            <label class="radio-option">
-              <input type="radio" v-model="exportFormat" value="csv" />
-              <div>
-                <span class="radio-label">CSV Format</span>
-                <small>Compatible with Excel and Google Sheets</small>
-              </div>
-            </label>
-            <label class="radio-option">
-              <input type="radio" v-model="exportFormat" value="excel" />
-              <div>
-                <span class="radio-label">Excel Format</span>
-                <small>Native Excel file with formatting</small>
-              </div>
-            </label>
-            <label class="radio-option">
-              <input type="radio" v-model="exportFormat" value="pdf" />
-              <div>
-                <span class="radio-label">PDF Report</span>
-                <small>Formatted report for printing</small>
-              </div>
-            </label>
-          </div>
-        </div>
-
-        <div class="option-group">
-          <h5>Include Data</h5>
-          <div class="checkbox-group">
-            <label class="checkbox-option">
-              <input type="checkbox" v-model="includeAssessments" />
-              <span class="checkbox-label">Assessment Marks</span>
-            </label>
-            <label class="checkbox-option">
-              <input type="checkbox" v-model="includeFinalExam" />
-              <span class="checkbox-label">Final Exam Marks</span>
-            </label>
-            <label class="checkbox-option">
-              <input type="checkbox" v-model="includeAverage" />
-              <span class="checkbox-label">Overall Average</span>
-            </label>
-            <label class="checkbox-option">
-              <input type="checkbox" v-model="includeGrade" />
-              <span class="checkbox-label">Letter Grade</span>
-            </label>
-            <label class="checkbox-option">
-              <input type="checkbox" v-model="includeStatistics" />
-              <span class="checkbox-label">Class Statistics</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="option-group">
-          <h5>Filter Students</h5>
-          <div class="radio-group">
-            <label class="radio-option">
-              <input type="radio" v-model="studentFilter" value="all" />
-              <span class="radio-label">All Students</span>
-            </label>
-            <label class="radio-option">
-              <input type="radio" v-model="studentFilter" value="passing" />
-              <span class="radio-label">Passing Students Only (≥50%)</span>
-            </label>
-            <label class="radio-option">
-              <input type="radio" v-model="studentFilter" value="failing" />
-              <span class="radio-label">Failing Students Only (&lt;50%)</span>
-            </label>
-            <label class="radio-option">
-              <input type="radio" v-model="studentFilter" value="grade" />
-              <span class="radio-label">Filter by Grade</span>
-            </label>
-          </div>
-          
-          <div class="grade-filter" v-if="studentFilter === 'grade'">
-            <label>Minimum Grade:</label>
-            <select v-model="minimumGrade">
-              <option value="A">A and above</option>
-              <option value="B">B and above</option>
-              <option value="C">C and above</option>
-              <option value="D">D and above</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Preview -->
-    <div class="card preview-section" v-if="selectedCourseId && previewData.length > 0">
-      <h4>Export Preview</h4>
-      <div class="preview-info">
-        <span class="preview-count">{{ filteredPreviewData.length }} records will be exported</span>
-        <span class="preview-note">Showing first 10 rows</span>
-      </div>
-      
-      <div class="preview-table-wrapper">
-        <table class="preview-table">
-          <thead>
-            <tr>
-              <th>Student Name</th>
-              <th>Matric No</th>
-              <template v-if="includeAssessments">
-                <th v-for="assessment in assessmentColumns" :key="assessment">
-                  {{ assessment }}
-                </th>
-              </template>
-              <th v-if="includeFinalExam">Final Exam</th>
-              <th v-if="includeAverage">Average</th>
-              <th v-if="includeGrade">Grade</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="student in previewRows" :key="student.id">
-              <td>{{ student.name }}</td>
-              <td>{{ student.matric_no }}</td>
-              <template v-if="includeAssessments">
-                <td v-for="assessment in assessmentColumns" :key="assessment">
-                  {{ student.assessments[assessment] || '-' }}
-                </td>
-              </template>
-              <td v-if="includeFinalExam">{{ student.finalExam || '-' }}</td>
-              <td v-if="includeAverage">{{ student.average }}%</td>
-              <td v-if="includeGrade">{{ student.grade }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Statistics Preview -->
-    <div class="card statistics-section" v-if="selectedCourseId && includeStatistics && statistics">
-      <h4>Class Statistics</h4>
-      <div class="stats-grid">
-        <div class="stat-item">
-          <div class="stat-value">{{ statistics.classAverage }}%</div>
-          <div class="stat-label">Class Average</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value">{{ statistics.highest }}%</div>
-          <div class="stat-label">Highest Mark</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value">{{ statistics.lowest }}%</div>
-          <div class="stat-label">Lowest Mark</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value">{{ statistics.passRate }}%</div>
-          <div class="stat-label">Pass Rate</div>
-        </div>
-      </div>
-      
-      <div class="distribution-chart">
-        <h5>Grade Distribution</h5>
-        <div v-for="grade in statistics.gradeDistribution" :key="grade.grade" class="grade-bar">
-          <span class="grade-label">{{ grade.grade }}</span>
-          <span class="grade-count">{{ grade.count }}</span>
-          <div class="grade-fill" :style="{ width: grade.percentage + '%' }"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Export Actions -->
-    <div class="card export-actions" v-if="selectedCourseId">
-      <h4>Export Actions</h4>
-      <div class="action-buttons">
-        <button @click="generatePreview" class="preview-btn">
-          <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"></path>
-            <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"></path>
+  <!-- Modal Overlay -->
+  <div v-if="isVisible" class="modal-overlay" @click.self="closeModal">
+    <div class="modal-content export-modal">
+      <div class="modal-header">
+        <h4>Export Marks CSV - {{ courseInfo?.code }}</h4>
+        <button @click="closeModal" class="close-btn">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
           </svg>
-          Preview Export
         </button>
+      </div>
+
+      <!-- Export Options -->
+      <div class="export-options">
+        <h5>Export Configuration</h5>
         
-        <button @click="exportData" :disabled="!canExport" class="export-btn">
-          <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-          </svg>
-          Export {{ exportFormat.toUpperCase() }}
-        </button>
-        
-        <button @click="exportToExcel" class="excel-btn">
-          <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clip-rule="evenodd"></path>
-          </svg>
-          Quick Excel Export
-        </button>
-        
-        <button @click="emailReport" class="email-btn">
-          <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"></path>
-            <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"></path>
-          </svg>
-          Email Report
-        </button>
-      </div>
-    </div>
-
-    <!-- Export History -->
-    <div class="card history-section" v-if="exportHistory.length > 0">
-      <h4>Recent Exports</h4>
-      <div class="history-list">
-        <div v-for="export_ in exportHistory" :key="export_.id" class="history-item">
-          <div>
-            <div class="history-name">{{ export_.filename }}</div>
-            <div class="history-details">
-              {{ export_.format.toUpperCase() }} • {{ export_.recordCount }} records • {{ formatDate(export_.timestamp) }}
+        <div class="options-grid">
+          <div class="option-group">
+            <h6>Export Format</h6>
+            <div class="radio-group">
+              <label class="radio-option">
+                <input type="radio" v-model="exportFormat" value="csv" />
+                <div>
+                  <span class="radio-label">CSV Format</span>
+                  <small>Compatible with Excel and Google Sheets</small>
+                </div>
+              </label>
+              <label class="radio-option">
+                <input type="radio" v-model="exportFormat" value="excel" />
+                <div>
+                  <span class="radio-label">Excel Format</span>
+                  <small>Native Excel file with formatting</small>
+                </div>
+              </label>
+              <label class="radio-option">
+                <input type="radio" v-model="exportFormat" value="pdf" />
+                <div>
+                  <span class="radio-label">PDF Report</span>
+                  <small>Formatted report for printing</small>
+                </div>
+              </label>
             </div>
           </div>
-          <button @click="downloadAgain(export_)" class="download-again-btn">
-            Download Again
+
+          <div class="option-group">
+            <h6>Include Data</h6>
+            <div class="checkbox-group">
+              <label class="checkbox-option">
+                <input type="checkbox" v-model="includeAssessments" />
+                <span class="checkbox-label">Assessment Marks</span>
+              </label>
+              <label class="checkbox-option">
+                <input type="checkbox" v-model="includeFinalExam" />
+                <span class="checkbox-label">Final Exam Marks</span>
+              </label>
+              <label class="checkbox-option">
+                <input type="checkbox" v-model="includeAverage" />
+                <span class="checkbox-label">Overall Average</span>
+              </label>
+              <label class="checkbox-option">
+                <input type="checkbox" v-model="includeGrade" />
+                <span class="checkbox-label">Letter Grade</span>
+              </label>
+              <label class="checkbox-option">
+                <input type="checkbox" v-model="includeStatistics" />
+                <span class="checkbox-label">Class Statistics</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="option-group">
+            <h6>Filter Students</h6>
+            <div class="radio-group">
+              <label class="radio-option">
+                <input type="radio" v-model="studentFilter" value="all" />
+                <span class="radio-label">All Students</span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" v-model="studentFilter" value="passing" />
+                <span class="radio-label">Passing Students Only (≥50%)</span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" v-model="studentFilter" value="failing" />
+                <span class="radio-label">Failing Students Only (&lt;50%)</span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" v-model="studentFilter" value="grade" />
+                <span class="radio-label">Filter by Grade</span>
+              </label>
+            </div>
+            
+            <div class="grade-filter" v-if="studentFilter === 'grade'">
+              <label>Minimum Grade:</label>
+              <select v-model="minimumGrade">
+                <option value="A">A and above</option>
+                <option value="B">B and above</option>
+                <option value="C">C and above</option>
+                <option value="D">D and above</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview -->
+      <div class="preview-section" v-if="previewData.length > 0">
+        <h5>Export Preview</h5>
+        <div class="preview-info">
+          <span class="preview-count">{{ filteredPreviewData.length }} records will be exported</span>
+          <span class="preview-note">Showing first 10 rows</span>
+        </div>
+        
+        <div class="preview-table-wrapper">
+          <table class="preview-table">
+            <thead>
+              <tr>
+                <th>Student Name</th>
+                <th>Matric No</th>
+                <template v-if="includeAssessments">
+                  <th v-for="assessment in assessmentColumns" :key="assessment">
+                    {{ assessment }}
+                  </th>
+                </template>
+                <th v-if="includeFinalExam">Final Exam</th>
+                <th v-if="includeAverage">Average</th>
+                <th v-if="includeGrade">Grade</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="student in previewRows" :key="student.id">
+                <td>{{ student.name }}</td>
+                <td>{{ student.matric_no }}</td>
+                <template v-if="includeAssessments">
+                  <td v-for="assessment in assessmentColumns" :key="assessment">
+                    {{ student.assessments[assessment] || '-' }}
+                  </td>
+                </template>
+                <td v-if="includeFinalExam">{{ student.finalExam || '-' }}</td>
+                <td v-if="includeAverage">{{ student.average }}%</td>
+                <td v-if="includeGrade">{{ student.grade }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Statistics Preview -->
+      <div class="statistics-section" v-if="includeStatistics && statistics">
+        <h5>Class Statistics</h5>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-value">{{ statistics.classAverage }}%</div>
+            <div class="stat-label">Class Average</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">{{ statistics.highest }}%</div>
+            <div class="stat-label">Highest Mark</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">{{ statistics.lowest }}%</div>
+            <div class="stat-label">Lowest Mark</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">{{ statistics.passRate }}%</div>
+            <div class="stat-label">Pass Rate</div>
+          </div>
+        </div>
+        
+        <div class="distribution-chart">
+          <h6>Grade Distribution</h6>
+          <div v-for="grade in statistics.gradeDistribution" :key="grade.grade" class="grade-bar">
+            <span class="grade-label">{{ grade.grade }}</span>
+            <span class="grade-count">{{ grade.count }}</span>
+            <div class="grade-fill" :style="{ width: grade.percentage + '%' }"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export Actions -->
+      <div class="export-actions">
+        <div class="action-buttons">
+          <button @click="generatePreview" class="preview-btn">
+            <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"></path>
+              <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"></path>
+            </svg>
+            Preview Export
+          </button>
+          
+          <button @click="exportData" :disabled="!canExport" class="export-btn">
+            <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+            </svg>
+            Export {{ exportFormat.toUpperCase() }}
+          </button>
+          
+          <button @click="exportToExcel" class="excel-btn">
+            <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clip-rule="evenodd"></path>
+            </svg>
+            Quick Excel Export
           </button>
         </div>
       </div>
-    </div>
 
-    <!-- Empty State -->
-    <div class="card empty-state" v-else-if="!selectedCourseId">
-      <div class="empty-content">
-        <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
-        </svg>
-        <h4>No Course Selected</h4>
-        <p>Select a course above to start exporting marks data.</p>
+      <!-- Error Messages -->
+      <div v-if="error" class="error-message">
+        {{ error }}
       </div>
-    </div>
-
-    <!-- Email Modal -->
-    <div class="modal" v-if="showEmailModal" @click.self="closeEmailModal">
-      <div class="modal-content">
-        <h4>Email Report</h4>
-        <div class="email-form">
-          <div class="form-group">
-            <label>Recipients (comma-separated emails):</label>
-            <input v-model="emailRecipients" type="text" placeholder="email1@example.com, email2@example.com" />
-          </div>
-          <div class="form-group">
-            <label>Subject:</label>
-            <input 
-              v-model="emailSubject" 
-              type="text"
-              placeholder="Course marks report"
-            />
-          </div>
-          <div class="form-group">
-            <label>Message:</label>
-            <textarea v-model="emailMessage" rows="4" placeholder="Optional message to include with the report..."></textarea>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button @click="closeEmailModal">Cancel</button>
-          <button @click="sendEmail">Send Report</button>
-        </div>
+      
+      <!-- Success Messages -->
+      <div v-if="success" class="success-message">
+        {{ success }}
       </div>
-    </div>
-
-    <!-- Success/Error Messages -->
-    <div v-if="error" class="floating-message error">
-      {{ error }}
-    </div>
-    <div v-if="success" class="floating-message success">
-      {{ success }}
     </div>
   </div>
 </template>
@@ -287,11 +221,19 @@
 import api from '../../api'
 
 export default {
-  name: 'ExportCSV',
+  name: 'ExportCSVModal',
+  props: {
+    isVisible: {
+      type: Boolean,
+      default: false
+    },
+    courseInfo: {
+      type: Object,
+      default: null
+    }
+  },
   data() {
     return {
-      lecturerCourses: [],
-      selectedCourseId: '',
       exportFormat: 'csv',
       includeAssessments: true,
       includeFinalExam: true,
@@ -303,19 +245,13 @@ export default {
       previewData: [],
       assessmentColumns: [],
       statistics: null,
-      exportHistory: [],
-      showEmailModal: false,
-      emailRecipients: '',
-      emailSubject: '',
-      emailMessage: '',
       error: '',
       success: ''
     }
   },
   computed: {
     selectedCourseName() {
-      const course = this.lecturerCourses.find(c => c.id == this.selectedCourseId)
-      return course ? `${course.code} - ${course.name}` : ''
+      return this.courseInfo ? `${this.courseInfo.code} - ${this.courseInfo.name}` : ''
     },
     filteredPreviewData() {
       if (!this.previewData.length) return []
@@ -338,41 +274,50 @@ export default {
       return this.filteredPreviewData.slice(0, 10)
     },
     canExport() {
-      return this.selectedCourseId && this.previewData.length > 0
+      return this.courseInfo && this.previewData.length > 0
+    }
+  },
+  watch: {
+    isVisible(newVal) {
+      if (newVal && this.courseInfo) {
+        this.fetchCourseData()
+      } else {
+        this.resetData()
+      }
     }
   },
   methods: {
-    async fetchLecturerCourses() {
-      try {
-        const user = JSON.parse(localStorage.getItem('user'))
-        const res = await api.get('/courses')
-        this.lecturerCourses = res.data.filter(c => c.lecturer_id === user.id)
-      } catch (e) {
-        this.error = 'Failed to load courses.'
-      }
+    closeModal() {
+      this.$emit('close')
     },
     
+    resetData() {
+      this.previewData = []
+      this.assessmentColumns = []
+      this.statistics = null
+      this.error = ''
+      this.success = ''
+    },
+
     async fetchCourseData() {
-      if (!this.selectedCourseId) return
+      if (!this.courseInfo) return
       
       try {
-        // Fetch marks and students data with better error handling
         const [marksRes, studentsRes] = await Promise.all([
-          api.get(`/courses/${this.selectedCourseId}/marks`).catch(err => {
+          api.get(`/courses/${this.courseInfo.id}/marks`).catch(err => {
             console.warn('Marks endpoint failed, using fallback:', err)
             return { data: { assessment_marks: [], final_marks: [] } }
           }),
-          api.get(`/courses/${this.selectedCourseId}/students`).catch(err => {
+          api.get(`/courses/${this.courseInfo.id}/students`).catch(err => {
             console.warn('Students endpoint failed, using fallback:', err)
             return { data: [] }
           })
         ])
         
-        // If we have no students data, try getting from enrollments
         let studentsData = studentsRes.data
         if (!studentsData || studentsData.length === 0) {
           try {
-            const enrollmentsRes = await api.get(`/courses/${this.selectedCourseId}/enrollments`)
+            const enrollmentsRes = await api.get(`/courses/${this.courseInfo.id}/enrollments`)
             studentsData = enrollmentsRes.data.map(enrollment => ({
               id: enrollment.student_id,
               name: enrollment.student_name,
@@ -387,19 +332,14 @@ export default {
         
         this.processCourseData(marksRes.data, studentsData)
         
-        // Set default email subject when course is selected
-        this.emailSubject = `${this.selectedCourseName} - Marks Report`
-        
       } catch (e) {
         console.error('Failed to load course data:', e)
         this.error = 'Failed to load course data. Please try again.'
-        // Provide fallback data for testing
         this.generateFallbackData()
       }
     },
     
     generateFallbackData() {
-      // Generate mock data when API fails
       const mockStudents = []
       for (let i = 1; i <= 20; i++) {
         mockStudents.push({
@@ -415,23 +355,21 @@ export default {
         final_marks: []
       }
       
-      // Generate mock assessment marks
       const assessments = ['Assignment 1', 'Assignment 2', 'Quiz 1', 'Mid-term']
       mockStudents.forEach(student => {
         assessments.forEach(assessment => {
           mockMarks.assessment_marks.push({
             student_id: student.id,
             assessment_name: assessment,
-            mark: Math.floor(Math.random() * 30) + 60, // 60-90 range
+            mark: Math.floor(Math.random() * 30) + 60,
             weight: 15,
             max_mark: 100
           })
         })
         
-        // Add final exam mark
         mockMarks.final_marks.push({
           student_id: student.id,
-          mark: Math.floor(Math.random() * 30) + 55 // 55-85 range
+          mark: Math.floor(Math.random() * 30) + 55
         })
       })
       
@@ -443,16 +381,13 @@ export default {
     processCourseData(marksData, studentsData) {
       const { assessment_marks, final_marks } = marksData
       
-      // Get unique assessment names
       this.assessmentColumns = [...new Set(assessment_marks.map(m => m.assessment_name))]
       
-      // Process student data
       this.previewData = studentsData.map(student => {
         const assessments = {}
         let totalMarks = 0
         let totalWeight = 0
         
-        // Get assessment marks for this student
         this.assessmentColumns.forEach(assessmentName => {
           const mark = assessment_marks.find(m => 
             m.student_id === student.id && m.assessment_name === assessmentName
@@ -464,7 +399,6 @@ export default {
           }
         })
         
-        // Get final exam mark
         const finalExam = final_marks?.find(m => m.student_id === student.id)
         const finalExamMark = finalExam ? Math.round(parseFloat(finalExam.mark)) : null
         
@@ -508,7 +442,6 @@ export default {
       const passCount = averages.filter(avg => avg >= 50).length
       const passRate = Math.round((passCount / averages.length) * 100)
       
-      // Grade distribution
       const gradeDistribution = ['A', 'B', 'C', 'D', 'F'].map(grade => {
         const count = this.previewData.filter(s => s.grade === grade).length
         const percentage = Math.round((count / this.previewData.length) * 100)
@@ -545,9 +478,14 @@ export default {
           this.downloadPDF()
         }
         
-        this.addToExportHistory()
         this.success = `${this.exportFormat.toUpperCase()} file exported successfully!`
         setTimeout(() => this.success = '', 3000)
+        
+        this.$emit('export-complete', {
+          format: this.exportFormat,
+          recordCount: this.filteredPreviewData.length,
+          filename: `${this.selectedCourseName}_marks.${this.exportFormat}`
+        })
         
       } catch (e) {
         this.error = 'Export failed. Please try again.'
@@ -608,12 +546,10 @@ export default {
     },
     
     downloadExcel(data) {
-      // Mock Excel export - in real implementation, use libraries like XLSX
-      this.downloadCSV(data) // Fallback to CSV for now
+      this.downloadCSV(data)
     },
     
     downloadPDF() {
-      // Mock PDF export - in real implementation, use libraries like jsPDF
       this.success = 'PDF export feature coming soon!'
       setTimeout(() => this.success = '', 3000)
     },
@@ -621,74 +557,85 @@ export default {
     exportToExcel() {
       this.exportFormat = 'excel'
       this.exportData()
-    },
-    
-    emailReport() {
-      this.showEmailModal = true
-    },
-    
-    closeEmailModal() {
-      this.showEmailModal = false
-    },
-    
-    sendEmail() {
-      if (!this.emailRecipients) {
-        this.error = 'Please enter recipient email addresses.'
-        return
-      }
-      
-      // Mock email sending
-      this.success = `Report sent to ${this.emailRecipients}!`
-      this.closeEmailModal()
-      setTimeout(() => this.success = '', 3000)
-    },
-    
-    addToExportHistory() {
-      const export_ = {
-        id: Date.now(),
-        filename: `${this.selectedCourseName}_marks.${this.exportFormat}`,
-        format: this.exportFormat,
-        recordCount: this.filteredPreviewData.length,
-        timestamp: new Date()
-      }
-      
-      this.exportHistory.unshift(export_)
-      if (this.exportHistory.length > 5) {
-        this.exportHistory = this.exportHistory.slice(0, 5)
-      }
-    },
-    
-    downloadAgain(export_) {
-      this.success = `Downloading ${export_.filename} again...`
-      setTimeout(() => this.success = '', 2000)
-    },
-    
-    formatDate(date) {
-      return new Date(date).toLocaleDateString() + ' ' + new Date(date).toLocaleTimeString()
     }
-  },
-  
-  mounted() {
-    this.fetchLecturerCourses()
   }
 }
 </script>
 
 <style scoped>
-.card {
-  background: #fff;
-  border-radius: 8px;
-  padding: 24px;
-  margin-bottom: 32px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
 }
 
-.course-select {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 14px;
+.modal-content {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.export-modal {
+  width: 900px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f3f4;
+}
+
+.modal-header h4 {
+  margin: 0;
+  color: #1D3557;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+  color: #6c757d;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background: #f8f9fa;
+  color: #495057;
+}
+
+.close-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.export-options {
+  margin-bottom: 24px;
+}
+
+.export-options h5 {
+  margin: 0 0 16px 0;
+  color: #1D3557;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .options-grid {
@@ -697,10 +644,11 @@ export default {
   gap: 24px;
 }
 
-.option-group h5 {
+.option-group h6 {
   margin: 0 0 12px 0;
   color: #1D3557;
   font-weight: 600;
+  font-size: 14px;
 }
 
 .radio-group {
@@ -774,6 +722,17 @@ export default {
   border-radius: 4px;
 }
 
+.preview-section, .statistics-section {
+  margin-bottom: 24px;
+}
+
+.preview-section h5, .statistics-section h5 {
+  margin: 0 0 16px 0;
+  color: #1D3557;
+  font-size: 16px;
+  font-weight: 600;
+}
+
 .preview-info {
   display: flex;
   justify-content: space-between;
@@ -840,8 +799,11 @@ export default {
   margin-top: 4px;
 }
 
-.distribution-chart {
-  margin-top: 12px;
+.distribution-chart h6 {
+  margin: 0 0 12px 0;
+  color: #1D3557;
+  font-weight: 600;
+  font-size: 14px;
 }
 
 .grade-bar {
@@ -868,6 +830,10 @@ export default {
   background: linear-gradient(90deg, #457B9D 0%, #1D3557 100%);
   border-radius: 4px;
   min-width: 4px;
+}
+
+.export-actions {
+  margin-bottom: 16px;
 }
 
 .action-buttons {
@@ -909,11 +875,6 @@ export default {
   color: white;
 }
 
-.email-btn {
-  background: #3498db;
-  color: white;
-}
-
 .action-buttons button:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
@@ -924,160 +885,22 @@ export default {
   cursor: not-allowed;
 }
 
-.history-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.history-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px;
-  background: #F8F9FA;
-  border-radius: 8px;
-}
-
-.history-name {
-  font-weight: 600;
-  color: #1D3557;
-}
-
-.history-details {
-  color: #6c757d;
-  font-size: 12px;
-  margin-top: 2px;
-}
-
-.download-again-btn {
-  padding: 6px 12px;
-  background: #457B9D;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 48px 24px;
-}
-
-.empty-content {
-  max-width: 300px;
-  margin: 0 auto;
-}
-
-.empty-icon {
-  width: 64px;
-  height: 64px;
-  color: #ccc;
-  margin: 0 auto 16px;
-}
-
-.modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0,0,0,0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: white;
-  padding: 24px;
-  border-radius: 8px;
-  max-width: 500px;
-  width: 90%;
-}
-
-.email-form {
-  margin: 16px 0;
-}
-
-.form-group {
-  margin-bottom: 16px;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 4px;
-  font-weight: 600;
-  color: #1D3557;
-}
-
-.form-group input,
-.form-group textarea {
-  width: 100%;
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-family: inherit;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-}
-
-.modal-actions button {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 4px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.modal-actions button:first-child {
-  background: #27ae60;
-  color: white;
-}
-
-.modal-actions button:last-child {
-  background: #6c757d;
-  color: white;
-}
-
-.floating-message {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  padding: 12px 20px;
-  border-radius: 4px;
-  font-weight: 500;
-  z-index: 1001;
-  animation: slideIn 0.3s ease;
-}
-
-.floating-message.success {
-  background: #D1FAE5;
-  color: #065F46;
-  border: 1px solid #A7F3D0;
-}
-
-.floating-message.error {
+.error-message {
   background: #FEE2E2;
   color: #991B1B;
+  padding: 12px;
+  border-radius: 4px;
   border: 1px solid #FECACA;
+  margin-top: 16px;
 }
 
-@keyframes slideIn {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+.success-message {
+  background: #D1FAE5;
+  color: #065F46;
+  padding: 12px;
+  border-radius: 4px;
+  border: 1px solid #A7F3D0;
+  margin-top: 16px;
 }
 
 @media (max-width: 768px) {
@@ -1091,6 +914,10 @@ export default {
   
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .export-modal {
+    width: auto;
   }
 }
 </style>
