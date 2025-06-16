@@ -19,15 +19,20 @@ $app->addBodyParsingMiddleware();
 $app->add(function ($request, $handler) {
     $response = $handler->handle($request);
     return $response
-        ->withHeader('Access-Control-Allow-Origin', '*')
+        ->withHeader('Access-Control-Allow-Origin', 'http://localhost:8081')
         ->withHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Origin, Authorization')
         ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        ->withHeader('Access-Control-Allow-Credentials', 'false');
+        ->withHeader('Access-Control-Allow-Credentials', 'true');
 });
 
 // Handle preflight OPTIONS requests for CORS
 $app->options('/{routes:.+}', function ($request, $response, $args) {
-    return $response;
+    return $response
+        ->withHeader('Access-Control-Allow-Origin', 'http://localhost:8081')
+        ->withHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Origin, Authorization')
+        ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        ->withHeader('Access-Control-Allow-Credentials', 'true')
+        ->withStatus(204);
 });
 
 // Database connection settings
@@ -71,11 +76,35 @@ $app->get('/login', function (Request $request, Response $response) {
     return $response->withHeader('Content-Type', 'application/json');
 });
 
+// Debug endpoint to check if users exist
+$app->get('/debug-users', function (Request $request, Response $response) use ($pdo) {
+    try {
+        $stmt = $pdo->prepare('SELECT id, matric_no, staff_id, full_name, email, role_id FROM users LIMIT 10');
+        $stmt->execute();
+        $users = $stmt->fetchAll();
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'user_count' => count($users),
+            'users' => $users
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (PDOException $e) {
+        $response->getBody()->write(json_encode([
+            'error' => 'Database error: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
 // Login endpoint - supports both matric_no and staff_id
 $app->post('/login', function (Request $request, Response $response) use ($pdo) {
     $data = $request->getParsedBody();
     $identifier = $data['matric_no'] ?? null;
     $password = $data['password'] ?? null;
+
+    // Debug log
+    error_log("Login attempt with identifier: " . $identifier);
 
     if (!$identifier || !$password) {
         $response->getBody()->write(json_encode(['error' => 'Matric number/Staff ID and password required.']));
@@ -87,12 +116,22 @@ $app->post('/login', function (Request $request, Response $response) use ($pdo) 
     $stmt->execute([$identifier, $identifier]);
     $user = $stmt->fetch();
 
+    // Debug log
+    if ($user) {
+        error_log("User found: " . $user['full_name']);
+    } else {
+        error_log("No user found with identifier: " . $identifier);
+    }
+
     if ($user && password_verify($password, $user['password_hash'])) {
         unset($user['password_hash']);
         logSystemActivity($pdo, $user['id'], "User logged in");
         $response->getBody()->write(json_encode(['success' => true, 'user' => $user]));
         return $response->withHeader('Content-Type', 'application/json');
     } else {
+        if ($user) {
+            error_log("Password verification failed for: " . $user['full_name']);
+        }
         $response->getBody()->write(json_encode(['error' => 'Invalid credentials.']));
         return $response->withStatus(401)->withHeader('Content-Type', 'application/json');
     }
@@ -894,8 +933,10 @@ $app->get('/debug/users', function (Request $request, Response $response) use ($
         return $response->withHeader('Content-Type', 'application/json');
     } catch (Exception $e) {
         $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');    }
 });
+
+// Include student routes
+require __DIR__ . '/../src/routes/student.php';
 
 $app->run();

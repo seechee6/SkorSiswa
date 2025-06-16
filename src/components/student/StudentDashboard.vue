@@ -251,26 +251,26 @@ export default {
         this.cgpa = data.cgpa
         this.ranking = data.ranking
         this.semesterProgress = data.semesterProgress
-        
-        // Process courses data
+          // Process courses data
         this.currentCourses = data.currentCourses.map(course => {
           return {
             id: course.id,
             code: course.code,
             name: course.name,
-            grade: this.calculateGrade(course.total_marks || 0),
-            progress: this.calculateProgress(course)
+            grade: course.grade || this.calculateGrade(course.current_percentage || 0),
+            progress: course.progress || this.calculateProgress(course)
           }
         })
-        
-        // Process notifications
+          // Process notifications
         this.notifications = data.notifications.map(notification => {
           // Determine notification type based on message content
           let type = 'general'
-          if (notification.message.includes('grade')) type = 'grade'
-          else if (notification.message.includes('remark')) type = 'remark'
-          else if (notification.message.includes('assignment') || notification.message.includes('exam')) type = 'assessment'
-          else if (notification.message.includes('deadline') || notification.message.includes('due')) type = 'deadline'
+          if (notification.message.includes('grade') || notification.message.includes('Grade')) type = 'grade'
+          else if (notification.message.includes('remark') || notification.message.includes('Remark')) type = 'remark'
+          else if (notification.message.includes('assignment') || notification.message.includes('exam') || 
+                  notification.message.includes('Assignment') || notification.message.includes('Exam')) type = 'assessment'
+          else if (notification.message.includes('deadline') || notification.message.includes('due') ||
+                  notification.message.includes('Deadline')) type = 'deadline'
           
           return {
             id: notification.id,

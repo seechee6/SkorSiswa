@@ -6,14 +6,19 @@
         <h2>Mark Breakdown</h2>
         <p class="subtitle">View your detailed course marks and progress</p>
       </div>
-      <div class="header-actions">
-        <div class="course-select">
+      <div class="header-actions">      <div class="course-select">
           <select v-model="selectedCourseId" @change="fetchMarks">
             <option value="">Select a Course</option>
             <option v-for="course in courses" :key="course.id" :value="course.id">
               {{ course.code }} - {{ course.name }}
             </option>
           </select>
+          <button @click="reloadCourses" class="reload-btn" title="Reload courses">
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+              <path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/>
+              <path d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/>
+            </svg>
+          </button>
         </div>
       </div>
     </div>
@@ -170,10 +175,8 @@
             </table>
           </div>
         </div>
-      </div>
-
-      <!-- Grade Distribution Chart -->
-      <div class="card chart-card">
+      </div>      <!-- Grade Distribution Chart -->
+      <div class="card chart-card" v-if="components.length > 0">
         <div class="card-header">
           <h3>Mark Distribution</h3>
         </div>
@@ -186,7 +189,7 @@
 </template>
 
 <script>
-import api from '../../api'
+import api from '../../api';
 import Chart from 'chart.js/auto'
 
 export default {
@@ -203,8 +206,10 @@ export default {
       error: '',
       chart: null
     }
-  },
-  methods: {
+  },  methods: {
+    reloadCourses() {
+      this.fetchCourses();
+    },
     async fetchCourses() {
       this.loading = true
       try {
@@ -214,46 +219,69 @@ export default {
           return
         }
         
-        const response = await api.get('/student/courses')
-        this.courses = response.data
+        // Get courses for this student
+        const response = await api.get(`/student/courses/${user.id}`)
+        
+        // Check response structure and extract courses
+        if (response.data && response.data.success && response.data.courses) {
+          this.courses = response.data.courses
+          console.log('Courses loaded:', this.courses) // Debug log
+        } else {
+          console.error('Unexpected response format:', response.data)
+          this.error = 'Unexpected response format from server'
+        }
       } catch (error) {
         this.error = 'Failed to load courses'
         console.error('Error fetching courses:', error)
       } finally {
         this.loading = false
       }
-    },
-    async fetchMarks() {
+    },    async fetchMarks() {
       if (!this.selectedCourseId) return
       
       this.loading = true
       try {
         const user = JSON.parse(localStorage.getItem('user'))
+        if (!user) {
+          this.$router.push('/login')
+          return
+        }
+        
+        console.log(`Fetching marks for student ${user.id} and course ${this.selectedCourseId}`)
         const response = await api.get(`/student/marks/${user.id}/${this.selectedCourseId}`)
+          console.log('Mark data received:', response.data)
         
-        this.components = response.data.components
-        this.totalScore = response.data.totalMarks
-        this.overallGrade = response.data.grade
-        
-        // For demo purposes, generate a class average
-        this.classAverage = this.totalScore - (Math.random() * 10) + (Math.random() * 5)
-        if (this.classAverage > 100) this.classAverage = 98.5
-        if (this.classAverage < 0) this.classAverage = 35.0
-        
-        this.$nextTick(() => {
-          this.createMarkChart()
-        })
+        if (response.data && response.data.success) {
+          this.components = response.data.components || []
+          this.totalScore = response.data.totalMarks || 0
+          this.overallGrade = response.data.grade || 'N/A'
+          this.classAverage = response.data.classAverage || 
+            (this.totalScore - (Math.random() * 10) + (Math.random() * 5))
+          
+          // Ensure class average is in valid range
+          if (this.classAverage > 100) this.classAverage = 98.5
+          if (this.classAverage < 0) this.classAverage = 35.0
+          
+          // Wait for the next render cycle to ensure the canvas exists
+          if (this.components.length > 0) {
+            setTimeout(() => {
+              this.createMarkChart()
+            }, 100)
+          }
+        } else {
+          console.error('Unexpected response format:', response.data)
+          this.error = 'Unexpected response format from server'
+        }
       } catch (error) {
         this.error = 'Failed to load mark data'
         console.error('Error fetching marks:', error)
       } finally {
         this.loading = false
       }
-    },
-    calculateWeightedScore(component) {
+    },    calculateWeightedScore(component) {
       if (!component.max_marks) return '0.00'
       return ((component.mark / component.max_marks) * component.weight).toFixed(2)
-    },    getGradeClass(grade) {
+    },getGradeClass(grade) {
       if (!grade || grade === 'N/A') return 'grade-na';
       
       const gradeMap = {
@@ -295,58 +323,68 @@ export default {
       if (percentage >= 40) return 'progress-pass';
       
       return 'progress-fail';
-    },
-    createMarkChart() {
+    },    createMarkChart() {
+      // Check if chart already exists and destroy it
       if (this.chart) {
         this.chart.destroy();
       }
       
-      const ctx = this.$refs.markChart.getContext('2d');
+      // Check if canvas element exists
+      if (!this.$refs.markChart) {
+        console.warn('Canvas element not found. Chart rendering deferred.');
+        return; // Exit if canvas element doesn't exist yet
+      }
       
-      // Generate component names and scores for chart
-      const labels = this.components.map(c => c.name);
-      const scores = this.components.map(c => (c.mark / c.max_marks) * 100);
-      
-      // Create chart
-      this.chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Your Score (%)',
-            data: scores,
-            backgroundColor: '#4c51bf',
-            borderColor: '#3c40a7',
-            borderWidth: 1
-          }]
-        },
-        options: {
-          responsive: true,
-          scales: {
-            y: {
-              beginAtZero: true,
-              max: 100,
+      try {
+        const ctx = this.$refs.markChart.getContext('2d');
+        
+        // Generate component names and scores for chart
+        const labels = this.components.map(c => c.name);
+        const scores = this.components.map(c => (c.mark / c.max_marks) * 100);
+        
+        // Create chart
+        this.chart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Your Score (%)',
+              data: scores,
+              backgroundColor: '#4c51bf',
+              borderColor: '#3c40a7',
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            scales: {
+              y: {
+                beginAtZero: true,
+                max: 100,
+                title: {
+                  display: true,
+                  text: 'Score (%)'
+                }
+              }
+            },
+            plugins: {
               title: {
                 display: true,
-                text: 'Score (%)'
-              }
-            }
-          },
-          plugins: {
-            title: {
-              display: true,
-              text: 'Component Performance'
-            },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  return `Score: ${context.raw.toFixed(2)}%`;
+                text: 'Component Performance'
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    return `Score: ${context.raw.toFixed(2)}%`;
+                  }
                 }
               }
             }
           }
-        }
-      });
+        });
+      } catch (error) {
+        console.error('Error creating chart:', error);
+      }
     }
   },
   async mounted() {
@@ -385,6 +423,11 @@ export default {
   margin-top: 4px;
 }
 
+.course-select {
+  display: flex;
+  align-items: center;
+}
+
 .course-select select {
   padding: 8px 12px;
   border-radius: 6px;
@@ -395,6 +438,22 @@ export default {
   outline: none;
   transition: all 0.2s;
   cursor: pointer;
+}
+
+.reload-btn {
+  margin-left: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e0;
+  background-color: #f8fafc;
+  color: #4a5568;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.reload-btn:hover {
+  background-color: #edf2f7;
+  color: #2d3748;
 }
 
 .course-select select:hover {

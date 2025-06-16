@@ -14,28 +14,36 @@
       </div>
 
       <div class="login-form">
-        <h1 class="login-title">Login</h1>
-        <p class="login-subtitle">Please enter your credentials</p>
-        
+        <h2 class="form-title">Welcome Back</h2>
+        <p class="form-subtitle">Please sign in to your account</p>
+
         <form @submit.prevent="login" class="form-content">
           <div class="input-group">
+            <div class="input-icon">
+              <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+              </svg>
+            </div>
             <input 
-              v-model="matric_no" 
-              placeholder="Matric No / Email" 
-              class="login-input" 
+              v-model="identifier" 
               type="text"
-              :disabled="isLoading"
+              placeholder="Matric No / Staff ID / Email"
+              class="form-input"
               required
             />
           </div>
 
           <div class="input-group">
+            <div class="input-icon">
+              <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+              </svg>
+            </div>
             <input 
               v-model="password" 
-              placeholder="Password" 
-              class="login-input" 
               type="password"
-              :disabled="isLoading"
+              placeholder="Password"
+              class="form-input"
               required
             />
           </div>
@@ -48,46 +56,47 @@
             </label>
             <a href="#" class="forgot-link">Forgot Password?</a>
           </div>
-          
+
           <button type="submit" class="login-btn" :disabled="isLoading">
-            <div v-if="isLoading" class="loading-spinner">
-              <svg class="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12,1A11,11,0,1,0,23,12,11,11,0,0,0,12,1Zm0,19a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z" opacity=".25"/>
-                <path d="M10.14,1.16a11,11,0,0,0-9,8.92A1.59,1.59,0,0,0,2.46,12,1.52,1.52,0,0,0,4.11,10.7a8,8,0,0,1,6.66-6.61A1.42,1.42,0,0,0,12,2.69h0A1.57,1.57,0,0,0,10.14,1.16Z"/>
+            <span v-if="!isLoading">Sign In</span>
+            <span v-else class="loading-spinner">
+              <svg class="animate-spin icon" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Logging in...
-            </div>
-            <div v-else class="login-content">
-              Login
-              <svg class="arrow-icon" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
-              </svg>
-            </div>
+              Signing In...
+            </span>
           </button>
         </form>
-        
-        <div class="footer-text">
-          <span class="footer-link">Click here</span> if you're a new Client
-        </div>
-        
-        <!-- Error and Success Messages -->
-        <div v-if="loginResult && loginResult.error" class="alert alert-error">
+
+        <!-- Error/Success Messages -->
+        <div v-if="loginResult?.error" class="alert alert-error">
           <svg class="alert-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
           </svg>
           {{ loginResult.error }}
         </div>
-        <div v-if="loginResult && loginResult.success" class="alert alert-success">
+
+        <div v-if="loginResult?.success" class="alert alert-success">
           <svg class="alert-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
           </svg>
           Login successful! Redirecting...
         </div>
       </div>
+
+      <div class="login-footer">
+        <p class="footer-text">
+          New to SkorSiswa? <a href="#" class="footer-link">Contact Administrator</a>
+        </p>
+      </div>
     </div>
-    
-    <div class="login-right">
-      <div class="background-image"></div>
+
+    <!-- Background decoration -->
+    <div class="bg-decoration">
+      <div class="decoration-circle circle-1"></div>
+      <div class="decoration-circle circle-2"></div>
+      <div class="decoration-circle circle-3"></div>
     </div>
   </div>
 </template>
@@ -99,76 +108,64 @@ export default {
   name: 'UserLogin',
   data() {
     return {
-      matric_no: '',
+      identifier: '',
       password: '',
       rememberMe: false,
       loginResult: null,
       isLoading: false
     };
-  },
-  methods: {
+  },  methods: {
     async login() {
-      // Reset previous results
-      this.loginResult = null;
       this.isLoading = true;
-      
-      // Basic validation
-      if (!this.matric_no.trim() || !this.password.trim()) {
-        this.loginResult = { error: 'Please fill in both matric number and password.' };
-        this.isLoading = false;
-        return;
-      }
-      
-      try {
-        console.log('Attempting login with:', { matric_no: this.matric_no });
-        
+      this.loginResult = null;      try {
         const response = await api.post('/login', {
-          matric_no: this.matric_no.trim(),
-          password: this.password.trim()
+          matric_no: this.identifier,  // Changed from identifier to matric_no to match backend
+          password: this.password
         });
         
-        console.log('Login response:', response.data);
         this.loginResult = response.data;
         
         if (response.data.success && response.data.user) {
+          // Store user data
           localStorage.setItem('user', JSON.stringify(response.data.user));
           
-          // Show success message briefly before redirecting
+          // Create and store a simple token based on user ID as a temporary solution
+          // Note: In a production app, this should be a proper JWT token from the backend
+          const simpleToken = btoa(`user_${response.data.user.id}_${Date.now()}`);
+          localStorage.setItem('token', simpleToken);
+          
+          // Redirect based on role
+          const role = response.data.user.role_name.toLowerCase();
           setTimeout(() => {
-            const role = response.data.user.role_name.toLowerCase(); // Convert to lowercase for comparison
             if (role === 'lecturer') {
               this.$router.push('/lecturer');
             } else if (role === 'student') {
               this.$router.push('/student');
             } else if (role === 'advisor') {
-              this.$router.push('/advisor');
-            } else if (role === 'admin') {
+              this.$router.push('/advisor');            } else if (role === 'admin') {
               this.$router.push('/admin');
-            } else {
-              this.loginResult = { error: 'Unknown user role. Please contact administrator.' };
             }
           }, 1000);
         }
       } catch (error) {
         console.error('Login error:', error);
-        
-        if (error.response) {
-          // Server responded with error status
-          this.loginResult = error.response.data;
-        } else if (error.request) {
-          // Request was made but no response received
-          this.loginResult = { 
-            error: 'Cannot connect to server. Please check if the backend is running on http://localhost:8080' 
-          };
-        } else {
-          // Something else happened
-          this.loginResult = { 
-            error: 'An unexpected error occurred. Please try again.' 
-          };
-        }
+        this.loginResult = { 
+          error: error.response ? 
+            error.response.data.error || 'Authentication failed' : 
+            'Network error occurred. Please check if the server is running.'
+        };
       } finally {
         this.isLoading = false;
       }
+    },
+    
+    // Add a logout method that can be called from anywhere in the app
+    logout() {
+      // Clear user data and token
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      // Redirect to login page
+      this.$router.push('/');
     }
   }
 };
@@ -443,29 +440,7 @@ export default {
   text-decoration: underline;
 }
 
-.login-right {
-  width: 380px;
-  height: 600px;
-  position: relative;
-  overflow: hidden;
-  border-radius: 0 12px 12px 0;
-}
-
-.background-image {
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, 
-    rgba(218, 165, 140, 0.9) 0%, 
-    rgba(201, 137, 118, 0.95) 50%, 
-    rgba(165, 102, 89, 1) 100%);
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.background-image::before {
-  content: '';
+.bg-decoration {
   position: absolute;
   top: 0;
   left: 0;
@@ -503,59 +478,27 @@ export default {
   background: linear-gradient(135deg, rgba(230, 57, 70, 0.05) 0%, rgba(69, 123, 157, 0.05) 100%);
 }
 
-@media (max-width: 768px) {
-  .login-container {
-    padding: 10px;
-  }
-  
-  .login-left {
-    width: 100%;
-    max-width: 400px;
-    height: auto;
-    min-height: 500px;
-    border-radius: 12px;
-    padding: 40px 30px;
-  }
-  
-  .brand-section {
-    position: relative;
-    top: 0;
-    left: 0;
-    margin-bottom: 40px;
-    text-align: center;
-  }
-  
-  .login-right {
-    display: none;
-  }
-  
-  .login-title {
-    font-size: 36px;
-    text-align: center;
-  }
-  
-  .login-subtitle {
-    text-align: center;
-  }
-  
-  .form-options {
-    flex-direction: column;
-    gap: 15px;
-    align-items: flex-start;
-  }
-}
-
 @media (max-width: 480px) {
-  .login-left {
-    padding: 30px 20px;
+  .login-card {
+    padding: 30px 24px;
+    margin: 16px;
   }
   
-  .login-title {
-    font-size: 32px;
+  .brand-title {
+    font-size: 28px;
   }
   
-  .login-form {
-    max-width: 280px;
+  .form-title {
+    font-size: 24px;
+  }
+  
+  .logo-circle {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .logo-text {
+    font-size: 20px;
   }
 }
 </style>
