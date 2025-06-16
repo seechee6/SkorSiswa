@@ -1,16 +1,18 @@
+-- User roles (Admin, Lecturer, Student, Advisor)
 CREATE TABLE roles (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name ENUM('admin', 'lecturer', 'student', 'advisor') NOT NULL UNIQUE
+    name VARCHAR(50) NOT NULL UNIQUE
 );
 
+-- Users table
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    matric_no VARCHAR(20) UNIQUE,         -- For students
-    staff_id VARCHAR(20) UNIQUE,          -- For staff (lecturers, advisors)
-    full_name VARCHAR(100) NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    matric_no VARCHAR(20) UNIQUE,
+    email VARCHAR(100) UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     role_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (role_id) REFERENCES roles(id)
 );
 
@@ -28,6 +30,7 @@ CREATE TABLE enrollments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     student_id INT NOT NULL,
     course_id INT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (student_id, course_id),
     FOREIGN KEY (student_id) REFERENCES users(id),
     FOREIGN KEY (course_id) REFERENCES courses(id)

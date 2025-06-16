@@ -46,11 +46,9 @@
             <label for="year">Academic Year</label>
             <select id="year" v-model="newCourse.year" required>
               <option value="">Select Academic Year</option>
-              <option value="2023/2024">2023/2024</option>
-              <option value="2024/2025">2024/2025</option>
-              <option value="2025/2026">2025/2026</option>
-              <option value="2026/2027">2026/2027</option>
-              <option value="2027/2028">2027/2028</option>
+              <option v-for="year in academicYears" :key="year.value" :value="year.value">
+                {{ year.label }}
+              </option>
             </select>
           </div>
         </div>
@@ -81,7 +79,6 @@
               <th>Course Name</th>
               <th>Semester</th>
               <th>Academic Year</th>
-              <th>Students</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -93,22 +90,37 @@
               <td class="name-cell">
                 <div class="course-name">{{ course.name }}</div>
               </td>
-              <td class="semester-cell">Semester {{ course.semester }}</td>
-              <td class="year-cell">{{ course.year }}</td>
-              <td class="students-cell">
-                <span class="student-count">{{ course.student_count || 0 }}</span>
+              <td class="semester-cell">
+                <span class="semester-badge">Semester {{ course.semester }}</span>
               </td>
+              <td class="year-cell">{{ course.year }}</td>
               <td class="actions-cell">
-                <button @click="editCourse(course)" class="edit-btn">
-                  <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                  </svg>
-                </button>
-                <button @click="confirmDelete(course)" class="delete-btn">
-                  <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                  </svg>
-                </button>
+                <div class="action-buttons">
+                  <button @click="editCourse(course)" class="action-btn-small info" title="Edit Course">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                  </button>
+                  
+                  <button @click="openEnrollModal(course)" class="action-btn-small primary" title="Enroll Students">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
+                    </svg>
+                  </button>
+                  
+                  <button @click="viewCourseEnrollments(course)" class="action-btn-small success" title="View Enrolled Students">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                    </svg>
+                  </button>
+                  
+                  <button @click="confirmDelete(course)" class="action-btn-small danger" title="Delete Course">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -129,8 +141,8 @@
     </div>
 
     <!-- Edit Course Modal -->
-    <div v-if="editing" class="modal" @click.self="closeEditModal">
-      <div class="modal-content">
+    <div v-if="editing" class="modal-overlay" @click.self="closeEditModal">
+      <div class="modal-content edit-modal">
         <div class="modal-header">
           <h4>Edit Course</h4>
           <button @click="closeEditModal" class="close-btn">
@@ -170,11 +182,9 @@
             <div class="form-group">
               <label for="edit-year">Academic Year</label>
               <select id="edit-year" v-model="editCourseData.year" required>
-                <option value="2023/2024">2023/2024</option>
-                <option value="2024/2025">2024/2025</option>
-                <option value="2025/2026">2025/2026</option>
-                <option value="2026/2027">2026/2027</option>
-                <option value="2027/2028">2027/2028</option>
+                <option v-for="year in academicYears" :key="year.value" :value="year.value">
+                  {{ year.label }}
+                </option>
               </select>
             </div>
           </div>
@@ -192,7 +202,7 @@
     </div>
 
     <!-- Delete Confirmation Modal -->
-    <div v-if="showDeleteConfirm" class="modal" @click.self="closeDeleteConfirm">
+    <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="closeDeleteConfirm">
       <div class="modal-content delete-modal">
         <div class="delete-icon">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -213,16 +223,32 @@
         </div>
       </div>
     </div>
+
+    <!-- Enrollment Modal - This should appear as a centered popup -->
+    <ManageEnrollment 
+      v-if="showEnrollmentModal"
+      :isModalOnly="true"
+      :selectedCourse="selectedCourse"
+      @enrollment-success="handleEnrollmentSuccess"
+      @enrollment-error="handleEnrollmentError"
+      @enrollment-closed="handleEnrollmentClosed"
+    />
   </div>
 </template>
 <script>
 import api from '../../api'
+import ManageEnrollment from './ManageEnrollment.vue'
 
 export default {
   name: 'ManageCourses',
+  components: {
+    ManageEnrollment
+  },
   data() {
     return {
       courses: [],
+      enrollments: [],
+      allStudents: [],
       error: '',
       success: '',
       showAddForm: false,
@@ -241,18 +267,130 @@ export default {
         name: '', 
         semester: '', 
         year: '' 
-      }
+      },
+      // Enrollment functionality
+      showEnrollmentModal: false,
+      selectedCourse: null
     }
   },
+  
+  computed: {
+    academicYears() {
+      const currentYear = new Date().getFullYear()
+      return Array.from({ length: 5 }, (_, i) => {
+        const year = currentYear + i - 1
+        return { 
+          value: `${year}/${year + 1}`, 
+          label: `${year}/${year + 1}` 
+        }
+      })
+    },
+
+    selectedCourseName() {
+      const course = this.courses.find(c => c.id == this.selectedCourseId)
+      return course ? `${course.code} - ${course.name}` : ''
+    },
+    
+    filteredStudents() {
+      let students = [...this.allStudents]
+      
+      if (this.selectedCourseId) {
+        const enrolledStudentIds = this.enrollments
+          .filter(e => e.course_id == this.selectedCourseId)
+          .map(e => e.student_id)
+        
+        students = students.filter(student => !enrolledStudentIds.includes(student.id))
+      }
+      
+      if (this.studentSearchTerm && this.studentSearchTerm.length > 0) {
+        const term = this.studentSearchTerm.toLowerCase()
+        students = students.filter(student => 
+          student.full_name.toLowerCase().includes(term) ||
+          student.matric_no.toLowerCase().includes(term)
+        )
+      }
+      
+      return students.slice(0, 10)
+    },
+
+    availableStudents() {
+      if (!this.selectedCourseId) return []
+      
+      const enrolledStudentIds = this.enrollments
+        .filter(e => e.course_id == this.selectedCourseId)
+        .map(e => e.student_id)
+      
+      return this.allStudents.filter(student => 
+        !enrolledStudentIds.includes(student.id)
+      )
+    },
+
+    canEnroll() {
+      if (this.enrollmentMethod === 'single') {
+        return !!this.selectedStudentId
+      } else if (this.enrollmentMethod === 'bulk') {
+        return this.bulkSelectedStudents.length > 0
+      } else if (this.enrollmentMethod === 'csv') {
+        return this.csvPreview.length > 0
+      }
+      return false
+    },
+
+    getEnrollButtonText() {
+      if (this.enrollmentMethod === 'single') {
+        return 'Enroll Student'
+      } else if (this.enrollmentMethod === 'bulk') {
+        return `Enroll Students (${this.bulkSelectedStudents.length})`
+      } else if (this.enrollmentMethod === 'csv') {
+        return `Enroll Students (${this.csvPreview.length})`
+      }
+      return 'Enroll'
+    }
+  },
+  
   methods: {
     async fetchCourses() {
       try {
         const user = JSON.parse(localStorage.getItem('user'))
-        const res = await api.get('/courses')
-        this.courses = res.data.filter(c => c.lecturer_id === user.id)
+        
+        if (!user || !user.id) {
+          this.showError('User session expired. Please login again.')
+          return
+        }
+        
+        console.log('Fetching courses for user:', user.id) // Debug log
+        
+        // Fetch courses first (most important)
+        const coursesRes = await api.get('/courses')
+        console.log('All courses from API:', coursesRes.data) // Debug log
+        
+        // Filter courses for current lecturer
+        this.courses = coursesRes.data.filter(c => c.lecturer_id == user.id)
+        console.log('Filtered courses for lecturer:', this.courses) // Debug log
+        
+        // Fetch additional data (these are less critical)
+        try {
+          const enrollmentsRes = await api.get('/enrollments')
+          this.enrollments = enrollmentsRes.data || []
+        } catch (e) {
+          console.warn('Failed to fetch enrollments:', e)
+          this.enrollments = []
+        }
+        
+        try {
+          const studentsRes = await api.get('/students')
+          this.allStudents = studentsRes.data || []
+        } catch (e) {
+          console.warn('Failed to fetch students:', e)
+          this.allStudents = []
+        }
+        
         this.clearMessages()
+        
       } catch (e) {
-        this.showError('Failed to load courses.')
+        console.error('Error fetching courses:', e) // Debug log
+        console.error('Error details:', e.response?.data) // Debug log
+        this.showError('Failed to load courses. Please try again.')
       }
     },
     
@@ -351,6 +489,33 @@ export default {
     clearMessages() {
       this.error = ''
       this.success = ''
+    },
+
+    getCourseEnrollmentCount(courseId) {
+      return this.enrollments.filter(e => e.course_id == courseId).length
+    },
+
+    openEnrollModal(course) {
+      this.selectedCourse = course
+      this.showEnrollmentModal = true
+    },
+
+    handleEnrollmentSuccess(message) {
+      this.showSuccess(message)
+      this.fetchCourses()
+    },
+
+    handleEnrollmentError(message) {
+      this.showError(message)
+    },
+
+    handleEnrollmentClosed() {
+      this.selectedCourse = null
+      this.showEnrollmentModal = false
+    },
+
+    viewCourseEnrollments(course) {
+      this.$router.push(`/lecturer/view-enrolled/${course.id}`)
     }
   },
   
@@ -560,30 +725,33 @@ export default {
 .course-code {
   font-weight: 700;
   color: #1D3557;
-  background: #F1FAEE;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-size: 14px;
+  letter-spacing: 0.5px;
 }
 
 .course-name {
-  font-weight: 500;
+  font-weight: 600;
   color: #1D3557;
   line-height: 1.4;
+  font-size: 15px;
 }
 
-.semester-cell,
+.semester-badge {
+  background: none;
+  color: #1D3557;
+  border-radius: 0;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  padding: 0;
+}
+
 .year-cell {
   color: #6c757d;
   font-size: 14px;
-}
-
-.student-count {
-  background: #e3f2fd;
-  color: #1976d2;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 12px;
   font-weight: 600;
 }
 
@@ -591,34 +759,108 @@ export default {
   white-space: nowrap;
 }
 
-.edit-btn,
-.delete-btn {
-  padding: 8px;
+.action-buttons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.action-btn-small {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  margin-right: 8px;
   transition: all 0.2s ease;
+  font-size: 12px;
+  font-weight: 600;
+  position: relative;
 }
 
-.edit-btn {
-  background: #fff3cd;
-  color: #856404;
+.action-btn-small svg {
+  width: 14px;
+  height: 14px;
 }
 
-.edit-btn:hover {
-  background: #ffeaa7;
-  transform: scale(1.1);
+.action-btn-small.primary {
+  background: linear-gradient(135deg, #457B9D, #1D3557);
+  color: white;
+  box-shadow: 0 2px 6px rgba(69, 123, 157, 0.3);
 }
 
-.delete-btn {
-  background: #f8d7da;
-  color: #721c24;
+.action-btn-small.primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(69, 123, 157, 0.4);
 }
 
-.delete-btn:hover {
-  background: #f5c6cb;
-  transform: scale(1.1);
+.action-btn-small.secondary {
+  background: linear-gradient(135deg, #6c757d, #495057);
+  color: white;
+  box-shadow: 0 2px 6px rgba(108, 117, 125, 0.3);
+}
+
+.action-btn-small.secondary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(108, 117, 125, 0.4);
+}
+
+.action-btn-small.info {
+  background: linear-gradient(135deg, #17a2b8, #138496);
+  color: white;
+  box-shadow: 0 2px 6px rgba(23, 162, 184, 0.3);
+}
+
+.action-btn-small.info:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(23, 162, 184, 0.4);
+}
+
+.action-btn-small.success {
+  background: linear-gradient(135deg, #28a745, #218838);
+  color: white;
+  box-shadow: 0 2px 6px rgba(40, 167, 69, 0.3);
+}
+
+.action-btn-small.success:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+}
+
+.action-btn-small.danger {
+  background: linear-gradient(135deg, #dc3545, #c82333);
+  color: white;
+  box-shadow: 0 2px 6px rgba(220, 53, 69, 0.3);
+}
+
+.action-btn-small.danger:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+}
+
+/* Tooltip for action buttons */
+.action-btn-small[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: -35px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 100;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(-5px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 .empty-state {
@@ -664,7 +906,8 @@ export default {
   border: 1px solid #c3e6cb;
 }
 
-.modal {
+/* Modal Styles - Enhanced for smooth animations */
+.modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -675,30 +918,178 @@ export default {
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  animation: fadeIn 0.3s ease;
+  backdrop-filter: blur(4px);
+  /* Hardware acceleration for smoother performance */
+  will-change: opacity;
+  animation: modalOverlayFadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+@keyframes modalOverlayFadeIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(4px);
+  }
+}
+
+.modal-overlay.modal-exit {
+  animation: modalOverlayFadeOut 0.15s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes modalOverlayFadeOut {
+  from {
+    opacity: 1;
+    backdrop-filter: blur(4px);
+  }
+  to {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
 }
 
 .modal-content {
   background: white;
-  border-radius: 12px;
-  padding: 24px;
-  min-width: 500px;
-  max-width: 90vw;
-  max-height: 90vh;
+  border-radius: 16px;
+  padding: 32px 28px;
+  min-width: 340px;
+  max-width: 95vw;
+  max-height: 95vh;
   overflow-y: auto;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  animation: slideUp 0.3s ease;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  /* Hardware acceleration and smooth transforms */
+  will-change: transform, opacity;
+  transform-origin: center center;
+  animation: modalContentSlideIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Smooth scrolling */
+  scroll-behavior: smooth;
 }
 
-@keyframes slideUp {
+@keyframes modalContentSlideIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.85) translateY(40px);
+  }
+  60% {
+    opacity: 0.8;
+    transform: scale(1.02) translateY(-5px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-content.modal-exit {
+  animation: modalContentSlideOut 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes modalContentSlideOut {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95) translateY(20px);
+  }
+}
+
+/* Enhanced Edit Modal */
+.edit-modal {
+  min-width: 500px;
+  max-width: 600px;
+  animation-duration: 0.3s;
+}
+
+.edit-modal .form-grid {
+  /* Prevent layout shift during animation */
+  min-height: 120px;
+}
+
+.edit-modal .form-group {
+  /* Smooth focus transitions */
+  transition: all 0.15s ease;
+}
+
+.edit-modal .form-group input,
+.edit-modal .form-group select {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.edit-modal .form-group input:focus,
+.edit-modal .form-group select:focus {
+  transform: translateY(-1px);
+  box-shadow: 
+    0 0 0 3px rgba(69, 123, 157, 0.1),
+    0 4px 12px rgba(69, 123, 157, 0.15);
+}
+
+/* Enhanced Delete Modal */
+.delete-modal {
+  min-width: 420px;
+  animation-duration: 0.25s;
+  text-align: center;
+}
+
+.delete-modal .delete-icon {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 20px;
+  background: linear-gradient(135deg, #fee2e2, #fecaca);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #dc3545;
+  /* Icon animation */
+  animation: deleteIconPulse 0.6s ease-out;
+}
+
+@keyframes deleteIconPulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.delete-modal .delete-icon svg {
+  width: 40px;
+  height: 40px;
+  transition: transform 0.2s ease;
+}
+
+.delete-modal h4 {
+  animation: slideUpFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s both;
+}
+
+.delete-modal p {
+  animation: slideUpFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.15s both;
+}
+
+.delete-modal .modal-actions {
+  animation: slideUpFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.2s both;
+}
+
+@keyframes slideUpFadeIn {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(15px);
   }
   to {
     opacity: 1;
@@ -706,136 +1097,256 @@ export default {
   }
 }
 
+/* Modal Header Enhancements */
 .modal-header {
+  width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   padding-bottom: 12px;
   border-bottom: 1px solid #f1f3f4;
+  /* Smooth border transition */
+  transition: border-color 0.2s ease;
 }
 
 .modal-header h4 {
   margin: 0;
   color: #1D3557;
-  font-size: 18px;
+  font-size: 20px;
+  font-weight: 600;
+  /* Text animation */
+  animation: titleFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s both;
+}
+
+@keyframes titleFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .close-btn {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: 8px;
+  border-radius: 6px;
   color: #6c757d;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Smooth hover effect */
+  transform: scale(1);
 }
 
 .close-btn:hover {
   background: #f8f9fa;
   color: #495057;
+  transform: scale(1.05);
+}
+
+.close-btn:active {
+  transform: scale(0.95);
 }
 
 .close-btn svg {
   width: 20px;
   height: 20px;
+  transition: transform 0.2s ease;
 }
 
+.close-btn:hover svg {
+  transform: rotate(90deg);
+}
+
+/* Modal Actions Enhancements */
 .modal-actions {
   display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 24px;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 32px;
+  /* Staggered button animation */
+}
+
+.modal-actions button {
+  transform: translateY(10px);
+  opacity: 0;
+  animation: buttonSlideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.modal-actions button:first-child {
+  animation-delay: 0.15s;
+}
+
+.modal-actions button:last-child {
+  animation-delay: 0.2s;
+}
+
+@keyframes buttonSlideUp {
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Enhanced Button Styles */
+.save-btn, .delete-confirm-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 28px;
+  font-size: 15px;
+  border-radius: 8px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
 }
 
 .save-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: linear-gradient(135deg, #27ae60, #2ecc71);
+  background: linear-gradient(135deg, #457B9D, #1D3557);
   color: white;
-  padding: 12px 20px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(69, 123, 157, 0.3);
 }
 
 .save-btn:hover {
-  background: linear-gradient(135deg, #229954, #27ae60);
+  background: linear-gradient(135deg, #3a6b8a, #1a2e4a);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(69, 123, 157, 0.4);
 }
 
-.delete-modal {
-  text-align: center;
-  max-width: 400px;
-}
-
-.delete-icon {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 16px;
-  color: #e74c3c;
-}
-
-.delete-modal h4 {
-  margin: 0 0 12px 0;
-  color: #1D3557;
-}
-
-.delete-modal p {
-  margin: 8px 0;
-  color: #495057;
-  line-height: 1.5;
-}
-
-.warning-text {
-  color: #e74c3c;
-  font-size: 14px;
-  font-weight: 500;
+.save-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(69, 123, 157, 0.3);
 }
 
 .delete-confirm-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  background: linear-gradient(135deg, #dc3545, #c82333);
   color: white;
-  padding: 12px 20px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
 }
 
 .delete-confirm-btn:hover {
-  background: linear-gradient(135deg, #c0392b, #a93226);
+  background: linear-gradient(135deg, #c82333, #a71e2a);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
 }
 
+.delete-confirm-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+}
+
+.cancel-btn {
+  background: #f8f9fa;
+  color: #6c757d;
+  border: 1px solid #e1e5e9;
+  padding: 14px 28px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 15px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cancel-btn:hover {
+  background: #e9ecef;
+  border-color: #adb5bd;
+  color: #495057;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.cancel-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Loading States */
+.save-btn:disabled,
+.delete-confirm-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.save-btn:disabled:hover,
+.delete-confirm-btn:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Responsive Enhancements */
 @media (max-width: 768px) {
-  .header-section {
-    flex-direction: column;
-    gap: 16px;
-    align-items: stretch;
+  .modal-content {
+    min-width: 0;
+    margin: 20px;
+    padding: 24px 20px;
+    max-height: calc(100vh - 40px);
+    border-radius: 12px;
   }
   
-  .form-grid {
-    grid-template-columns: 1fr;
+  .edit-modal {
+    min-width: 0;
+  }
+  
+  .delete-modal {
+    min-width: 0;
+  }
+  
+  .modal-actions {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .modal-actions button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-content {
+    margin: 10px;
+    padding: 20px 16px;
+    max-height: calc(100vh - 20px);
+  }
+  
+  .modal-header h4 {
+    font-size: 18px;
+  }
+  
+  .delete-modal .delete-icon {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .delete-modal .delete-icon svg {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* Performance Optimizations */
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay,
+  .modal-content,
+  .delete-icon,
+  .modal-actions button,
+  .close-btn,
+  .save-btn,
+  .delete-confirm-btn,
+  .cancel-btn {
+    animation: none !important;
+    transition: none !important;
   }
   
   .modal-content {
-    min-width: 0;
-    margin: 16px;
-  }
-  
-  .form-actions,
-  .modal-actions {
-    flex-direction: column;
-  }
-  
-  .table-container {
-    overflow-x: auto;
+    transform: none !important;
   }
 }
 </style>

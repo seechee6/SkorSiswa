@@ -3,6 +3,7 @@ import LecturerLayout from '../components/lecturer/LecturerLayout.vue'
 import LecturerDashboard from '../components/lecturer/LecturerDashboard.vue'
 import ManageCourses from '../components/lecturer/ManageCourses.vue'
 import ManageEnrollment from '../components/lecturer/ManageEnrollment.vue'
+import ViewEnrolledStudents from '../components/lecturer/ViewEnrolledStudents.vue'
 import ManageAssessments from '../components/lecturer/ManageAssessments.vue'
 import EnterFinalExam from '../components/lecturer/EnterFinalExam.vue'
 import BulkUploadCSV from '../components/lecturer/BulkUploadCSV.vue'
@@ -34,6 +35,7 @@ const routes = [
       { path: 'dashboard', component: LecturerDashboard },
       { path: 'manage-courses', component: ManageCourses },
       { path: 'manage-enrollment', component: ManageEnrollment },
+      { path: 'view-enrolled/:courseId', component: ViewEnrolledStudents },
       { path: 'manage-assessments', component: ManageAssessments },
       { path: 'enter-final-marks', component: EnterFinalExam },
       { path: 'bulk-upload', component: BulkUploadCSV },
