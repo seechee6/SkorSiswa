@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="header-section">
-      <h3>Enter Assessment Marks</h3>
+      <h3>Manage Assessment Marks</h3>
       <p class="subtitle">Enter assessment marks for your courses</p>
     </div>
     
@@ -56,12 +56,30 @@
                 </div>
               </td>
               <td class="actions-cell">
-                <button @click="openAssessmentsModal(course)" class="action-btn primary">
-                  <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 2 002 2h8a2 2 2 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 2 002-2M9 5a2 2 0 012-2h2a2 2 2 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
-                  </svg>
-                  View Assessments
-                </button>
+                <div class="action-buttons-group">
+                  <button @click="openAssessmentsModal(course)" class="action-btn primary">
+                    <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 2 002 2h8a2 2 2 002-2V7a2 2 2 002-2h-2M9 5a2 2 0 002 2h2a2 2 2 002-2M9 5a2 2 0 012-2h2a2 2 2 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+                    </svg>
+                    View Assessments
+                  </button>
+                  
+                  <div class="action-buttons-secondary">
+                    <button @click="openUploadModal(course)" class="action-btn-small upload">
+                      <svg class="btn-icon-small" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                      </svg>
+                      Upload CSV
+                    </button>
+                    
+                    <button @click="openExportModal(course)" class="action-btn-small download">
+                      <svg class="btn-icon-small" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 2 01-2-2V5a2 2 2 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 2 01-2 2z"></path>
+                      </svg>
+                      Export CSV
+                    </button>
+                  </div>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -464,6 +482,22 @@
       </div>
     </div>
 
+    <!-- Bulk Upload CSV Modal -->
+    <BulkUploadCSVModal 
+      :isVisible="showBulkUploadModal"
+      :courseInfo="selectedCourseForModal"
+      @close="closeBulkUploadModal"
+      @upload-complete="onUploadComplete"
+    />
+
+    <!-- Export CSV Modal -->
+    <ExportCSVModal 
+      :isVisible="showExportModal"
+      :courseInfo="selectedCourseForModal"
+      @close="closeExportModal"
+      @export-complete="onExportComplete"
+    />
+
     <!-- Success/Error Messages -->
     <div v-if="success" class="toast success-toast">
       <svg class="toast-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -483,9 +517,15 @@
 
 <script>
 import api from '../../api';
+import BulkUploadCSVModal from './BulkUploadCSV.vue';
+import ExportCSVModal from './ExportCSV.vue';
 
 export default {
   name: 'EnterFinalExam',
+  components: {
+    BulkUploadCSVModal,
+    ExportCSVModal
+  },
   data() {
     return {
       lecturerCourses: [],
@@ -504,7 +544,10 @@ export default {
       success: '',
       error: '',
       filterStatus: 'all', // Add filter status
-      selectedAssessment: null // Add selectedAssessment
+      selectedAssessment: null, // Add selectedAssessment
+      showBulkUploadModal: false,
+      showExportModal: false,
+      selectedCourseForModal: null
     }
   },
   computed: {
@@ -947,6 +990,49 @@ export default {
         this.showError(e.message || 'Failed to apply batch marks.');
       }
     },
+
+    // Modal methods
+    openUploadModal(course) {
+      this.selectedCourseForModal = course;
+      this.showBulkUploadModal = true;
+    },
+
+    closeBulkUploadModal() {
+      this.showBulkUploadModal = false;
+      this.selectedCourseForModal = null;
+    },
+
+    onUploadComplete(results) {
+      this.showSuccess(`Upload completed! ${results.successful} marks uploaded successfully.`);
+      
+      // Refresh course stats after upload
+      if (this.selectedCourseForModal) {
+        this.fetchCourseStats(this.selectedCourseForModal);
+      }
+      
+      // If assessments modal is open, refresh that too
+      if (this.showAssessmentsModal && this.selectedCourse) {
+        this.fetchAssessments(this.selectedCourse.id);
+      }
+      
+      this.closeBulkUploadModal();
+    },
+
+    openExportModal(course) {
+      this.selectedCourseForModal = course;
+      this.showExportModal = true;
+    },
+
+    closeExportModal() {
+      this.showExportModal = false;
+      this.selectedCourseForModal = null;
+    },
+
+    onExportComplete(results) {
+      this.showSuccess(`Export completed! ${results.recordCount} records exported as ${results.format.toUpperCase()}.`);
+      this.closeExportModal();
+    },
+
     showSuccess(message) {
       this.success = message;
       setTimeout(() => {
@@ -1190,6 +1276,107 @@ export default {
 .btn-icon {
   width: 16px;
   height: 16px;
+}
+
+/* Secondary Action Buttons */
+.action-buttons-secondary {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.action-btn-small {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 12px;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.action-btn-small.upload {
+  background: #E8F4FD;
+  color: #1976D2;
+}
+
+.action-btn-small.upload:hover {
+  background: #D1E9F9;
+}
+
+.action-btn-small.download {
+  background: #E8F5E8;
+  color: #388E3C;
+}
+
+.action-btn-small.download:hover {
+  background: #D1F0D1;
+}
+
+.btn-icon-small {
+  width: 14px;
+  height: 14px;
+}
+
+.save-btn {
+  background: #27ae60;
+  color: white;
+}
+
+.save-btn:hover {
+  background: #219a52;
+  transform: translateY(-1px);
+}
+
+.reset-btn {
+  background: #6c757d;
+  color: white;
+}
+
+.reset-btn:hover {
+  background: #5a6268;
+  transform: translateY(-1px);
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 16px;
+  border-top: 1px solid #f1f3f4;
+}
+
+.pagination-btn {
+  padding: 8px 16px;
+  border: 1px solid #457B9D;
+  background: white;
+  color: #457B9D;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-btn:not(:disabled):hover {
+  background: #457B9D;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.page-info {
+  color: #6c757d;
+  font-size: 14px;
 }
 
 /* Empty State */
@@ -1719,69 +1906,6 @@ export default {
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
-}
-
-.btn-icon-small {
-  width: 14px;
-  height: 14px;
-}
-
-.save-btn {
-  background: #27ae60;
-  color: white;
-}
-
-.save-btn:hover {
-  background: #219a52;
-  transform: translateY(-1px);
-}
-
-.reset-btn {
-  background: #6c757d;
-  color: white;
-}
-
-.reset-btn:hover {
-  background: #5a6268;
-  transform: translateY(-1px);
-}
-
-/* Pagination */
-.pagination {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 16px;
-  margin-top: 20px;
-  padding: 16px;
-  border-top: 1px solid #f1f3f4;
-}
-
-.pagination-btn {
-  padding: 8px 16px;
-  border: 1px solid #457B9D;
-  background: white;
-  color: #457B9D;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-.pagination-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.pagination-btn:not(:disabled):hover {
-  background: #457B9D;
-  color: white;
-  transform: translateY(-1px);
-}
-
-.page-info {
-  color: #6c757d;
-  font-size: 14px;
 }
 
 /* Empty States in Modal */

@@ -24,6 +24,8 @@
               placeholder="Matric No / Email" 
               class="login-input" 
               type="text"
+              :disabled="isLoading"
+              required
             />
           </div>
 
@@ -33,6 +35,8 @@
               placeholder="Password" 
               class="login-input" 
               type="password"
+              :disabled="isLoading"
+              required
             />
           </div>
 
@@ -45,11 +49,20 @@
             <a href="#" class="forgot-link">Forgot Password?</a>
           </div>
           
-          <button type="submit" class="next-btn">
-            Login
-            <svg class="arrow-icon" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
-            </svg>
+          <button type="submit" class="login-btn" :disabled="isLoading">
+            <div v-if="isLoading" class="loading-spinner">
+              <svg class="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12,1A11,11,0,1,0,23,12,11,11,0,0,0,12,1Zm0,19a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z" opacity=".25"/>
+                <path d="M10.14,1.16a11,11,0,0,0-9,8.92A1.59,1.59,0,0,0,2.46,12,1.52,1.52,0,0,0,4.11,10.7a8,8,0,0,1,6.66-6.61A1.42,1.42,0,0,0,12,2.69h0A1.57,1.57,0,0,0,10.14,1.16Z"/>
+              </svg>
+              Logging in...
+            </div>
+            <div v-else class="login-content">
+              Login
+              <svg class="arrow-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
+              </svg>
+            </div>
           </button>
         </form>
         
@@ -57,8 +70,19 @@
           <span class="footer-link">Click here</span> if you're a new Client
         </div>
         
-        <div v-if="loginResult && loginResult.error" class="login-error">{{ loginResult.error }}</div>
-        <div v-if="loginResult && loginResult.success" class="login-success">Login successful!</div>
+        <!-- Error and Success Messages -->
+        <div v-if="loginResult && loginResult.error" class="alert alert-error">
+          <svg class="alert-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+          </svg>
+          {{ loginResult.error }}
+        </div>
+        <div v-if="loginResult && loginResult.success" class="alert alert-success">
+          <svg class="alert-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          Login successful! Redirecting...
+        </div>
       </div>
     </div>
     
@@ -84,31 +108,64 @@ export default {
   },
   methods: {
     async login() {
-      this.isLoading = true;
+      // Reset previous results
       this.loginResult = null;
+      this.isLoading = true;
+      
+      // Basic validation
+      if (!this.matric_no.trim() || !this.password.trim()) {
+        this.loginResult = { error: 'Please fill in both matric number and password.' };
+        this.isLoading = false;
+        return;
+      }
       
       try {
+        console.log('Attempting login with:', { matric_no: this.matric_no });
+        
         const response = await api.post('/login', {
-          matric_no: this.matric_no,
-          password: this.password
+          matric_no: this.matric_no.trim(),
+          password: this.password.trim()
         });
         
+        console.log('Login response:', response.data);
         this.loginResult = response.data;
         
         if (response.data.success && response.data.user) {
           localStorage.setItem('user', JSON.stringify(response.data.user));
-          if (response.data.user.role_name === 'Lecturer') {
-            this.$router.push('/lecturer');
-          } else if (response.data.user.role_name === 'Student') {
-            this.$router.push('/student');
-          } else if (response.data.user.role_name === 'Advisor') {
-            this.$router.push('/advisor');
-          } else if (response.data.user.role_name === 'Admin') {
-            this.$router.push('/admin');
-          }
+          
+          // Show success message briefly before redirecting
+          setTimeout(() => {
+            const role = response.data.user.role_name.toLowerCase(); // Convert to lowercase for comparison
+            if (role === 'lecturer') {
+              this.$router.push('/lecturer');
+            } else if (role === 'student') {
+              this.$router.push('/student');
+            } else if (role === 'advisor') {
+              this.$router.push('/advisor');
+            } else if (role === 'admin') {
+              this.$router.push('/admin');
+            } else {
+              this.loginResult = { error: 'Unknown user role. Please contact administrator.' };
+            }
+          }, 1000);
         }
       } catch (error) {
-        this.loginResult = error.response ? error.response.data : { error: 'Network error occurred' };
+        console.error('Login error:', error);
+        
+        if (error.response) {
+          // Server responded with error status
+          this.loginResult = error.response.data;
+        } else if (error.request) {
+          // Request was made but no response received
+          this.loginResult = { 
+            error: 'Cannot connect to server. Please check if the backend is running on http://localhost:8080' 
+          };
+        } else {
+          // Something else happened
+          this.loginResult = { 
+            error: 'An unexpected error occurred. Please try again.' 
+          };
+        }
       } finally {
         this.isLoading = false;
       }
