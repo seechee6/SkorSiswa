@@ -88,10 +88,9 @@
 
           <router-link to="/lecturer/notifications" class="nav-item" active-class="active">
             <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5-5h5M6 17h5l-5-5h5"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5-5v5M6 17h5l-5-5v5m0 0V7a2 2 0 012-2h4a2 2 0 012 2v6"></path>
             </svg>
             <span class="nav-label">Notifications</span>
-            <span v-if="unreadCount > 0" class="notification-badge">{{ unreadCount }}</span>
           </router-link>
         </nav>
       </div>
@@ -141,6 +140,13 @@ export default {
   min-height: 100vh;
   background: #F1FAEE;
   font-family: 'Roboto', sans-serif;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
 
 .top-nav {
@@ -153,6 +159,7 @@ export default {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   position: relative;
   z-index: 100;
+  margin: 0;
 }
 
 .nav-left {

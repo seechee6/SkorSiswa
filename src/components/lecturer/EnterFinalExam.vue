@@ -59,7 +59,7 @@
                 <div class="action-buttons-group">
                   <button @click="openAssessmentsModal(course)" class="action-btn primary">
                     <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 2 002 2h8a2 2 2 002-2V7a2 2 2 002-2h-2M9 5a2 2 0 002 2h2a2 2 2 002-2M9 5a2 2 0 012-2h2a2 2 2 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 2 002 2h8a2 2 2 002-2V7a2 2 2 002-2h-2M9 5a2 2 0 002 2h2a2 2 2 002-2M9 5a2 2 2 012-2h2a2 2 2 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
                     </svg>
                     View Assessments
                   </button>
@@ -611,11 +611,50 @@ export default {
       try {
         const enrollmentsRes = await api.get(`/courses/${course.id}/enrollments`);
         const enrollments = enrollmentsRes.data || [];
-        
         course.enrolledCount = enrollments.length;
-        course.gradedCount = enrollments.filter(enrollment => 
-          enrollment.final_mark !== null && enrollment.final_mark !== ''
-        ).length;
+        
+        if (enrollments.length === 0) {
+          course.gradedCount = 0;
+          return;
+        }
+        
+        // Get all assessments for this course
+        const assessmentsRes = await api.get(`/courses/${course.id}/assessments`);
+        const assessments = assessmentsRes.data || [];
+        
+        // Calculate total possible gradings (assessments + final exam for each student)
+        const totalAssessments = assessments.length + 1; // +1 for final exam
+        const totalPossibleGradings = enrollments.length * totalAssessments;
+        
+        let totalGradedItems = 0;
+        
+        // Count graded assessment marks
+        try {
+          const marksRes = await api.get(`/courses/${course.id}/marks`);
+          const assessmentMarks = marksRes.data.assessment_marks || [];
+          totalGradedItems += assessmentMarks.filter(mark => 
+            mark.mark !== null && mark.mark !== undefined
+          ).length;
+        } catch (e) {
+          console.warn(`Failed to fetch assessment marks for course ${course.id}:`, e);
+        }
+        
+        // Count graded final exam marks
+        for (const enrollment of enrollments) {
+          try {
+            const finalMarkRes = await api.get(`/enrollments/${enrollment.id}/final-mark`);
+            if (finalMarkRes.data && finalMarkRes.data.mark !== null) {
+              totalGradedItems++;
+            }
+          } catch (e) {
+            // Student doesn't have final exam mark yet
+          }
+        }
+        
+        // Calculate the overall graded count as a percentage of total enrolled students
+        // This represents how many students have been completely graded across all assessments
+        course.gradedCount = Math.round((totalGradedItems / totalPossibleGradings) * enrollments.length);
+        
       } catch (e) {
         course.enrolledCount = 0;
         course.gradedCount = 0;
@@ -754,10 +793,15 @@ export default {
           // Fetch assessment marks for each enrollment
           this.students = await Promise.all(enrollments.map(async (enrollment) => {
             try {
-              // Get marks for this course to find the specific assessment mark
-              const marksRes = await api.get(`/courses/${courseId}/students/${enrollment.student_id}/marks`);
+              // Use the course marks endpoint to get all assessment marks for this course
+              const marksRes = await api.get(`/courses/${courseId}/marks`);
               const assessmentMarks = marksRes.data.assessment_marks || [];
-              const assessmentMark = assessmentMarks.find(mark => mark.assessment_id === this.selectedAssessment.id);
+              
+              // Find the specific assessment mark for this student and assessment
+              const assessmentMark = assessmentMarks.find(mark => 
+                mark.enrollment_id === enrollment.id && 
+                mark.assessment_id === this.selectedAssessment.id
+              );
               const mark = assessmentMark ? parseFloat(assessmentMark.mark) : null;
               
               // Calculate initial weighted mark display
@@ -776,6 +820,7 @@ export default {
                 weighted_mark: weightedDisplay
               };
             } catch (e) {
+              console.warn(`Failed to fetch assessment marks for enrollment ${enrollment.id}:`, e);
               return {
                 ...enrollment,
                 assessment_mark: null,
@@ -808,6 +853,7 @@ export default {
                 weighted_mark: weightedDisplay
               };
             } catch (e) {
+              console.warn(`Failed to fetch final exam mark for enrollment ${enrollment.id}:`, e);
               return {
                 ...enrollment,
                 assessment_mark: null,

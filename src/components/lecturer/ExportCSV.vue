@@ -17,33 +17,6 @@
         
         <div class="options-grid">
           <div class="option-group">
-            <h6>Export Format</h6>
-            <div class="radio-group">
-              <label class="radio-option">
-                <input type="radio" v-model="exportFormat" value="csv" />
-                <div>
-                  <span class="radio-label">CSV Format</span>
-                  <small>Compatible with Excel and Google Sheets</small>
-                </div>
-              </label>
-              <label class="radio-option">
-                <input type="radio" v-model="exportFormat" value="excel" />
-                <div>
-                  <span class="radio-label">Excel Format</span>
-                  <small>Native Excel file with formatting</small>
-                </div>
-              </label>
-              <label class="radio-option">
-                <input type="radio" v-model="exportFormat" value="pdf" />
-                <div>
-                  <span class="radio-label">PDF Report</span>
-                  <small>Formatted report for printing</small>
-                </div>
-              </label>
-            </div>
-          </div>
-
-          <div class="option-group">
             <h6>Include Data</h6>
             <div class="checkbox-group">
               <label class="checkbox-option">
@@ -55,16 +28,8 @@
                 <span class="checkbox-label">Final Exam Marks</span>
               </label>
               <label class="checkbox-option">
-                <input type="checkbox" v-model="includeAverage" />
-                <span class="checkbox-label">Overall Average</span>
-              </label>
-              <label class="checkbox-option">
                 <input type="checkbox" v-model="includeGrade" />
                 <span class="checkbox-label">Letter Grade</span>
-              </label>
-              <label class="checkbox-option">
-                <input type="checkbox" v-model="includeStatistics" />
-                <span class="checkbox-label">Class Statistics</span>
               </label>
             </div>
           </div>
@@ -123,7 +88,6 @@
                   </th>
                 </template>
                 <th v-if="includeFinalExam">Final Exam</th>
-                <th v-if="includeAverage">Average</th>
                 <th v-if="includeGrade">Grade</th>
               </tr>
             </thead>
@@ -137,7 +101,6 @@
                   </td>
                 </template>
                 <td v-if="includeFinalExam">{{ student.finalExam || '-' }}</td>
-                <td v-if="includeAverage">{{ student.average }}%</td>
                 <td v-if="includeGrade">{{ student.grade }}</td>
               </tr>
             </tbody>
@@ -145,61 +108,14 @@
         </div>
       </div>
 
-      <!-- Statistics Preview -->
-      <div class="statistics-section" v-if="includeStatistics && statistics">
-        <h5>Class Statistics</h5>
-        <div class="stats-grid">
-          <div class="stat-item">
-            <div class="stat-value">{{ statistics.classAverage }}%</div>
-            <div class="stat-label">Class Average</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-value">{{ statistics.highest }}%</div>
-            <div class="stat-label">Highest Mark</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-value">{{ statistics.lowest }}%</div>
-            <div class="stat-label">Lowest Mark</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-value">{{ statistics.passRate }}%</div>
-            <div class="stat-label">Pass Rate</div>
-          </div>
-        </div>
-        
-        <div class="distribution-chart">
-          <h6>Grade Distribution</h6>
-          <div v-for="grade in statistics.gradeDistribution" :key="grade.grade" class="grade-bar">
-            <span class="grade-label">{{ grade.grade }}</span>
-            <span class="grade-count">{{ grade.count }}</span>
-            <div class="grade-fill" :style="{ width: grade.percentage + '%' }"></div>
-          </div>
-        </div>
-      </div>
-
       <!-- Export Actions -->
       <div class="export-actions">
         <div class="action-buttons">
-          <button @click="generatePreview" class="preview-btn">
-            <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"></path>
-              <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"></path>
-            </svg>
-            Preview Export
-          </button>
-          
           <button @click="exportData" :disabled="!canExport" class="export-btn">
             <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20">
               <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"></path>
             </svg>
-            Export {{ exportFormat.toUpperCase() }}
-          </button>
-          
-          <button @click="exportToExcel" class="excel-btn">
-            <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clip-rule="evenodd"></path>
-            </svg>
-            Quick Excel Export
+            Export CSV
           </button>
         </div>
       </div>
@@ -234,17 +150,13 @@ export default {
   },
   data() {
     return {
-      exportFormat: 'csv',
       includeAssessments: true,
       includeFinalExam: true,
-      includeAverage: true,
       includeGrade: true,
-      includeStatistics: false,
       studentFilter: 'all',
       minimumGrade: 'C',
       previewData: [],
       assessmentColumns: [],
-      statistics: null,
       error: '',
       success: ''
     }
@@ -294,7 +206,6 @@ export default {
     resetData() {
       this.previewData = []
       this.assessmentColumns = []
-      this.statistics = null
       this.error = ''
       this.success = ''
     },
@@ -420,8 +331,6 @@ export default {
           grade
         }
       })
-      
-      this.calculateStatistics()
     },
     
     calculateGrade(average) {
@@ -430,31 +339,6 @@ export default {
       if (average >= 60) return 'C'
       if (average >= 50) return 'D'
       return 'F'
-    },
-    
-    calculateStatistics() {
-      if (!this.previewData.length) return
-      
-      const averages = this.previewData.map(s => s.average).filter(a => a > 0)
-      const classAverage = Math.round(averages.reduce((sum, avg) => sum + avg, 0) / averages.length)
-      const highest = Math.max(...averages)
-      const lowest = Math.min(...averages)
-      const passCount = averages.filter(avg => avg >= 50).length
-      const passRate = Math.round((passCount / averages.length) * 100)
-      
-      const gradeDistribution = ['A', 'B', 'C', 'D', 'F'].map(grade => {
-        const count = this.previewData.filter(s => s.grade === grade).length
-        const percentage = Math.round((count / this.previewData.length) * 100)
-        return { grade, count, percentage }
-      })
-      
-      this.statistics = {
-        classAverage,
-        highest,
-        lowest,
-        passRate,
-        gradeDistribution
-      }
     },
     
     generatePreview() {
@@ -469,22 +353,15 @@ export default {
     exportData() {
       try {
         const data = this.generateExportData()
+        this.downloadCSV(data)
         
-        if (this.exportFormat === 'csv') {
-          this.downloadCSV(data)
-        } else if (this.exportFormat === 'excel') {
-          this.downloadExcel(data)
-        } else if (this.exportFormat === 'pdf') {
-          this.downloadPDF()
-        }
-        
-        this.success = `${this.exportFormat.toUpperCase()} file exported successfully!`
+        this.success = `CSV file exported successfully!`
         setTimeout(() => this.success = '', 3000)
         
         this.$emit('export-complete', {
-          format: this.exportFormat,
+          format: 'csv',
           recordCount: this.filteredPreviewData.length,
-          filename: `${this.selectedCourseName}_marks.${this.exportFormat}`
+          filename: `${this.selectedCourseName}_marks.csv`
         })
         
       } catch (e) {
@@ -501,9 +378,6 @@ export default {
       if (this.includeFinalExam) {
         headers.push('Final Exam')
       }
-      if (this.includeAverage) {
-        headers.push('Average')
-      }
       if (this.includeGrade) {
         headers.push('Grade')
       }
@@ -518,9 +392,6 @@ export default {
         }
         if (this.includeFinalExam) {
           row.push(student.finalExam || '')
-        }
-        if (this.includeAverage) {
-          row.push(student.average + '%')
         }
         if (this.includeGrade) {
           row.push(student.grade)
@@ -543,20 +414,6 @@ export default {
       link.href = URL.createObjectURL(blob)
       link.download = `${this.selectedCourseName}_marks.csv`
       link.click()
-    },
-    
-    downloadExcel(data) {
-      this.downloadCSV(data)
-    },
-    
-    downloadPDF() {
-      this.success = 'PDF export feature coming soon!'
-      setTimeout(() => this.success = '', 3000)
-    },
-    
-    exportToExcel() {
-      this.exportFormat = 'excel'
-      this.exportData()
     }
   }
 }
@@ -722,11 +579,11 @@ export default {
   border-radius: 4px;
 }
 
-.preview-section, .statistics-section {
+.preview-section {
   margin-bottom: 24px;
 }
 
-.preview-section h5, .statistics-section h5 {
+.preview-section h5 {
   margin: 0 0 16px 0;
   color: #1D3557;
   font-size: 16px;
@@ -773,65 +630,6 @@ export default {
   color: #1D3557;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.stat-item {
-  text-align: center;
-  padding: 16px;
-  background: #F8F9FA;
-  border-radius: 8px;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1D3557;
-}
-
-.stat-label {
-  color: #6c757d;
-  font-size: 12px;
-  margin-top: 4px;
-}
-
-.distribution-chart h6 {
-  margin: 0 0 12px 0;
-  color: #1D3557;
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.grade-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.grade-label {
-  width: 40px;
-  font-weight: 600;
-  color: #1D3557;
-}
-
-.grade-count {
-  width: 30px;
-  font-size: 12px;
-  color: #6c757d;
-}
-
-.grade-fill {
-  height: 20px;
-  background: linear-gradient(90deg, #457B9D 0%, #1D3557 100%);
-  border-radius: 4px;
-  min-width: 4px;
-}
-
 .export-actions {
   margin-bottom: 16px;
 }
@@ -860,18 +658,8 @@ export default {
   height: 16px;
 }
 
-.preview-btn {
-  background: #6c757d;
-  color: white;
-}
-
 .export-btn {
   background: #27ae60;
-  color: white;
-}
-
-.excel-btn {
-  background: #457B9D;
   color: white;
 }
 
@@ -910,10 +698,6 @@ export default {
   
   .action-buttons {
     grid-template-columns: 1fr;
-  }
-  
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
   }
   
   .export-modal {
