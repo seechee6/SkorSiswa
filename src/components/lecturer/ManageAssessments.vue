@@ -221,7 +221,16 @@
                   </td>
                   <td>{{ assessment.max_mark }}</td>
                   <td>
-                    <span class="graded-count">{{ assessment.graded_count || 0 }}</span>
+                    <div class="grading-progress">
+                      <span class="graded-count">{{ assessment.graded_count || 0 }} / {{ assessment.total_students || 0 }}</span>
+                      <div class="progress-bar-mini">
+                        <div 
+                          class="progress-fill-mini" 
+                          :style="{ width: assessment.total_students ? (assessment.graded_count / assessment.total_students * 100) + '%' : '0%' }"
+                          :class="getGradingProgressClass(assessment)"
+                        ></div>
+                      </div>
+                    </div>
                   </td>
                   <td>
                     <div class="action-buttons">
@@ -462,9 +471,31 @@ export default {
         const res = await api.get(`/courses/${courseId}/assessments`)
         this.currentAssessments = res.data || []
         
-        // Fetch graded count for each assessment (mock data for now)
+        // Fetch enrolled students count for this course
+        const enrollmentsRes = await api.get(`/courses/${courseId}/enrollments`)
+        const enrolledStudents = enrollmentsRes.data || []
+        
+        // For each assessment, calculate how many students have been graded
         for (let assessment of this.currentAssessments) {
-          assessment.graded_count = Math.floor(Math.random() * 20)
+          try {
+            // Get marks for this specific assessment
+            const marksRes = await api.get(`/courses/${courseId}/marks`)
+            const assessmentMarks = marksRes.data.assessment_marks || []
+            
+            // Count how many students have marks for this assessment
+            assessment.graded_count = assessmentMarks.filter(mark => 
+              mark.assessment_id === assessment.id && 
+              mark.mark !== null && 
+              mark.mark !== undefined
+            ).length
+            
+            // Store total enrolled students for display
+            assessment.total_students = enrolledStudents.length
+          } catch (e) {
+            console.warn(`Failed to fetch marks for assessment ${assessment.id}:`, e)
+            assessment.graded_count = 0
+            assessment.total_students = enrolledStudents.length
+          }
         }
       } catch (e) {
         this.currentAssessments = []
@@ -477,6 +508,14 @@ export default {
       if (weight > 70) return 'over-limit'
       if (weight > 60) return 'warning'
       return 'normal'
+    },
+
+    getGradingProgressClass(assessment) {
+      if (!assessment.total_students || !assessment.graded_count) return ''
+      const progress = assessment.graded_count / assessment.total_students
+      if (progress === 1) return 'complete'
+      if (progress >= 0.5) return 'in-progress'
+      return 'not-started'
     },
 
     openAddAssessmentModal(course) {
@@ -1170,6 +1209,39 @@ export default {
   font-size: 12px;
   color: #6c757d;
   text-align: center;
+}
+
+/* Grading Progress */
+.grading-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.progress-bar-mini {
+  height: 6px;
+  background: #E5E5E5;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill-mini {
+  height: 100%;
+  background: #457B9D;
+  transition: width 0.3s ease;
+  border-radius: 3px;
+}
+
+.progress-fill-mini.complete {
+  background: #28a745;
+}
+
+.progress-fill-mini.in-progress {
+  background: #F4A261;
+}
+
+.progress-fill-mini.not-started {
+  background: #E63946;
 }
 
 /* Assessment Form */

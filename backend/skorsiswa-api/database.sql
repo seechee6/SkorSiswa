@@ -81,6 +81,25 @@ CREATE TABLE notifications (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+-- New table for detailed mark update notifications
+CREATE TABLE mark_update_notifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    lecturer_id INT NOT NULL,
+    student_id INT NOT NULL,
+    enrollment_id INT NOT NULL,
+    assessment_id INT NULL,
+    is_final_exam BOOLEAN DEFAULT FALSE,
+    old_mark DECIMAL(5,2) NULL,
+    new_mark DECIMAL(5,2) NOT NULL,
+    change_reason TEXT,
+    acknowledged BOOLEAN DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (lecturer_id) REFERENCES users(id),
+    FOREIGN KEY (student_id) REFERENCES users(id),
+    FOREIGN KEY (enrollment_id) REFERENCES enrollments(id),
+    FOREIGN KEY (assessment_id) REFERENCES assessments(id)
+);
+
 CREATE TABLE advisors (
     id INT AUTO_INCREMENT PRIMARY KEY,
     advisor_id INT NOT NULL,

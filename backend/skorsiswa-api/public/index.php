@@ -67,6 +67,12 @@ function createNotification($pdo, $user_id, $message) {
     $stmt->execute([$user_id, $message]);
 }
 
+// Helper function to create mark update notification
+function createMarkUpdateNotification($pdo, $lecturer_id, $student_id, $enrollment_id, $assessment_id = null, $is_final_exam = false, $old_mark = null, $new_mark, $reason = null) {
+    $stmt = $pdo->prepare('INSERT INTO mark_update_notifications (lecturer_id, student_id, enrollment_id, assessment_id, is_final_exam, old_mark, new_mark, change_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt->execute([$lecturer_id, $student_id, $enrollment_id, $assessment_id, $is_final_exam, $old_mark, $new_mark, $reason]);
+}
+
 // ===================== AUTHENTICATION =====================
 // GET /login route for browser access
 $app->get('/login', function (Request $request, Response $response) {
@@ -638,26 +644,47 @@ $app->get('/courses/{course_id}/marks', function (Request $request, Response $re
 $app->post('/enrollments/{enrollment_id}/assessment-marks', function (Request $request, Response $response, $args) use ($pdo) {
     $data = $request->getParsedBody();
     
-    // Check if mark exists
-    $stmt = $pdo->prepare('SELECT id FROM assessment_marks WHERE enrollment_id = ? AND assessment_id = ?');
+    // Get old mark for comparison
+    $stmt = $pdo->prepare('SELECT mark FROM assessment_marks WHERE enrollment_id = ? AND assessment_id = ?');
     $stmt->execute([$args['enrollment_id'], $data['assessment_id']]);
     $existing = $stmt->fetch();
+    $old_mark = $existing ? $existing['mark'] : null;
     
     if ($existing) {
         // Update
-        $stmt = $pdo->prepare('UPDATE assessment_marks SET mark = ? WHERE id = ?');
-        $stmt->execute([$data['mark'], $existing['id']]);
+        $stmt = $pdo->prepare('UPDATE assessment_marks SET mark = ? WHERE enrollment_id = ? AND assessment_id = ?');
+        $stmt->execute([$data['mark'], $args['enrollment_id'], $data['assessment_id']]);
     } else {
         // Insert
         $stmt = $pdo->prepare('INSERT INTO assessment_marks (enrollment_id, assessment_id, mark) VALUES (?, ?, ?)');
         $stmt->execute([$args['enrollment_id'], $data['assessment_id'], $data['mark']]);
     }
     
-    // Create notification for student
-    $stmt = $pdo->prepare('SELECT student_id FROM enrollments WHERE id = ?');
+    // Get enrollment and course info for notifications
+    $stmt = $pdo->prepare('
+        SELECT e.student_id, e.course_id, c.lecturer_id
+        FROM enrollments e 
+        JOIN courses c ON e.course_id = c.id 
+        WHERE e.id = ?
+    ');
     $stmt->execute([$args['enrollment_id']]);
-    $enrollment = $stmt->fetch();
-    createNotification($pdo, $enrollment['student_id'], 'Your assessment mark has been updated');
+    $enrollment_info = $stmt->fetch();
+    
+    // Create notification for student
+    createNotification($pdo, $enrollment_info['student_id'], 'Your assessment mark has been updated');
+    
+    // Create mark update notification for lecturer tracking
+    createMarkUpdateNotification(
+        $pdo,
+        $enrollment_info['lecturer_id'],
+        $enrollment_info['student_id'],
+        $args['enrollment_id'],
+        $data['assessment_id'],
+        false, // not final exam
+        $old_mark,
+        $data['mark'],
+        $data['reason'] ?? null
+    );
     
     $response->getBody()->write(json_encode(['success' => true]));
     return $response->withHeader('Content-Type', 'application/json');
@@ -667,26 +694,47 @@ $app->post('/enrollments/{enrollment_id}/assessment-marks', function (Request $r
 $app->post('/enrollments/{enrollment_id}/final-mark', function (Request $request, Response $response, $args) use ($pdo) {
     $data = $request->getParsedBody();
     
-    // Check if mark exists
-    $stmt = $pdo->prepare('SELECT id FROM final_exam_marks WHERE enrollment_id = ?');
+    // Get old mark for comparison
+    $stmt = $pdo->prepare('SELECT mark FROM final_exam_marks WHERE enrollment_id = ?');
     $stmt->execute([$args['enrollment_id']]);
     $existing = $stmt->fetch();
+    $old_mark = $existing ? $existing['mark'] : null;
     
     if ($existing) {
         // Update
-        $stmt = $pdo->prepare('UPDATE final_exam_marks SET mark = ? WHERE id = ?');
-        $stmt->execute([$data['mark'], $existing['id']]);
+        $stmt = $pdo->prepare('UPDATE final_exam_marks SET mark = ? WHERE enrollment_id = ?');
+        $stmt->execute([$data['mark'], $args['enrollment_id']]);
     } else {
         // Insert
         $stmt = $pdo->prepare('INSERT INTO final_exam_marks (enrollment_id, mark) VALUES (?, ?)');
         $stmt->execute([$args['enrollment_id'], $data['mark']]);
     }
     
-    // Create notification for student
-    $stmt = $pdo->prepare('SELECT student_id FROM enrollments WHERE id = ?');
+    // Get enrollment and course info for notifications
+    $stmt = $pdo->prepare('
+        SELECT e.student_id, e.course_id, c.lecturer_id
+        FROM enrollments e 
+        JOIN courses c ON e.course_id = c.id 
+        WHERE e.id = ?
+    ');
     $stmt->execute([$args['enrollment_id']]);
-    $enrollment = $stmt->fetch();
-    createNotification($pdo, $enrollment['student_id'], 'Your final exam mark has been updated');
+    $enrollment_info = $stmt->fetch();
+    
+    // Create notification for student
+    createNotification($pdo, $enrollment_info['student_id'], 'Your final exam mark has been updated');
+    
+    // Create mark update notification for lecturer tracking
+    createMarkUpdateNotification(
+        $pdo,
+        $enrollment_info['lecturer_id'],
+        $enrollment_info['student_id'],
+        $args['enrollment_id'],
+        null, // no assessment_id for final exam
+        true, // is final exam
+        $old_mark,
+        $data['mark'],
+        $data['reason'] ?? null
+    );
     
     $response->getBody()->write(json_encode(['success' => true]));
     return $response->withHeader('Content-Type', 'application/json');
@@ -885,6 +933,55 @@ $app->post('/users/{user_id}/notifications', function (Request $request, Respons
     $stmt = $pdo->prepare('INSERT INTO notifications (user_id, message) VALUES (?, ?)');
     $stmt->execute([$args['user_id'], $data['message']]);
     $response->getBody()->write(json_encode(['success' => true, 'id' => $pdo->lastInsertId()]));
+    return $response->withHeader('Content-Type', 'application/json');
+});
+
+// ===================== MARK UPDATE NOTIFICATIONS =====================
+// Get mark update notifications for a lecturer
+$app->get('/lecturers/{lecturer_id}/mark-notifications', function (Request $request, Response $response, $args) use ($pdo) {
+    $stmt = $pdo->prepare('
+        SELECT 
+            mun.*,
+            s.full_name as student_name,
+            s.matric_no as student_id,
+            c.code as course_code,
+            c.name as course_name,
+            a.name as assessment_name,
+            CASE 
+                WHEN mun.is_final_exam = 1 THEN "final_exam"
+                ELSE LOWER(REPLACE(a.name, " ", "_"))
+            END as assessment_type
+        FROM mark_update_notifications mun
+        JOIN users s ON mun.student_id = s.id
+        JOIN enrollments e ON mun.enrollment_id = e.id
+        JOIN courses c ON e.course_id = c.id
+        LEFT JOIN assessments a ON mun.assessment_id = a.id
+        WHERE mun.lecturer_id = ?
+        ORDER BY mun.created_at DESC
+    ');
+    $stmt->execute([$args['lecturer_id']]);
+    $notifications = $stmt->fetchAll();
+    
+    $response->getBody()->write(json_encode($notifications));
+    return $response->withHeader('Content-Type', 'application/json');
+});
+
+// Get courses for a lecturer (for filtering)
+$app->get('/lecturers/{lecturer_id}/courses', function (Request $request, Response $response, $args) use ($pdo) {
+    $stmt = $pdo->prepare('SELECT id, code, name FROM courses WHERE lecturer_id = ? ORDER BY code');
+    $stmt->execute([$args['lecturer_id']]);
+    $courses = $stmt->fetchAll();
+    
+    $response->getBody()->write(json_encode($courses));
+    return $response->withHeader('Content-Type', 'application/json');
+});
+
+// Acknowledge a mark update notification
+$app->put('/notifications/{id}/acknowledge', function (Request $request, Response $response, $args) use ($pdo) {
+    $stmt = $pdo->prepare('UPDATE mark_update_notifications SET acknowledged = 1 WHERE id = ?');
+    $stmt->execute([$args['id']]);
+    
+    $response->getBody()->write(json_encode(['success' => true]));
     return $response->withHeader('Content-Type', 'application/json');
 });
 
