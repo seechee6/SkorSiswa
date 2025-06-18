@@ -1,139 +1,214 @@
 <template>
-  <div>
-    <h3>Notifications</h3>
-    
-    <!-- Notification Stats -->
-    <div class="card stats-section">
+  <div class="marks-notifications">
+    <!-- Page Header -->
+    <div class="page-header">
+      <div class="header-content">
+        <h1 class="page-title">Mark Update Notifications</h1>
+        <p class="page-subtitle">Track all mark updates and changes for your courses</p>
+      </div>
+      <div class="header-actions">
+        <button @click="refreshNotifications" class="refresh-btn" :disabled="loading">
+          <svg class="refresh-icon" :class="{ spinning: loading }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+          {{ loading ? 'Loading...' : 'Refresh' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="stats-section">
       <div class="stats-grid">
-        <div class="stat-item">
-          <div class="stat-value">{{ unreadCount }}</div>
-          <div class="stat-label">Unread</div>
+        <div class="stat-card">
+          <div class="stat-icon new">
+            <svg fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">{{ newUpdatesCount }}</div>
+            <div class="stat-label">New Updates</div>
+          </div>
         </div>
-        <div class="stat-item">
-          <div class="stat-value">{{ todayCount }}</div>
-          <div class="stat-label">Today</div>
+        
+        <div class="stat-card">
+          <div class="stat-icon today">
+            <svg fill="currentColor" viewBox="0 0 20 20">
+              <path d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zM4 8h12v8H4V8z"></path>
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">{{ todayCount }}</div>
+            <div class="stat-label">Today's Updates</div>
+          </div>
         </div>
-        <div class="stat-item">
-          <div class="stat-value">{{ totalCount }}</div>
-          <div class="stat-label">Total</div>
+        
+        <div class="stat-card">
+          <div class="stat-icon week">
+            <svg fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">{{ weekCount }}</div>
+            <div class="stat-label">This Week</div>
+          </div>
+        </div>
+        
+        <div class="stat-card">
+          <div class="stat-icon total">
+            <svg fill="currentColor" viewBox="0 0 20 20">
+              <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"></path>
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">{{ totalCount }}</div>
+            <div class="stat-label">Total Updates</div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Notification Controls -->
-    <div class="card controls-section">
-      <div class="controls-header">
-        <div class="filter-controls">
-          <select v-model="filterType" @change="applyFilters" class="filter-select">
-            <option value="all">All Notifications</option>
-            <option value="unread">Unread Only</option>
-            <option value="read">Read Only</option>
-            <option value="today">Today</option>
-            <option value="week">This Week</option>
-          </select>
-          
-          <select v-model="categoryFilter" @change="applyFilters" class="filter-select">
-            <option value="all">All Categories</option>
-            <option value="student">Student Related</option>
-            <option value="assessment">Assessment Updates</option>
-            <option value="system">System Notifications</option>
-            <option value="enrollment">Enrollment Changes</option>
+    <!-- Filters Section -->
+    <div class="filters-section">
+      <div class="filter-row">
+        <div class="filter-group">
+          <label class="filter-label">Course:</label>
+          <select v-model="selectedCourse" @change="applyFilters" class="filter-select">
+            <option value="">All Courses</option>
+            <option v-for="course in courses" :key="course.id" :value="course.id">
+              {{ course.code }} - {{ course.name }}
+            </option>
           </select>
         </div>
         
-        <div class="action-controls">
-          <button @click="markAllAsRead" :disabled="unreadCount === 0" class="mark-all-btn">
-            Mark All Read ({{ unreadCount }})
-          </button>
-          <button @click="refreshNotifications" class="refresh-btn">
-            <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-              <path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/>
-              <path d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/>
-            </svg>
-            Refresh
-          </button>
+        <div class="filter-group">
+          <label class="filter-label">Assessment Type:</label>
+          <select v-model="selectedAssessment" @change="applyFilters" class="filter-select">
+            <option value="">All Assessments</option>
+            <option value="quiz">Quiz</option>
+            <option value="assignment">Assignment</option>
+            <option value="test">Test</option>
+            <option value="final_exam">Final Exam</option>
+            <option value="project">Project</option>
+          </select>
+        </div>
+        
+        <div class="filter-group">
+          <label class="filter-label">Time Period:</label>
+          <select v-model="timePeriod" @change="applyFilters" class="filter-select">
+            <option value="all">All Time</option>
+            <option value="today">Today</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+          </select>
+        </div>
+        
+        <div class="filter-group">
+          <label class="filter-label">Status:</label>
+          <select v-model="statusFilter" @change="applyFilters" class="filter-select">
+            <option value="all">All Updates</option>
+            <option value="new">New Updates</option>
+            <option value="acknowledged">Acknowledged</option>
+          </select>
         </div>
       </div>
     </div>
 
     <!-- Notifications List -->
-    <div class="card notifications-section">
-      <div class="notifications-header">
-        <h4>Notifications</h4>
-        <span class="showing-count">Showing {{ filteredNotifications.length }} of {{ totalCount }}</span>
+    <div class="notifications-section">
+      <div class="section-header">
+        <h3>Mark Update History</h3>
+        <div class="section-actions">
+          <span class="results-count">{{ filteredNotifications.length }} updates found</span>
+          <button 
+            v-if="newUpdatesCount > 0" 
+            @click="markAllAsAcknowledged" 
+            class="acknowledge-all-btn"
+          >
+            Acknowledge All New ({{ newUpdatesCount }})
+          </button>
+        </div>
       </div>
-      
-      <div class="notifications-container" v-if="filteredNotifications.length > 0">
+
+      <div class="notifications-list" v-if="filteredNotifications.length > 0">
         <div 
           v-for="notification in paginatedNotifications" 
           :key="notification.id"
-          class="notification-item"
+          class="notification-card"
           :class="{ 
-            'unread': !notification.is_read,
-            'urgent': notification.priority === 'high',
-            'system': notification.category === 'system'
+            'new': !notification.acknowledged,
+            'high-impact': notification.impact === 'high'
           }"
         >
-          <div class="notification-icon">
-            <svg v-if="notification.category === 'student'" class="icon" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"></path>
-            </svg>
-            <svg v-else-if="notification.category === 'assessment'" class="icon" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <svg v-else-if="notification.category === 'enrollment'" class="icon" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"></path>
-            </svg>
-            <svg v-else class="icon" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M10 2L3 7v11c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V7l-7-5z"></path>
-            </svg>
+          <div class="notification-indicator">
+            <div class="status-dot" :class="{ 'new': !notification.acknowledged }"></div>
           </div>
           
           <div class="notification-content">
-            <div class="notification-title">{{ notification.title || 'Notification' }}</div>
-            <div class="notification-message">{{ notification.message }}</div>
-            <div class="notification-meta">
-              <span class="notification-time">{{ formatTime(notification.created_at) }}</span>
-              <span class="notification-category">{{ formatCategory(notification.category) }}</span>
+            <div class="notification-header">
+              <div class="notification-title">
+                <h4>{{ getNotificationTitle(notification) }}</h4>
+                <span class="assessment-type">{{ formatAssessmentType(notification.assessment_type) }}</span>
+              </div>
+              <div class="notification-meta">
+                <span class="course-code">{{ notification.course_code }}</span>
+                <span class="timestamp">{{ formatTimestamp(notification.created_at) }}</span>
+              </div>
+            </div>
+            
+            <div class="notification-details">
+              <div class="student-info">
+                <strong>Student:</strong> {{ notification.student_name }} ({{ notification.student_id }})
+              </div>
+              <div class="mark-changes">
+                <div class="mark-change-item">
+                  <span class="label">Previous Mark:</span>
+                  <span class="old-mark">{{ notification.old_mark || 'Not Set' }}</span>
+                </div>
+                <div class="change-arrow">→</div>
+                <div class="mark-change-item">
+                  <span class="label">New Mark:</span>
+                  <span class="new-mark">{{ notification.new_mark }}</span>
+                </div>
+                <div class="mark-difference" v-if="notification.old_mark">
+                  <span :class="getDifferenceClass(notification.old_mark, notification.new_mark)">
+                    {{ getMarkDifference(notification.old_mark, notification.new_mark) }}
+                  </span>
+                </div>
+              </div>
+              <div class="change-reason" v-if="notification.reason">
+                <strong>Reason:</strong> {{ notification.reason }}
+              </div>
             </div>
           </div>
           
           <div class="notification-actions">
             <button 
-              v-if="!notification.is_read" 
-              @click="markAsRead(notification.id)"
-              class="read-btn"
-              title="Mark as read"
+              v-if="!notification.acknowledged"
+              @click="acknowledgeNotification(notification.id)"
+              class="acknowledge-btn"
+              title="Mark as acknowledged"
             >
-              <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/>
-              </svg>
-            </button>
-            <button 
-              @click="deleteNotification(notification.id)"
-              class="delete-btn"
-              title="Delete notification"
-            >
-              <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-                <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+              <svg fill="currentColor" viewBox="0 0 20 20">
+                <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"></path>
               </svg>
             </button>
           </div>
         </div>
       </div>
-      
+
       <!-- Empty State -->
       <div v-else class="empty-state">
         <div class="empty-content">
           <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5 5-5-5h5v-5a7.5 7.5 0 0 0-15 0v5h5l-5 5-5-5h5V7a9.5 9.5 0 0 1 19 0v10z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 8l2 2 4-4"></path>
           </svg>
-          <h4>No Notifications</h4>
-          <p>{{ getEmptyMessage() }}</p>
+          <h4>No Mark Updates Found</h4>
+          <p>{{ getEmptyStateMessage() }}</p>
         </div>
       </div>
-      
+
       <!-- Pagination -->
       <div class="pagination" v-if="totalPages > 1">
         <button 
@@ -141,27 +216,32 @@
           :disabled="currentPage === 1"
           class="pagination-btn"
         >
+          <svg fill="currentColor" viewBox="0 0 20 20">
+            <path d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"></path>
+          </svg>
           Previous
         </button>
-        <span class="page-info">
-          Page {{ currentPage }} of {{ totalPages }}
-        </span>
+        
+        <div class="page-numbers">
+          <span class="page-info">Page {{ currentPage }} of {{ totalPages }}</span>
+        </div>
+        
         <button 
           @click="currentPage++" 
           :disabled="currentPage === totalPages"
           class="pagination-btn"
         >
           Next
+          <svg fill="currentColor" viewBox="0 0 20 20">
+            <path d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"></path>
+          </svg>
         </button>
       </div>
     </div>
 
-    <!-- Error/Success Messages -->
-    <div v-if="error" class="floating-message error">
-      {{ error }}
-    </div>
-    <div v-if="success" class="floating-message success">
-      {{ success }}
+    <!-- Toast Messages -->
+    <div v-if="message" class="toast-message" :class="messageType">
+      {{ message }}
     </div>
   </div>
 </template>
@@ -175,22 +255,33 @@ export default {
     return {
       notifications: [],
       filteredNotifications: [],
-      filterType: 'all',
-      categoryFilter: 'all',
+      courses: [],
+      selectedCourse: '',
+      selectedAssessment: '',
+      timePeriod: 'all',
+      statusFilter: 'all',
       currentPage: 1,
       itemsPerPage: 10,
-      error: '',
-      success: ''
+      loading: false,
+      message: '',
+      messageType: 'success'
     }
   },
   computed: {
-    unreadCount() {
-      return this.notifications.filter(n => !n.is_read).length
+    newUpdatesCount() {
+      return this.notifications.filter(n => !n.acknowledged).length
     },
     todayCount() {
       const today = new Date().toDateString()
       return this.notifications.filter(n => 
         new Date(n.created_at).toDateString() === today
+      ).length
+    },
+    weekCount() {
+      const weekAgo = new Date()
+      weekAgo.setDate(weekAgo.getDate() - 7)
+      return this.notifications.filter(n => 
+        new Date(n.created_at) >= weekAgo
       ).length
     },
     totalCount() {
@@ -207,107 +298,106 @@ export default {
   },
   methods: {
     async fetchNotifications() {
+      this.loading = true
       try {
         const user = JSON.parse(localStorage.getItem('user'))
-        const res = await api.get(`/users/${user.id}/notifications`)
         
-        // Add mock data structure for better functionality
-        this.notifications = res.data.map(notification => ({
-          ...notification,
-          category: notification.category || this.inferCategory(notification.message),
-          priority: notification.priority || 'normal',
-          title: notification.title || this.generateTitle(notification.message)
-        }))
+        // Fetch mark update notifications
+        const notificationsRes = await api.get(`/lecturers/${user.id}/mark-notifications`)
         
+        // Fetch courses for filtering
+        const coursesRes = await api.get(`/lecturers/${user.id}/courses`)
+        
+        this.notifications = notificationsRes.data || []
+        this.courses = coursesRes.data || []
         this.applyFilters()
-      } catch (e) {
-        this.error = 'Failed to load notifications.'
+      } catch (error) {
+        console.error('Error fetching notifications:', error)
+        this.showMessage('Failed to load notifications. Please try again.', 'error')
+        // Fallback to empty data
+        this.notifications = []
+        this.courses = []
+        this.applyFilters()
       }
+      this.loading = false
     },
     
     async refreshNotifications() {
-      this.error = ''
-      this.success = ''
       await this.fetchNotifications()
-      this.success = 'Notifications refreshed!'
-      setTimeout(() => this.success = '', 2000)
+      this.showMessage('Notifications refreshed successfully!', 'success')
     },
     
-    async markAsRead(id) {
+    async acknowledgeNotification(id) {
       try {
-        await api.put(`/notifications/${id}/read`)
+        await api.put(`/notifications/${id}/acknowledge`)
         const notification = this.notifications.find(n => n.id === id)
         if (notification) {
-          notification.is_read = true
+          notification.acknowledged = true
         }
         this.applyFilters()
-        this.success = 'Marked as read!'
-        setTimeout(() => this.success = '', 2000)
-      } catch (e) {
-        this.error = 'Failed to mark as read.'
+        this.showMessage('Notification acknowledged!', 'success')
+      } catch (error) {
+        console.error('Error acknowledging notification:', error)
+        this.showMessage('Failed to acknowledge notification.', 'error')
       }
     },
     
-    async markAllAsRead() {
+    async markAllAsAcknowledged() {
       try {
-        const unreadIds = this.notifications
-          .filter(n => !n.is_read)
-          .map(n => n.id)
-        
-        await Promise.all(unreadIds.map(id => 
-          api.put(`/notifications/${id}/read`)
+        const newNotifications = this.notifications.filter(n => !n.acknowledged)
+        await Promise.all(newNotifications.map(n => 
+          api.put(`/notifications/${n.id}/acknowledge`)
         ))
         
-        this.notifications.forEach(notification => {
-          notification.is_read = true
-        })
-        
+        this.notifications.forEach(n => n.acknowledged = true)
         this.applyFilters()
-        this.success = 'All notifications marked as read!'
-        setTimeout(() => this.success = '', 3000)
-      } catch (e) {
-        this.error = 'Failed to mark all as read.'
-      }
-    },
-    
-    async deleteNotification(id) {
-      if (!confirm('Are you sure you want to delete this notification?')) return
-      
-      try {
-        await api.delete(`/notifications/${id}`)
-        this.notifications = this.notifications.filter(n => n.id !== id)
-        this.applyFilters()
-        this.success = 'Notification deleted!'
-        setTimeout(() => this.success = '', 2000)
-      } catch (e) {
-        this.error = 'Failed to delete notification.'
+        this.showMessage('All notifications acknowledged!', 'success')
+      } catch (error) {
+        console.error('Error acknowledging all notifications:', error)
+        this.showMessage('Failed to acknowledge all notifications.', 'error')
       }
     },
     
     applyFilters() {
       let filtered = [...this.notifications]
       
-      // Apply read/unread filter
-      if (this.filterType === 'unread') {
-        filtered = filtered.filter(n => !n.is_read)
-      } else if (this.filterType === 'read') {
-        filtered = filtered.filter(n => n.is_read)
-      } else if (this.filterType === 'today') {
-        const today = new Date().toDateString()
-        filtered = filtered.filter(n => 
-          new Date(n.created_at).toDateString() === today
-        )
-      } else if (this.filterType === 'week') {
-        const weekAgo = new Date()
-        weekAgo.setDate(weekAgo.getDate() - 7)
-        filtered = filtered.filter(n => 
-          new Date(n.created_at) >= weekAgo
-        )
+      // Course filter
+      if (this.selectedCourse) {
+        filtered = filtered.filter(n => n.course_code === this.selectedCourse)
       }
       
-      // Apply category filter
-      if (this.categoryFilter !== 'all') {
-        filtered = filtered.filter(n => n.category === this.categoryFilter)
+      // Assessment type filter
+      if (this.selectedAssessment) {
+        filtered = filtered.filter(n => n.assessment_type === this.selectedAssessment)
+      }
+      
+      // Time period filter
+      if (this.timePeriod !== 'all') {
+        const now = new Date()
+        let cutoff
+        
+        switch (this.timePeriod) {
+          case 'today':
+            cutoff = new Date(now.toDateString())
+            break
+          case 'week':
+            cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+            break
+          case 'month':
+            cutoff = new Date(now.getFullYear(), now.getMonth(), 1)
+            break
+        }
+        
+        filtered = filtered.filter(n => new Date(n.created_at) >= cutoff)
+      }
+      
+      // Status filter
+      if (this.statusFilter !== 'all') {
+        if (this.statusFilter === 'new') {
+          filtered = filtered.filter(n => !n.acknowledged)
+        } else if (this.statusFilter === 'acknowledged') {
+          filtered = filtered.filter(n => n.acknowledged)
+        }
       }
       
       // Sort by creation date (newest first)
@@ -317,21 +407,28 @@ export default {
       this.currentPage = 1
     },
     
-    inferCategory(message) {
-      if (message.includes('student') || message.includes('enrollment')) return 'student'
-      if (message.includes('assessment') || message.includes('mark') || message.includes('exam')) return 'assessment'
-      if (message.includes('enroll')) return 'enrollment'
-      return 'system'
+    getNotificationTitle(notification) {
+      if (notification.is_final_exam) {
+        return 'Final Exam - Mark Updated'
+      }
+      return `${notification.assessment_name || 'Assessment'} - Mark Updated`
     },
     
-    generateTitle(message) {
-      if (message.includes('mark')) return 'Grade Update'
-      if (message.includes('enroll')) return 'Enrollment Change'
-      if (message.includes('assessment')) return 'Assessment Update'
-      return 'System Notification'
+    formatAssessmentType(type) {
+      const types = {
+        quiz: 'Quiz',
+        assignment: 'Assignment',
+        test: 'Test',
+        final_exam: 'Final Exam',
+        project: 'Project',
+        'lab_assignment': 'Lab Assignment',
+        'midterm_exam': 'Midterm Exam',
+        homework: 'Homework'
+      }
+      return types[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
     },
     
-    formatTime(timestamp) {
+    formatTimestamp(timestamp) {
       const date = new Date(timestamp)
       const now = new Date()
       const diff = now - date
@@ -341,24 +438,42 @@ export default {
       if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`
       if (diff < 604800000) return `${Math.floor(diff/86400000)}d ago`
       
-      return date.toLocaleDateString()
+      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     },
     
-    formatCategory(category) {
-      const categories = {
-        student: 'Student',
-        assessment: 'Assessment',
-        system: 'System',
-        enrollment: 'Enrollment'
+    getMarkDifference(oldMark, newMark) {
+      if (!oldMark && oldMark !== 0) return ''
+      const diff = newMark - oldMark
+      return diff > 0 ? `+${diff}` : `${diff}`
+    },
+    
+    getDifferenceClass(oldMark, newMark) {
+      if (!oldMark && oldMark !== 0) return ''
+      const diff = newMark - oldMark
+      return diff > 0 ? 'positive' : diff < 0 ? 'negative' : 'neutral'
+    },
+    
+    viewStudentDetails(notification) {
+      // Navigate to student details or show modal
+      this.$router.push(`/lecturer/students/${notification.student_id}`)
+    },
+    
+    getEmptyStateMessage() {
+      if (this.selectedCourse) {
+        const course = this.courses.find(c => c.code === this.selectedCourse)
+        return `No mark updates found for ${course ? course.code + ' - ' + course.name : this.selectedCourse}`
       }
-      return categories[category] || 'General'
+      if (this.selectedAssessment) return `No ${this.formatAssessmentType(this.selectedAssessment)} updates found`
+      if (this.timePeriod !== 'all') return `No updates found for ${this.timePeriod}`
+      return 'No mark updates have been recorded yet'
     },
     
-    getEmptyMessage() {
-      if (this.filterType === 'unread') return 'No unread notifications'
-      if (this.filterType === 'today') return 'No notifications today'
-      if (this.categoryFilter !== 'all') return `No ${this.categoryFilter} notifications`
-      return 'You have no notifications'
+    showMessage(text, type = 'success') {
+      this.message = text
+      this.messageType = type
+      setTimeout(() => {
+        this.message = ''
+      }, 3000)
     }
   },
   
@@ -369,255 +484,570 @@ export default {
 </script>
 
 <style scoped>
-.card {
-  background: #fff;
-  border-radius: 8px;
-  padding: 24px;
+.marks-notifications {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Page Header */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
   margin-bottom: 32px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  padding-bottom: 20px;
+  border-bottom: 2px solid #E9ECEF;
+}
+
+.header-content h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1D3557;
+  margin: 0 0 8px 0;
+}
+
+.page-subtitle {
+  color: #6C757D;
+  margin: 0;
+  font-size: 16px;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #457B9D;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #1D3557;
+  transform: translateY(-1px);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.refresh-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.refresh-icon.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Stats Section */
+.stats-section {
+  margin-bottom: 32px;
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
 }
 
-.stat-item {
-  text-align: center;
-  padding: 16px;
-  background: #F1FAEE;
-  border-radius: 8px;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: bold;
-  color: #1D3557;
-  margin-bottom: 4px;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #6c757d;
-  text-transform: uppercase;
-}
-
-.controls-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.filter-controls {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.filter-select {
-  padding: 8px 12px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 14px;
-}
-
-.action-controls {
-  display: flex;
-  gap: 8px;
-}
-
-.mark-all-btn, .refresh-btn {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
+.stat-card {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 16px;
+  transition: transform 0.2s ease;
 }
 
-.mark-all-btn {
-  background: #457B9D;
+.stat-card:hover {
+  transform: translateY(-2px);
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-icon svg {
+  width: 24px;
+  height: 24px;
   color: white;
 }
 
-.mark-all-btn:disabled {
-  background: #ccc;
-  cursor: not-allowed;
+.stat-icon.new { background: linear-gradient(135deg, #E63946, #F77F00); }
+.stat-icon.today { background: linear-gradient(135deg, #457B9D, #1D3557); }
+.stat-icon.week { background: linear-gradient(135deg, #F77F00, #FCBF49); }
+.stat-icon.total { background: linear-gradient(135deg, #6A994E, #A7C957); }
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1D3557;
+  line-height: 1;
 }
 
-.refresh-btn {
-  background: #E9ECEF;
-  color: #495057;
+.stat-label {
+  font-size: 14px;
+  color: #6C757D;
+  font-weight: 500;
 }
 
-.notifications-header {
+/* Filters Section */
+.filters-section {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  margin-bottom: 32px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-label {
+  font-weight: 600;
+  color: #1D3557;
+  font-size: 14px;
+}
+
+.filter-select {
+  padding: 10px 12px;
+  border: 2px solid #E9ECEF;
+  border-radius: 8px;
+  font-size: 14px;
+  background: white;
+  transition: border-color 0.2s ease;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #457B9D;
+}
+
+/* Notifications Section */
+.notifications-section {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  overflow: hidden;
+}
+
+.section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid #E9ECEF;
 }
 
-.showing-count {
+.section-header h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1D3557;
+  margin: 0;
+}
+
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.results-count {
   font-size: 14px;
-  color: #6c757d;
+  color: #6C757D;
 }
 
-.notification-item {
+.acknowledge-all-btn {
+  background: #6A994E;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.acknowledge-all-btn:hover {
+  background: #5A8A42;
+}
+
+/* Notification Cards */
+.notifications-list {
+  padding: 0 24px 24px;
+}
+
+.notification-card {
   display: flex;
   align-items: flex-start;
-  padding: 16px;
-  border: 1px solid #e9ecef;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid #E9ECEF;
   border-radius: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   transition: all 0.2s ease;
 }
 
-.notification-item:hover {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+.notification-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
 
-.notification-item.unread {
-  background: #f8f9ff;
+.notification-card.new {
+  background: linear-gradient(135deg, #F8F9FF 0%, #FFFFFF 100%);
   border-left: 4px solid #457B9D;
 }
 
-.notification-item.urgent {
+.notification-card.high-impact {
   border-left-color: #E63946;
 }
 
-.notification-item.system {
-  border-left-color: #F77F00;
+.notification-indicator {
+  margin-top: 4px;
 }
 
-.notification-icon {
-  margin-right: 12px;
-  padding: 8px;
-  background: #f1f3f4;
+.status-dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  flex-shrink: 0;
+  background: #CED4DA;
 }
 
-.icon {
-  width: 20px;
-  height: 20px;
-  color: #457B9D;
+.status-dot.new {
+  background: #457B9D;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .notification-content {
   flex: 1;
 }
 
-.notification-title {
-  font-weight: 600;
-  color: #1D3557;
-  margin-bottom: 4px;
+.notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
 }
 
-.notification-message {
-  color: #495057;
-  margin-bottom: 8px;
-  line-height: 1.4;
+.notification-title h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1D3557;
+  margin: 0 0 4px 0;
+}
+
+.assessment-type {
+  background: #F1FAEE;
+  color: #457B9D;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .notification-meta {
   display: flex;
-  gap: 16px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.course-code {
+  background: #1D3557;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
   font-size: 12px;
-  color: #6c757d;
+  font-weight: 600;
+}
+
+.timestamp {
+  font-size: 12px;
+  color: #6C757D;
+}
+
+.notification-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.student-info {
+  color: #495057;
+  font-size: 14px;
+}
+
+.mark-changes {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mark-change-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mark-change-item .label {
+  font-size: 12px;
+  color: #6C757D;
+  font-weight: 500;
+}
+
+.old-mark, .new-mark {
+  font-size: 18px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.old-mark {
+  background: #F8D7DA;
+  color: #721C24;
+}
+
+.new-mark {
+  background: #D4EDDA;
+  color: #155724;
+}
+
+.change-arrow {
+  font-size: 20px;
+  color: #457B9D;
+  font-weight: bold;
+}
+
+.mark-difference {
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.mark-difference.positive {
+  background: #D4EDDA;
+  color: #155724;
+}
+
+.mark-difference.negative {
+  background: #F8D7DA;
+  color: #721C24;
+}
+
+.mark-difference.neutral {
+  background: #E2E3E5;
+  color: #6C757D;
+}
+
+.change-reason {
+  font-size: 14px;
+  color: #495057;
+  font-style: italic;
 }
 
 .notification-actions {
   display: flex;
-  gap: 4px;
-  margin-left: 12px;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.read-btn, .delete-btn {
-  padding: 6px;
+.acknowledge-btn {
+  width: 36px;
+  height: 36px;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.read-btn {
-  background: #d4edda;
+  transition: all 0.2s ease;
+  background: #D4EDDA;
   color: #155724;
 }
 
-.delete-btn {
-  background: #f8d7da;
-  color: #721c24;
+.acknowledge-btn:hover {
+  background: #C3E6CB;
 }
 
+.acknowledge-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Empty State */
 .empty-state {
   text-align: center;
-  padding: 60px 20px;
-  color: #6c757d;
+  padding: 80px 20px;
+  color: #6C757D;
 }
 
 .empty-icon {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 20px;
-  opacity: 0.5;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 24px;
+  opacity: 0.4;
 }
 
+.empty-content h4 {
+  font-size: 20px;
+  margin: 0 0 12px 0;
+  color: #495057;
+}
+
+.empty-content p {
+  font-size: 16px;
+  margin: 0;
+}
+
+/* Pagination */
 .pagination {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 16px;
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid #e9ecef;
+  gap: 20px;
+  padding: 24px;
+  border-top: 1px solid #E9ECEF;
 }
 
 .pagination-btn {
-  padding: 8px 16px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 2px solid #E9ECEF;
+  border-radius: 8px;
   background: white;
+  color: #495057;
   cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  border-color: #457B9D;
+  color: #457B9D;
 }
 
 .pagination-btn:disabled {
-  background: #f8f9fa;
-  color: #6c757d;
+  background: #F8F9FA;
+  color: #ADB5BD;
   cursor: not-allowed;
 }
 
+.pagination-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
 .page-info {
-  font-size: 14px;
+  font-weight: 600;
   color: #495057;
 }
 
-.floating-message {
+/* Toast Messages */
+.toast-message {
   position: fixed;
   top: 20px;
   right: 20px;
-  padding: 12px 20px;
-  border-radius: 4px;
-  z-index: 1000;
+  padding: 16px 24px;
+  border-radius: 8px;
   font-weight: 500;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  animation: slideInRight 0.3s ease;
 }
 
-.floating-message.success {
-  background: #d4edda;
+.toast-message.success {
+  background: #D4EDDA;
   color: #155724;
-  border: 1px solid #c3e6cb;
+  border: 1px solid #C3E6CB;
 }
 
-.floating-message.error {
-  background: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
+.toast-message.error {
+  background: #F8D7DA;
+  color: #721C24;
+  border: 1px solid #F5C6CB;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .filter-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .notification-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .mark-changes {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .change-arrow {
+    transform: rotate(90deg);
+  }
 }
 </style>

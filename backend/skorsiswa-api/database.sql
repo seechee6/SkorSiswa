@@ -1,16 +1,19 @@
+-- User roles (Admin, Lecturer, Student, Advisor)
 CREATE TABLE roles (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name ENUM('admin', 'lecturer', 'student', 'advisor') NOT NULL UNIQUE
+    name VARCHAR(50) NOT NULL UNIQUE
 );
 
+-- Users table with correct column names
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    matric_no VARCHAR(20) UNIQUE,         -- For students
-    staff_id VARCHAR(20) UNIQUE,          -- For staff (lecturers, advisors)
     full_name VARCHAR(100) NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
+    matric_no VARCHAR(20) UNIQUE,
+    staff_id VARCHAR(20) UNIQUE,
+    email VARCHAR(100) UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     role_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (role_id) REFERENCES roles(id)
 );
 
@@ -19,7 +22,7 @@ CREATE TABLE courses (
     code VARCHAR(20) NOT NULL UNIQUE,
     name VARCHAR(100) NOT NULL,
     semester VARCHAR(10),
-    year VARCHAR(10),  -- Changed from INT to VARCHAR(10) to support "2024/2025" format
+    year VARCHAR(10),
     lecturer_id INT NOT NULL,
     FOREIGN KEY (lecturer_id) REFERENCES users(id)
 );
@@ -28,6 +31,7 @@ CREATE TABLE enrollments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     student_id INT NOT NULL,
     course_id INT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (student_id, course_id),
     FOREIGN KEY (student_id) REFERENCES users(id),
     FOREIGN KEY (course_id) REFERENCES courses(id)
@@ -77,10 +81,29 @@ CREATE TABLE notifications (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+-- New table for detailed mark update notifications
+CREATE TABLE mark_update_notifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    lecturer_id INT NOT NULL,
+    student_id INT NOT NULL,
+    enrollment_id INT NOT NULL,
+    assessment_id INT NULL,
+    is_final_exam BOOLEAN DEFAULT FALSE,
+    old_mark DECIMAL(5,2) NULL,
+    new_mark DECIMAL(5,2) NOT NULL,
+    change_reason TEXT,
+    acknowledged BOOLEAN DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (lecturer_id) REFERENCES users(id),
+    FOREIGN KEY (student_id) REFERENCES users(id),
+    FOREIGN KEY (enrollment_id) REFERENCES enrollments(id),
+    FOREIGN KEY (assessment_id) REFERENCES assessments(id)
+);
+
 CREATE TABLE advisors (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    advisor_id INT NOT NULL,  -- user.id of advisor
-    student_id INT NOT NULL,  -- user.id of student
+    advisor_id INT NOT NULL,
+    student_id INT NOT NULL,
     UNIQUE (advisor_id, student_id),
     FOREIGN KEY (advisor_id) REFERENCES users(id),
     FOREIGN KEY (student_id) REFERENCES users(id)
@@ -90,6 +113,7 @@ CREATE TABLE advisor_notes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     advisor_id INT NOT NULL,
     student_id INT NOT NULL,
+    course_id INT NOT NULL,
     note TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (advisor_id) REFERENCES users(id),
@@ -120,7 +144,7 @@ INSERT INTO roles (name) VALUES
 ('student'), 
 ('advisor');
 
--- Insert sample users (passwords are hashed for 'password123')
+-- Insert sample users (password is 'password123' for all users)
 INSERT INTO users (matric_no, staff_id, full_name, email, password_hash, role_id) VALUES
 (NULL, 'ADMIN001', 'Admin User', 'admin@university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 1),
 (NULL, 'LEC001', 'Dr. John Smith', 'john.smith@university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 2),
@@ -217,13 +241,13 @@ INSERT INTO notifications (user_id, message, is_read) VALUES
 (6, 'Welcome to the SkorSiswa system!', TRUE);
 
 -- Insert sample advisor notes
-INSERT INTO advisor_notes (advisor_id, student_id, note) VALUES
-(7, 4, 'Alice shows excellent academic performance. Discussed career paths in computer science.'),
-(7, 4, 'Alice expressed interest in AI/ML. Recommended advanced courses for next semester.'),
-(7, 5, 'Bob needs to improve time management. Suggested study techniques and resources.'),
-(7, 5, 'Follow-up meeting with Bob - showing improvement in recent assignments.'),
-(7, 6, 'Charlie is doing well overall. Discussed internship opportunities.'),
-(7, 6, 'Charlie completed summer internship application. Provided recommendation letter.');
+INSERT INTO advisor_notes (advisor_id, student_id, course_id, note) VALUES
+(7, 4, 1, 'Alice shows excellent academic performance. Discussed career paths in computer science.'),
+(7, 4, 1, 'Alice expressed interest in AI/ML. Recommended advanced courses for next semester.'),
+(7, 5, 1, 'Bob needs to improve time management. Suggested study techniques and resources.'),
+(7, 5, 1, 'Follow-up meeting with Bob - showing improvement in recent assignments.'),
+(7, 6, 1, 'Charlie is doing well overall. Discussed internship opportunities.'),
+(7, 6, 1, 'Charlie completed summer internship application. Provided recommendation letter.');
 
 -- Insert sample remark requests
 INSERT INTO remark_requests (enrollment_id, reason, status) VALUES
@@ -236,36 +260,6 @@ INSERT INTO remark_requests (enrollment_id, reason, status) VALUES
 -- Insert sample system logs
 INSERT INTO system_logs (user_id, action) VALUES
 (1, 'Admin logged into the system'),
-(1, 'Created new user: Dr. John Smith'),
-(1, 'Updated user role for student STU001'),
-(1, 'Reset password for user ID: 5'),
 (2, 'Lecturer logged in'),
-(2, 'Created new course: CS101'),
-(2, 'Added assessment: Assignment 1 for CS101'),
-(2, 'Updated marks for student Alice Brown'),
-(2, 'Exported marks for course CS101'),
-(3, 'Lecturer logged in'),
-(3, 'Updated course information for MATH201'),
-(3, 'Added final exam marks for MATH201'),
 (4, 'Student logged in'),
-(4, 'Viewed course marks for CS101'),
-(4, 'Submitted remark request for CS101'),
-(5, 'Student logged in'),
-(5, 'Used what-if simulator for grade calculation'),
-(6, 'Student logged in'),
-(6, 'Viewed class rankings for CS101'),
-(7, 'Advisor logged in'),
-(7, 'Added meeting note for student Alice Brown'),
-(7, 'Generated advisee report'),
-(1, 'Admin exported system activity logs'),
-(2, 'Bulk uploaded marks via CSV for CS102'),
-(4, 'Student viewed performance analytics'),
-(5, 'Student compared marks with coursemates'),
-(7, 'Advisor identified at-risk students'),
-(3, 'Lecturer added feedback for multiple students'),
-(1, 'Admin updated system settings'),
-(2, 'Lecturer created new assessment for CS101'),
-(6, 'Student requested grade rechecking'),
-(7, 'Advisor scheduled meeting with student'),
-(4, 'Student viewed notification about new feedback'),
-(5, 'Student marked notifications as read');
+(7, 'Advisor logged in');

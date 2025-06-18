@@ -1,280 +1,257 @@
 <template>
-  <div>
-    <h3>Bulk Upload CSV</h3>
-    
-    <!-- Course Selection -->
-    <div class="card course-selection">
-      <h4>Select Course</h4>
-      <select v-model="selectedCourseId" @change="fetchAssessments" class="course-select">
-        <option value="">Select a course...</option>
-        <option v-for="course in lecturerCourses" :key="course.id" :value="course.id">
-          {{ course.code }} - {{ course.name }}
-        </option>
-      </select>
-    </div>
-
-    <!-- Upload Guidelines -->
-    <div class="card guidelines" v-if="selectedCourseId">
-      <h4>CSV Format Guidelines</h4>
-      <div class="guideline-content">
-        <div class="format-info">
-          <h5>Required CSV Format:</h5>
-          <div class="format-example">
-            <code>matric_no,assessment_name,mark</code><br>
-            <code>STU001,Quiz 1,85.5</code><br>
-            <code>STU002,Quiz 1,92.0</code><br>
-            <code>STU001,Assignment 1,78.0</code>
-          </div>
-        </div>
-        
-        <div class="format-rules">
-          <h5>Important Rules:</h5>
-          <ul>
-            <li>First row must contain headers: <strong>matric_no,assessment_name,mark</strong></li>
-            <li>Assessment names must match existing components exactly</li>
-            <li>Marks should be numeric values (decimals allowed)</li>
-            <li>Students must be enrolled in the selected course</li>
-            <li>Maximum file size: 5MB</li>
-          </ul>
-        </div>
-
-        <div class="available-assessments" v-if="assessments.length > 0">
-          <h5>Available Assessment Components:</h5>
-          <div class="assessment-tags">
-            <span 
-              v-for="assessment in assessments" 
-              :key="assessment.id"
-              class="assessment-tag"
-            >
-              {{ assessment.name }}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- File Upload -->
-    <div class="card upload-section" v-if="selectedCourseId">
-      <h4>Upload CSV File</h4>
-      
-      <div class="upload-area" :class="{ 'drag-over': isDragOver }">
-        <input 
-          ref="fileInput"
-          type="file" 
-          accept=".csv"
-          @change="handleFileSelect"
-          class="file-input"
-        />
-        
-        <div 
-          class="drop-zone"
-          @dragover.prevent="isDragOver = true"
-          @dragleave.prevent="isDragOver = false"
-          @drop.prevent="handleFileDrop"
-          @click="$refs.fileInput.click()"
-        >
-          <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+  <!-- Modal Overlay -->
+  <div v-if="isVisible" class="modal-overlay" @click.self="closeModal">
+    <div class="modal-content upload-modal">
+      <div class="modal-header">
+        <h4>Bulk Upload CSV - {{ courseInfo?.code }}</h4>
+        <button @click="closeModal" class="close-btn">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
           </svg>
-          <div class="upload-text">
-            <p><strong>Click to browse</strong> or drag and drop your CSV file here</p>
-            <p class="upload-hint">Supported format: .csv (max 5MB)</p>
+        </button>
+      </div>
+
+      <!-- Upload Guidelines -->
+      <div class="guidelines-section">
+        <h5>CSV Format Guidelines</h5>
+        <div class="guideline-content">
+          <div class="format-info">
+            <h6>Required CSV Format:</h6>
+            <div class="format-example">
+              <code>matric_no,assessment_name,mark</code><br>
+              <code>STU001,Quiz 1,85.5</code><br>
+              <code>STU002,Quiz 1,92.0</code><br>
+              <code>STU001,Assignment 1,78.0</code>
+            </div>
+          </div>
+          
+          <div class="format-rules">
+            <h6>Important Rules:</h6>
+            <ul>
+              <li>First row must contain headers: <strong>matric_no,assessment_name,mark</strong></li>
+              <li>Assessment names must match existing components exactly</li>
+              <li>Marks should be numeric values (decimals allowed)</li>
+              <li>Students must be enrolled in the selected course</li>
+              <li>Maximum file size: 5MB</li>
+            </ul>
+          </div>
+
+          <div class="available-assessments" v-if="assessments.length > 0">
+            <h6>Available Assessment Components:</h6>
+            <div class="assessment-tags">
+              <span 
+                v-for="assessment in assessments" 
+                :key="assessment.id"
+                class="assessment-tag"
+              >
+                {{ assessment.name }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Selected File Info -->
-      <div v-if="selectedFile" class="file-info">
-        <div class="file-details">
-          <svg class="file-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-          </svg>
-          <div class="file-meta">
-            <div class="file-name">{{ selectedFile.name }}</div>
-            <div class="file-size">{{ formatFileSize(selectedFile.size) }}</div>
-          </div>
-          <button @click="removeFile" class="remove-file-btn">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+      <!-- File Upload -->
+      <div class="upload-section">
+        <h5>Upload CSV File</h5>
+        
+        <div class="upload-area" :class="{ 'drag-over': isDragOver }">
+          <input 
+            ref="fileInput"
+            type="file" 
+            accept=".csv"
+            @change="handleFileSelect"
+            class="file-input"
+          />
+          
+          <div 
+            class="drop-zone"
+            @dragover.prevent="isDragOver = true"
+            @dragleave.prevent="isDragOver = false"
+            @drop.prevent="handleFileDrop"
+            @click="$refs.fileInput.click()"
+          >
+            <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
             </svg>
-          </button>
+            <div class="upload-text">
+              <p><strong>Click to browse</strong> or drag and drop your CSV file here</p>
+              <p class="upload-hint">Supported format: .csv (max 5MB)</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Selected File Info -->
+        <div v-if="selectedFile" class="file-info">
+          <div class="file-details">
+            <svg class="file-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            <div class="file-meta">
+              <div class="file-name">{{ selectedFile.name }}</div>
+              <div class="file-size">{{ formatFileSize(selectedFile.size) }}</div>
+            </div>
+            <button @click="removeFile" class="remove-file-btn">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="upload-actions">
+            <button 
+              @click="previewFile" 
+              class="preview-btn"
+              :disabled="isProcessing"
+            >
+              Preview Data
+            </button>
+            <button 
+              @click="uploadFile" 
+              class="upload-btn"
+              :disabled="isProcessing || !isValidFile"
+            >
+              {{ isProcessing ? 'Processing...' : 'Upload Marks' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview Data -->
+      <div class="preview-section" v-if="previewData.length > 0">
+        <h5>Data Preview</h5>
+        <div class="preview-info">
+          <span class="preview-count">{{ previewData.length }} records found</span>
+          <span class="preview-note">Showing first 10 rows</span>
         </div>
         
-        <div class="upload-actions">
-          <button 
-            @click="previewFile" 
-            class="preview-btn"
-            :disabled="isProcessing"
-          >
-            Preview Data
-          </button>
-          <button 
-            @click="uploadFile" 
-            class="upload-btn"
-            :disabled="isProcessing || !isValidFile"
-          >
-            {{ isProcessing ? 'Processing...' : 'Upload Marks' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Preview Data -->
-    <div class="card preview-section" v-if="previewData.length > 0">
-      <h4>Data Preview</h4>
-      <div class="preview-info">
-        <span class="preview-count">{{ previewData.length }} records found</span>
-        <span class="preview-note">Showing first 10 rows</span>
-      </div>
-      
-      <div class="preview-table-wrapper">
-        <table class="preview-table">
-          <thead>
-            <tr>
-              <th>Matric No</th>
-              <th>Assessment</th>
-              <th>Mark</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(row, index) in previewData.slice(0, 10)" :key="index">
-              <td>{{ row.matric_no }}</td>
-              <td>{{ row.assessment_name }}</td>
-              <td>{{ row.mark }}</td>
-              <td>
-                <span 
-                  class="status-badge"
-                  :class="getPreviewStatusClass(row.status)"
-                >
-                  {{ row.status }}
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Validation Summary -->
-      <div class="validation-summary" v-if="validationSummary">
-        <div class="summary-stats">
-          <div class="stat-item valid">
-            <span class="stat-number">{{ validationSummary.valid }}</span>
-            <span class="stat-label">Valid</span>
-          </div>
-          <div class="stat-item invalid">
-            <span class="stat-number">{{ validationSummary.invalid }}</span>
-            <span class="stat-label">Invalid</span>
-          </div>
-          <div class="stat-item warning">
-            <span class="stat-number">{{ validationSummary.warnings }}</span>
-            <span class="stat-label">Warnings</span>
-          </div>
-        </div>
-        
-        <div v-if="validationErrors.length > 0" class="validation-errors">
-          <h5>Validation Issues:</h5>
-          <ul class="error-list">
-            <li v-for="error in validationErrors.slice(0, 5)" :key="error.row">
-              <strong>Row {{ error.row }}:</strong> {{ error.message }}
-            </li>
-          </ul>
-          <p v-if="validationErrors.length > 5" class="more-errors">
-            And {{ validationErrors.length - 5 }} more issues...
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Upload Progress -->
-    <div class="card progress-section" v-if="uploadProgress.show">
-      <h4>Upload Progress</h4>
-      <div class="progress-bar">
-        <div 
-          class="progress-fill" 
-          :style="{ width: uploadProgress.percentage + '%' }"
-        ></div>
-      </div>
-      <div class="progress-info">
-        <span>{{ uploadProgress.current }} / {{ uploadProgress.total }} records processed</span>
-        <span>{{ uploadProgress.percentage }}%</span>
-      </div>
-      <p class="progress-status">{{ uploadProgress.status }}</p>
-    </div>
-
-    <!-- Upload Results -->
-    <div class="card results-section" v-if="uploadResults">
-      <h4>Upload Results</h4>
-      <div class="results-summary">
-        <div class="result-stats">
-          <div class="stat-item success">
-            <span class="stat-number">{{ uploadResults.successful }}</span>
-            <span class="stat-label">Successful</span>
-          </div>
-          <div class="stat-item failed">
-            <span class="stat-number">{{ uploadResults.failed }}</span>
-            <span class="stat-label">Failed</span>
-          </div>
-          <div class="stat-item updated">
-            <span class="stat-number">{{ uploadResults.updated }}</span>
-            <span class="stat-label">Updated</span>
-          </div>
-        </div>
-        
-        <div class="results-actions">
-          <button @click="downloadErrorReport" v-if="uploadResults.errors.length > 0">
-            Download Error Report
-          </button>
-          <button @click="resetUpload" class="secondary">
-            Upload Another File
-          </button>
-        </div>
-      </div>
-
-      <div v-if="uploadResults.errors.length > 0" class="upload-errors">
-        <h5>Failed Records:</h5>
-        <div class="error-table-wrapper">
-          <table class="error-table">
+        <div class="preview-table-wrapper">
+          <table class="preview-table">
             <thead>
               <tr>
-                <th>Row</th>
                 <th>Matric No</th>
                 <th>Assessment</th>
                 <th>Mark</th>
-                <th>Error</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="error in uploadResults.errors.slice(0, 10)" :key="error.row">
-                <td>{{ error.row }}</td>
-                <td>{{ error.matric_no }}</td>
-                <td>{{ error.assessment_name }}</td>
-                <td>{{ error.mark }}</td>
-                <td class="error-message">{{ error.error }}</td>
+              <tr v-for="(row, index) in previewData.slice(0, 10)" :key="index">
+                <td>{{ row.matric_no }}</td>
+                <td>{{ row.assessment_name }}</td>
+                <td>{{ row.mark }}</td>
+                <td>
+                  <span 
+                    class="status-badge"
+                    :class="getPreviewStatusClass(row.status)"
+                  >
+                    {{ row.status }}
+                  </span>
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
-        <p v-if="uploadResults.errors.length > 10" class="more-errors">
-          Showing first 10 errors. Download full report for complete list.
-        </p>
-      </div>
-    </div>
 
-    <!-- Course Not Selected -->
-    <div class="card empty-state" v-else>
-      <div class="empty-content">
-        <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-        </svg>
-        <h4>Select a Course</h4>
-        <p>Choose a course to upload marks via CSV.</p>
+        <!-- Validation Summary -->
+        <div class="validation-summary" v-if="validationSummary">
+          <div class="summary-stats">
+            <div class="stat-item valid">
+              <span class="stat-number">{{ validationSummary.valid }}</span>
+              <span class="stat-label">Valid</span>
+            </div>
+            <div class="stat-item invalid">
+              <span class="stat-number">{{ validationSummary.invalid }}</span>
+              <span class="stat-label">Invalid</span>
+            </div>
+          </div>
+          
+          <div v-if="validationErrors.length > 0" class="validation-errors">
+            <h6>Validation Issues:</h6>
+            <ul class="error-list">
+              <li v-for="error in validationErrors.slice(0, 5)" :key="error.row">
+                <strong>Row {{ error.row }}:</strong> {{ error.message }}
+              </li>
+            </ul>
+            <p v-if="validationErrors.length > 5" class="more-errors">
+              And {{ validationErrors.length - 5 }} more issues...
+            </p>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <!-- Error Messages -->
-    <div v-if="error" class="floating-message error">
-      {{ error }}
+      <!-- Upload Progress -->
+      <div class="progress-section" v-if="uploadProgress.show">
+        <h5>Upload Progress</h5>
+        <div class="progress-bar">
+          <div 
+            class="progress-fill" 
+            :style="{ width: uploadProgress.percentage + '%' }"
+          ></div>
+        </div>
+        <div class="progress-info">
+          <span>{{ uploadProgress.current }} / {{ uploadProgress.total }} records processed</span>
+          <span>{{ uploadProgress.percentage }}%</span>
+        </div>
+        <p class="progress-status">{{ uploadProgress.status }}</p>
+      </div>
+
+      <!-- Upload Results -->
+      <div class="results-section" v-if="uploadResults">
+        <h5>Upload Results</h5>
+        <div class="results-summary">
+          <div class="result-stats">
+            <div class="stat-item success">
+              <span class="stat-number">{{ uploadResults.successful }}</span>
+              <span class="stat-label">Successful</span>
+            </div>
+            <div class="stat-item failed">
+              <span class="stat-number">{{ uploadResults.failed }}</span>
+              <span class="stat-label">Failed</span>
+            </div>
+          </div>
+          
+          <div class="results-actions">
+            <button @click="downloadErrorReport" v-if="uploadResults.errors.length > 0" class="secondary-btn">
+              Download Error Report
+            </button>
+            <button @click="resetUpload" class="primary-btn">
+              Upload Another File
+            </button>
+          </div>
+        </div>
+
+        <div v-if="uploadResults.errors.length > 0" class="upload-errors">
+          <h6>Failed Records (showing first 5):</h6>
+          <div class="error-table-wrapper">
+            <table class="error-table">
+              <thead>
+                <tr>
+                  <th>Row</th>
+                  <th>Matric No</th>
+                  <th>Assessment</th>
+                  <th>Mark</th>
+                  <th>Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="error in uploadResults.errors.slice(0, 5)" :key="error.row">
+                  <td>{{ error.row }}</td>
+                  <td>{{ error.matric_no }}</td>
+                  <td>{{ error.assessment_name }}</td>
+                  <td>{{ error.mark }}</td>
+                  <td class="error-message">{{ error.error }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error Messages -->
+      <div v-if="error" class="error-message">
+        {{ error }}
+      </div>
     </div>
   </div>
 </template>
@@ -283,12 +260,20 @@
 import api from '../../api'
 
 export default {
-  name: 'BulkUploadCSV',
+  name: 'BulkUploadCSVModal',
+  props: {
+    isVisible: {
+      type: Boolean,
+      default: false
+    },
+    courseInfo: {
+      type: Object,
+      default: null
+    }
+  },
   data() {
     return {
-      lecturerCourses: [],
       assessments: [],
-      selectedCourseId: '',
       selectedFile: null,
       previewData: [],
       validationSummary: null,
@@ -311,29 +296,46 @@ export default {
       return this.selectedFile && this.selectedFile.type === 'text/csv' && this.selectedFile.size <= 5 * 1024 * 1024
     }
   },
+  watch: {
+    isVisible(newVal) {
+      if (newVal && this.courseInfo) {
+        this.fetchAssessments()
+      } else {
+        this.resetData()
+      }
+    }
+  },
   methods: {
-    async fetchLecturerCourses() {
-      try {
-        const user = JSON.parse(localStorage.getItem('user'))
-        const res = await api.get('/courses')
-        this.lecturerCourses = res.data.filter(c => c.lecturer_id === user.id)
-      } catch (e) {
-        this.error = 'Failed to load courses.'
+    closeModal() {
+      this.$emit('close')
+    },
+    
+    resetData() {
+      this.selectedFile = null
+      this.previewData = []
+      this.validationSummary = null
+      this.validationErrors = []
+      this.uploadResults = null
+      this.error = ''
+      if (this.$refs.fileInput) {
+        this.$refs.fileInput.value = ''
       }
     },
+
     async fetchAssessments() {
-      if (!this.selectedCourseId) {
+      if (!this.courseInfo) {
         this.assessments = []
         return
       }
       
       try {
-        const res = await api.get(`/courses/${this.selectedCourseId}/assessments`)
+        const res = await api.get(`/courses/${this.courseInfo.id}/assessments`)
         this.assessments = res.data
       } catch (e) {
         this.error = 'Failed to load assessments.'
       }
     },
+
     handleFileSelect(event) {
       const file = event.target.files[0]
       if (file) {
@@ -341,6 +343,7 @@ export default {
         this.resetPreview()
       }
     },
+
     handleFileDrop(event) {
       this.isDragOver = false
       const file = event.dataTransfer.files[0]
@@ -351,17 +354,20 @@ export default {
         this.error = 'Please select a valid CSV file.'
       }
     },
+
     removeFile() {
       this.selectedFile = null
       this.resetPreview()
       this.$refs.fileInput.value = ''
     },
+
     resetPreview() {
       this.previewData = []
       this.validationSummary = null
       this.validationErrors = []
       this.uploadResults = null
     },
+
     async previewFile() {
       if (!this.selectedFile) return
       
@@ -371,17 +377,16 @@ export default {
       try {
         const csvText = await this.readFileAsText(this.selectedFile)
         const parsedData = this.parseCSV(csvText)
-        
         const validatedData = await this.validateData(parsedData)
         this.previewData = validatedData
         this.generateValidationSummary()
-        
       } catch (e) {
         this.error = e.message || 'Failed to preview file.'
       } finally {
         this.isProcessing = false
       }
     },
+
     async uploadFile() {
       if (!this.selectedFile || this.previewData.length === 0) return
       
@@ -395,7 +400,6 @@ export default {
       const results = {
         successful: 0,
         failed: 0,
-        updated: 0,
         errors: []
       }
       
@@ -411,7 +415,7 @@ export default {
           
           try {
             // Find student enrollment
-            const enrollmentsRes = await api.get(`/courses/${this.selectedCourseId}/enrollments`)
+            const enrollmentsRes = await api.get(`/courses/${this.courseInfo.id}/enrollments`)
             const enrollment = enrollmentsRes.data.find(e => e.matric_no === record.matric_no)
             
             if (!enrollment) {
@@ -450,6 +454,9 @@ export default {
         this.uploadProgress.status = 'Upload completed!'
         this.uploadResults = results
         
+        // Emit success event to parent
+        this.$emit('upload-complete', results)
+        
       } catch (e) {
         this.error = 'Upload failed: ' + e.message
       } finally {
@@ -459,6 +466,7 @@ export default {
         }, 2000)
       }
     },
+
     readFileAsText(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader()
@@ -467,6 +475,7 @@ export default {
         reader.readAsText(file)
       })
     },
+
     parseCSV(csvText) {
       const lines = csvText.trim().split('\n')
       if (lines.length < 2) {
@@ -495,11 +504,12 @@ export default {
       
       return data
     },
+
     async validateData(data) {
       this.validationErrors = []
       
       // Get enrolled students
-      const enrollmentsRes = await api.get(`/courses/${this.selectedCourseId}/enrollments`)
+      const enrollmentsRes = await api.get(`/courses/${this.courseInfo.id}/enrollments`)
       const enrolledMatricNos = enrollmentsRes.data.map(e => e.matric_no)
       const assessmentNames = this.assessments.map(a => a.name)
       
@@ -537,23 +547,24 @@ export default {
         }
       })
     },
+
     generateValidationSummary() {
       const valid = this.previewData.filter(row => row.status === 'Valid').length
       const invalid = this.previewData.filter(row => row.status === 'Invalid').length
       
       this.validationSummary = {
         valid,
-        invalid,
-        warnings: 0
+        invalid
       }
     },
+
     getPreviewStatusClass(status) {
       return {
         'status-valid': status === 'Valid',
-        'status-invalid': status === 'Invalid',
-        'status-warning': status === 'Warning'
+        'status-invalid': status === 'Invalid'
       }
     },
+
     formatFileSize(bytes) {
       if (bytes === 0) return '0 Bytes'
       const k = 1024
@@ -561,6 +572,7 @@ export default {
       const i = Math.floor(Math.log(bytes) / Math.log(k))
       return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
     },
+
     downloadErrorReport() {
       if (!this.uploadResults || this.uploadResults.errors.length === 0) return
       
@@ -577,38 +589,96 @@ export default {
       a.click()
       window.URL.revokeObjectURL(url)
     },
+
     resetUpload() {
       this.selectedFile = null
       this.resetPreview()
       this.$refs.fileInput.value = ''
     }
-  },
-  mounted() {
-    this.fetchLecturerCourses()
   }
 }
 </script>
 
 <style scoped>
-.card {
-  background: #fff;
-  border-radius: 8px;
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background: white;
+  border-radius: 16px;
   padding: 24px;
-  margin-bottom: 32px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 
-.course-select {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 14px;
+.upload-modal {
+  width: 800px;
 }
 
-.guidelines {
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f3f4;
+}
+
+.modal-header h4 {
+  margin: 0;
+  color: #1D3557;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+  color: #6c757d;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background: #f8f9fa;
+  color: #495057;
+}
+
+.close-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Guidelines Section */
+.guidelines-section {
   background: linear-gradient(135deg, #FFF3CD 0%, #F1FAEE 100%);
   border-left: 4px solid #FFC107;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.guidelines-section h5 {
+  margin: 0 0 16px 0;
+  color: #1D3557;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .guideline-content {
@@ -646,6 +716,18 @@ export default {
   border-radius: 12px;
   font-size: 12px;
   font-weight: 500;
+}
+
+/* Upload Section */
+.upload-section {
+  margin-bottom: 24px;
+}
+
+.upload-section h5 {
+  margin: 0 0 16px 0;
+  color: #1D3557;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .upload-area {
@@ -767,6 +849,18 @@ export default {
   cursor: not-allowed;
 }
 
+/* Other sections */
+.preview-section, .progress-section, .results-section {
+  margin-bottom: 24px;
+}
+
+.preview-section h5, .progress-section h5, .results-section h5 {
+  margin: 0 0 16px 0;
+  color: #1D3557;
+  font-size: 16px;
+  font-weight: 600;
+}
+
 .preview-info {
   display: flex;
   justify-content: space-between;
@@ -825,11 +919,6 @@ export default {
   color: #991B1B;
 }
 
-.status-warning {
-  background: #FEF3C7;
-  color: #92400E;
-}
-
 .validation-summary {
   background: #F8F9FA;
   border-radius: 8px;
@@ -855,7 +944,6 @@ export default {
 
 .stat-item.valid .stat-number { color: #065F46; }
 .stat-item.invalid .stat-number { color: #991B1B; }
-.stat-item.warning .stat-number { color: #92400E; }
 
 .stat-label {
   font-size: 12px;
@@ -904,14 +992,13 @@ export default {
 
 .stat-item.success .stat-number { color: #065F46; }
 .stat-item.failed .stat-number { color: #991B1B; }
-.stat-item.updated .stat-number { color: #1E40AF; }
 
 .results-actions {
   display: flex;
   gap: 12px;
 }
 
-.results-actions button {
+.primary-btn, .secondary-btn {
   padding: 8px 16px;
   border: none;
   border-radius: 4px;
@@ -919,12 +1006,12 @@ export default {
   cursor: pointer;
 }
 
-.results-actions button:not(.secondary) {
+.primary-btn {
   background: #457B9D;
   color: white;
 }
 
-.results-actions button.secondary {
+.secondary-btn {
   background: #6c757d;
   color: white;
 }
@@ -957,49 +1044,13 @@ export default {
   word-wrap: break-word;
 }
 
-.empty-state {
-  text-align: center;
-  padding: 48px 24px;
-}
-
-.empty-content {
-  max-width: 300px;
-  margin: 0 auto;
-}
-
-.empty-icon {
-  width: 64px;
-  height: 64px;
-  color: #ccc;
-  margin: 0 auto 16px;
-}
-
-.floating-message {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  padding: 12px 20px;
-  border-radius: 4px;
-  font-weight: 500;
-  z-index: 1001;
-  animation: slideIn 0.3s ease;
-}
-
-.floating-message.error {
+.error-message {
   background: #FEE2E2;
   color: #991B1B;
+  padding: 12px;
+  border-radius: 4px;
+  margin-top: 16px;
   border: 1px solid #FECACA;
-}
-
-@keyframes slideIn {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
 }
 
 @media (max-width: 768px) {
@@ -1014,6 +1065,10 @@ export default {
   
   .upload-actions {
     flex-direction: column;
+  }
+  
+  .upload-modal {
+    width: auto;
   }
 }
 </style>
