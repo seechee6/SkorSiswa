@@ -146,20 +146,20 @@ INSERT INTO roles (name) VALUES
 
 -- Insert sample users (password is 'password123' for all users)
 INSERT INTO users (matric_no, staff_id, full_name, email, password_hash, role_id) VALUES
-(NULL, 'ADMIN001', 'Admin User', 'admin@university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 1),
-(NULL, 'LEC001', 'Dr. John Smith', 'john.smith@university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 2),
-(NULL, 'LEC002', 'Dr. Sarah Johnson', 'sarah.johnson@university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 2),
-('STU001', NULL, 'Alice Brown', 'alice.brown@student.university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 3),
-('STU002', NULL, 'Bob Wilson', 'bob.wilson@student.university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 3),
-('STU003', NULL, 'Charlie Davis', 'charlie.davis@student.university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 3),
-('STU004', NULL, 'Diana Evans', 'diana.evans@student.university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 3),
-('STU005', NULL, 'Edward Foster', 'edward.foster@student.university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 3),
-('STU006', NULL, 'Fiona Grant', 'fiona.grant@student.university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 3),
-('STU007', NULL, 'George Harris', 'george.harris@student.university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 3),
-('STU008', NULL, 'Hannah Irving', 'hannah.irving@student.university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 3),
-('STU009', NULL, 'Ian Jackson', 'ian.jackson@student.university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 3),
-('STU010', NULL, 'Julia King', 'julia.king@student.university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 3),
-(NULL, 'ADV001', 'Prof. Mary Taylor', 'mary.taylor@university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 4);
+(NULL, 'ADMIN001', 'Admin User', 'admin@university.edu', '$2y$10$9r3tl78wN6hYPVY03rtmmOmsIs965dxO4r1Q78.kRQIGn8dEOnAqW', 1),
+(NULL, 'LEC001', 'Dr. John Smith', 'john.smith@university.edu', '$2y$10$GZwTEixkt4X.NcYVkxQCVOei37DX.oza/KpwKpKrYF/6bkAJP9HF2', 2),
+(NULL, 'LEC002', 'Dr. Sarah Johnson', 'sarah.johnson@university.edu', '$2y$10$GZwTEixkt4X.NcYVkxQCVOei37DX.oza/KpwKpKrYF/6bkAJP9HF2', 2),
+('STU001', NULL, 'Alice Brown', 'alice.brown@student.university.edu', '$2y$10$N5rH/JKrqvN2SENF22myTOSTT0c2XYHYzgv4EyRM81e80mf7cg8BO', 3),
+('STU002', NULL, 'Bob Wilson', 'bob.wilson@student.university.edu', '$2y$10$N5rH/JKrqvN2SENF22myTOSTT0c2XYHYzgv4EyRM81e80mf7cg8BO', 3),
+('STU003', NULL, 'Charlie Davis', 'charlie.davis@student.university.edu', '$2y$10$N5rH/JKrqvN2SENF22myTOSTT0c2XYHYzgv4EyRM81e80mf7cg8BO', 3),
+('STU004', NULL, 'Diana Evans', 'diana.evans@student.university.edu', '$2y$10$N5rH/JKrqvN2SENF22myTOSTT0c2XYHYzgv4EyRM81e80mf7cg8BO', 3),
+('STU005', NULL, 'Edward Foster', 'edward.foster@student.university.edu', '$2y$10$N5rH/JKrqvN2SENF22myTOSTT0c2XYHYzgv4EyRM81e80mf7cg8BO', 3),
+('STU006', NULL, 'Fiona Grant', 'fiona.grant@student.university.edu', '$2y$10$N5rH/JKrqvN2SENF22myTOSTT0c2XYHYzgv4EyRM81e80mf7cg8BO', 3),
+('STU007', NULL, 'George Harris', 'george.harris@student.university.edu', '$2y$10$N5rH/JKrqvN2SENF22myTOSTT0c2XYHYzgv4EyRM81e80mf7cg8BO', 3),
+('STU008', NULL, 'Hannah Irving', 'hannah.irving@student.university.edu', '$2y$10$N5rH/JKrqvN2SENF22myTOSTT0c2XYHYzgv4EyRM81e80mf7cg8BO', 3),
+('STU009', NULL, 'Ian Jackson', 'ian.jackson@student.university.edu', '$2y$10$N5rH/JKrqvN2SENF22myTOSTT0c2XYHYzgv4EyRM81e80mf7cg8BO', 3),
+('STU010', NULL, 'Julia King', 'julia.king@student.university.edu', '$2y$10$N5rH/JKrqvN2SENF22myTOSTT0c2XYHYzgv4EyRM81e80mf7cg8BO', 3),
+(NULL, 'ADV001', 'Prof. Mary Taylor', 'mary.taylor@university.edu', '$2y$10$3x0HjENbRTpgnEq8lkmxA.Iu.TO6beQd.f.OZHBmOIwV1aWIrAMoS', 4);
 
 -- Insert sample courses
 INSERT INTO courses (code, name, semester, year, lecturer_id) VALUES
