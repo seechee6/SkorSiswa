@@ -9,17 +9,13 @@
         </option>
       </select>
     </div>
-    <div v-if="selectedCourseId" class="comparison-content">
-      <div class="comparison-charts">
-        <div class="chart-container">
-          <h3>Score Distribution</h3>
-          <canvas ref="distributionChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <h3>Component Comparison</h3>
-          <canvas ref="radarChart"></canvas>
-        </div>
-      </div>
+    
+    <div v-if="loading" class="loading">
+      <div class="spinner"></div>
+      <p>Loading comparison data...</p>
+    </div>
+
+    <div v-else-if="selectedCourseId && components.length > 0" class="comparison-content">
       <div class="stats-cards">
         <div class="stat-card">
           <h3>Your Percentile</h3>
@@ -38,8 +34,20 @@
           <div class="stat-value">{{ classSize }}</div>
         </div>
       </div>
-      <div class="comparison-table">
-        <table>
+
+      <div class="comparison-charts">
+        <div class="chart-container">
+          <h3>Score Distribution</h3>
+          <canvas ref="distributionChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Component Comparison</h3>
+          <canvas ref="radarChart"></canvas>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table class="comparison-table">
           <thead>
             <tr>
               <th>Component</th>
@@ -65,6 +73,11 @@
         </table>
       </div>
     </div>
+
+    <div v-else-if="selectedCourseId" class="no-data">
+      <p>No comparison data available for this course.</p>
+    </div>
+
     <div v-if="error" class="error-message">
       {{ error }}
     </div>
@@ -74,6 +87,7 @@
 <script>
 import api from '../../api'
 import Chart from 'chart.js/auto'
+
 export default {
   name: 'CompareWithCoursemates',
   data() {
@@ -86,6 +100,7 @@ export default {
       yourScore: 0,
       classSize: 0,
       error: '',
+      loading: false,
       distributionChart: null,
       radarChart: null
     }
@@ -103,25 +118,36 @@ export default {
     },
     async fetchComparison() {
       if (!this.selectedCourseId) return
+      
+      this.loading = true
+      this.error = ''
+      
       try {
         const user = JSON.parse(localStorage.getItem('user'))
         const response = await api.get(`/courses/${this.selectedCourseId}/comparison/${user.id}`)
         const data = response.data
+        
         this.components = data.components
         this.percentile = data.percentile
         this.classAverage = data.classAverage
         this.yourScore = data.yourScore
         this.classSize = data.classSize
+        
         this.updateCharts(data)
       } catch (error) {
         this.error = 'Failed to load comparison data'
         console.error('Error fetching comparison:', error)
+      } finally {
+        this.loading = false
       }
     },
     updateCharts(data) {
       if (this.distributionChart) this.distributionChart.destroy()
       if (this.radarChart) this.radarChart.destroy()
+      
       const distCtx = this.$refs.distributionChart
+      if (!distCtx) return
+      
       this.distributionChart = new Chart(distCtx, {
         type: 'bar',
         data: {
@@ -142,7 +168,10 @@ export default {
           }
         }
       })
+      
       const radarCtx = this.$refs.radarChart
+      if (!radarCtx) return
+      
       this.radarChart = new Chart(radarCtx, {
         type: 'radar',
         data: {
@@ -186,15 +215,18 @@ export default {
   max-width: 1200px;
   margin: 0 auto;
 }
+
 .page-title {
   font-size: 32px;
   font-weight: 300;
   margin-bottom: 32px;
   color: #2c3e50;
 }
+
 .course-select {
   margin-bottom: 32px;
 }
+
 .course-select select {
   width: 100%;
   max-width: 400px;
@@ -205,89 +237,130 @@ export default {
   color: #2c3e50;
   background: white;
 }
+
 .comparison-charts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
   gap: 24px;
   margin-bottom: 32px;
 }
+
 .chart-container {
   background: white;
   border-radius: 8px;
   padding: 24px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
+
 .chart-container h3 {
   font-size: 16px;
   color: #2c3e50;
   margin: 0 0 16px 0;
 }
+
 .stats-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 24px;
   margin-bottom: 32px;
 }
+
 .stat-card {
   background: white;
   border-radius: 8px;
   padding: 24px;
-  text-align: center;
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  text-align: center;
 }
+
 .stat-card h3 {
-  font-size: 14px;
+  font-size: 16px;
   color: #7f8c8d;
-  margin: 0 0 12px 0;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  margin: 0 0 16px 0;
 }
+
 .stat-value {
-  font-size: 28px;
-  font-weight: 500;
+  font-size: 36px;
+  font-weight: 600;
   color: #2c3e50;
 }
-.comparison-table {
+
+.table-container {
   background: white;
   border-radius: 8px;
   padding: 24px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  margin-bottom: 32px;
   overflow-x: auto;
 }
-table {
+
+.comparison-table {
   width: 100%;
   border-collapse: collapse;
 }
-th, td {
-  padding: 12px;
+
+.comparison-table th, .comparison-table td {
+  padding: 16px;
   text-align: left;
-  border-bottom: 1px solid #ecf0f1;
+  border-bottom: 1px solid #eee;
 }
-th {
-  font-weight: 500;
+
+.comparison-table th {
   color: #7f8c8d;
-  text-transform: uppercase;
-  font-size: 12px;
-  letter-spacing: 0.5px;
-}
-td {
-  color: #2c3e50;
-}
-.difference {
   font-weight: 500;
 }
+
+.difference {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
 .difference.positive {
+  background: #e3fcef;
   color: #27ae60;
 }
+
 .difference.negative {
+  background: #fdeded;
   color: #e74c3c;
 }
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.spinner {
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-top: 4px solid #3498db;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.no-data, .error-message {
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  text-align: center;
+  color: #7f8c8d;
+}
+
 .error-message {
-  margin-top: 16px;
-  padding: 12px;
-  background: #fee;
+  background: #fdeded;
   color: #e74c3c;
-  border-radius: 6px;
-  border-left: 4px solid #e74c3c;
 }
 </style>
