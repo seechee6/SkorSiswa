@@ -99,25 +99,23 @@
             <div class="card-label">Status</div>
           </div>
         </div>
-      </div>
-
-      <!-- Progress Card -->
+      </div>      <!-- Progress Card -->
       <div class="card progress-card">
         <div class="card-header">
-          <h3>Overall Progress</h3>
+          <h3>Assessment Completion</h3>
         </div>
         <div class="card-body">
           <div class="progress-container">
-            <div class="progress-bar" :style="{ width: `${totalScore}%` }"></div>
+            <div class="progress-bar" :style="{ width: `${(totalCompletedWeight / totalWeight) * 100}%` }"></div>
           </div>
           <div class="progress-stats">
             <div class="stat">
-              <span class="stat-label">Current</span>
-              <span class="stat-value">{{ totalScore.toFixed(2) }}%</span>
+              <span class="stat-label">Completed</span>
+              <span class="stat-value">{{ Math.round((totalCompletedWeight / totalWeight) * 100) }}%</span>
             </div>
             <div class="stat">
-              <span class="stat-label">Target</span>
-              <span class="stat-value">100%</span>
+              <span class="stat-label">Remaining</span>
+              <span class="stat-value">{{ Math.round(((totalWeight - totalCompletedWeight) / totalWeight) * 100) }}%</span>
             </div>
           </div>
         </div>
@@ -132,13 +130,12 @@
           <div class="table-responsive">
             <table class="mark-table">
               <thead>
-                <tr>
-                  <th>Component</th>
+                <tr>                  <th>Component</th>
                   <th>Weight (%)</th>
                   <th>Your Mark</th>
                   <th>Max Mark</th>
                   <th>Weighted Score</th>
-                  <th>Progress</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -147,13 +144,13 @@
                   <td>{{ component.weight }}%</td>
                   <td>{{ component.mark }}</td>
                   <td>{{ component.max_marks }}</td>
-                  <td>{{ calculateWeightedScore(component) }}</td>
-                  <td>
+                  <td>{{ calculateWeightedScore(component) }}</td>                  <td>
                     <div class="mini-progress">
-                      <div class="mini-progress-bar" 
-                           :style="{ width: `${(component.mark / component.max_marks) * 100}%` }"
-                           :class="getProgressClass(component.mark, component.max_marks)">
+                      <div v-if="component.mark !== null" 
+                           class="mini-progress-bar progress-done"
+                           style="width: 100%">
                       </div>
+                      <div v-else class="progress-status">Not Graded</div>
                     </div>
                   </td>
                 </tr>
@@ -161,13 +158,12 @@
               <tfoot>
                 <tr>
                   <td colspan="4" class="total-label">Total</td>
-                  <td class="total-value">{{ totalScore.toFixed(2) }}%</td>
-                  <td>
+                  <td class="total-value">{{ totalScore.toFixed(2) }}%</td>                  <td>
                     <div class="mini-progress">
-                      <div class="mini-progress-bar" 
-                           :style="{ width: `${totalScore}%` }"
-                           :class="getProgressClass(totalScore, 100)">
+                      <div class="mini-progress-bar progress-done" 
+                           :style="{ width: `${(totalCompletedWeight / totalWeight) * 100}%` }">
                       </div>
+                      <div class="progress-percent">{{ Math.round((totalCompletedWeight / totalWeight) * 100) }}% Complete</div>
                     </div>
                   </td>
                 </tr>
@@ -193,13 +189,14 @@ import api from '../../api';
 import Chart from 'chart.js/auto'
 
 export default {
-  name: 'MarkBreakdown',
-  data() {
+  name: 'MarkBreakdown',  data() {
     return {
       courses: [],
       selectedCourseId: '',
       components: [],
       totalScore: 0,
+      totalCompletedWeight: 0,
+      totalWeight: 100, // Default to 100%
       overallGrade: 'N/A',
       classAverage: 0,
       loading: false,
@@ -250,13 +247,17 @@ export default {
         console.log(`Fetching marks for student ${user.id} and course ${this.selectedCourseId}`)
         const response = await api.get(`/student/marks/${user.id}/${this.selectedCourseId}`)
           console.log('Mark data received:', response.data)
-        
-        if (response.data && response.data.success) {
+          if (response.data && response.data.success) {
           this.components = response.data.components || []
           this.totalScore = response.data.totalMarks || 0
           this.overallGrade = response.data.grade || 'N/A'
           this.classAverage = response.data.classAverage || 
             (this.totalScore - (Math.random() * 10) + (Math.random() * 5))
+          
+          // Calculate total and completed weights
+          this.totalWeight = this.components.reduce((sum, component) => sum + component.weight, 0) || 100
+          this.totalCompletedWeight = this.components.reduce((sum, component) => 
+            component.mark !== null ? sum + component.weight : sum, 0)
           
           // Ensure class average is in valid range
           if (this.classAverage > 100) this.classAverage = 98.5
@@ -748,12 +749,33 @@ export default {
   border-radius: 4px;
   overflow: hidden;
   width: 100%;
+  position: relative;
 }
 
 .mini-progress-bar {
   height: 100%;
   border-radius: 4px;
   transition: width 0.5s ease;
+}
+
+.progress-done {
+  background-color: #48bb78;
+}
+
+.progress-status {
+  font-size: 0.75rem;
+  color: #a0aec0;
+  text-align: center;
+  position: absolute;
+  width: 100%;
+  top: -4px;
+}
+
+.progress-percent {
+  font-size: 0.75rem;
+  color: #4a5568;
+  margin-top: 6px;
+  text-align: center;
 }
 
 .progress-excellent {

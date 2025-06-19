@@ -267,8 +267,7 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
         ]));
         return $response->withHeader('Content-Type', 'application/json');
     });
-    
-    // Get comparison with coursemates
+      // Get comparison with coursemates
     $group->get('/compare/{student_id}/{course_id}', function (Request $request, Response $response, $args) use ($pdo) {
         $studentId = $args['student_id'];
         $courseId = $args['course_id'];
@@ -283,33 +282,147 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
             return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
         }
         
+        $enrollmentId = $enrollment['id'];
+        
+        // Get course details
+        $stmt = $pdo->prepare('SELECT code, name FROM courses WHERE id = ?');
+        $stmt->execute([$courseId]);
+        $course = $stmt->fetch();
+        
         // Get all assessments for the course
-        $stmt = $pdo->prepare('SELECT id, name FROM assessments WHERE course_id = ? ORDER BY id');
+        $stmt = $pdo->prepare('SELECT id, name, weight, max_mark FROM assessments WHERE course_id = ? ORDER BY id');
         $stmt->execute([$courseId]);
         $assessments = $stmt->fetchAll();
         
-        $comparisonData = [];
+        // Get class size (total students enrolled in the course)
+        $stmt = $pdo->prepare('SELECT COUNT(*) as class_size FROM enrollments WHERE course_id = ?');
+        $stmt->execute([$courseId]);
+        $classSize = (int)$stmt->fetch()['class_size'];
+          // Calculate overall score for student
+        $stmt = $pdo->prepare('
+            SELECT SUM((am.mark / a.max_mark) * a.weight) as total_score
+            FROM assessment_marks am
+            JOIN assessments a ON am.assessment_id = a.id
+            WHERE am.enrollment_id = ? AND am.mark IS NOT NULL
+        ');
+        $stmt->execute([$enrollmentId]);
+        $studentResult = $stmt->fetch();
+        $studentOverallScore = $studentResult ? (float)$studentResult['total_score'] : 0;
         
-        // For each assessment, get student's score, class average, min and max
+        // Calculate class average overall score - ensure this matches the calculation in the marks endpoint
+        $stmt = $pdo->prepare('
+            WITH student_scores AS (
+                SELECT 
+                    e.id as enrollment_id,
+                    SUM((am.mark / a.max_mark) * a.weight) AS weighted_score
+                FROM 
+                    enrollments e
+                    JOIN assessment_marks am ON e.id = am.enrollment_id
+                    JOIN assessments a ON am.assessment_id = a.id
+                WHERE 
+                    e.course_id = ? AND am.mark IS NOT NULL
+                GROUP BY 
+                    e.id
+            )
+            SELECT AVG(weighted_score) as class_average
+            FROM student_scores
+        ');
+        $stmt->execute([$courseId]);
+        $classAverageResult = $stmt->fetch();
+        $classAverage = $classAverageResult ? (float)$classAverageResult['class_average'] : 0;
+        
+        // Calculate student's percentile
+        $stmt = $pdo->prepare('
+            WITH student_scores AS (
+                SELECT 
+                    e.student_id,
+                    SUM((am.mark / a.max_mark) * a.weight) AS total_score
+                FROM 
+                    enrollments e
+                    JOIN assessment_marks am ON e.id = am.enrollment_id
+                    JOIN assessments a ON am.assessment_id = a.id
+                WHERE 
+                    e.course_id = ? AND am.mark IS NOT NULL
+                GROUP BY 
+                    e.student_id
+            )
+            SELECT COUNT(*) as better_than
+            FROM student_scores
+            WHERE total_score > (
+                SELECT total_score FROM student_scores WHERE student_id = ?
+            )
+        ');
+        $stmt->execute([$courseId, $studentId]);
+        $betterThan = (int)($stmt->fetch()['better_than'] ?? 0);
+        
+        // Calculate percentile (higher is better)
+        $percentile = $classSize > 0 ? 
+            round(100 - (($betterThan / $classSize) * 100)) : 0;
+          // Get score distribution for histogram
+        $distribution = [0, 0, 0, 0, 0]; // 0-20, 21-40, 41-60, 61-80, 81-100
+        
+        $stmt = $pdo->prepare('
+            WITH student_scores AS (
+                SELECT 
+                    e.student_id,
+                    SUM((am.mark / a.max_mark) * a.weight) AS total_score
+                FROM 
+                    enrollments e
+                    JOIN assessment_marks am ON e.id = am.enrollment_id
+                    JOIN assessments a ON am.assessment_id = a.id
+                WHERE 
+                    e.course_id = ? AND am.mark IS NOT NULL
+                GROUP BY 
+                    e.student_id
+            )
+            SELECT total_score
+            FROM student_scores
+        ');
+        $stmt->execute([$courseId]);
+        $scores = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        
+        if (count($scores) > 0) {
+            foreach ($scores as $score) {
+                // Adjusted to use percentage values (0-100) rather than absolute values
+                if ($score >= 0 && $score < 20) $distribution[0]++;
+                elseif ($score >= 20 && $score < 40) $distribution[1]++;
+                elseif ($score >= 40 && $score < 60) $distribution[2]++;
+                elseif ($score >= 60 && $score < 80) $distribution[3]++;
+                else $distribution[4]++;
+            }
+        }
+          // Debug the score distribution array
+        error_log("Score distribution: " . json_encode($distribution));
+        
+        // Process each assessment component
+        $components = [];
+        
         foreach ($assessments as $assessment) {
             $assessmentId = $assessment['id'];
             $assessmentName = $assessment['name'];
+            $weight = (float)$assessment['weight'];
+            $maxMark = (float)$assessment['max_mark'];
             
             // Get student's score
             $stmt = $pdo->prepare('
-                SELECT mark, (SELECT max_mark FROM assessments WHERE id = ?) as max_mark
+                SELECT mark
                 FROM assessment_marks 
                 WHERE assessment_id = ? AND enrollment_id = ?
             ');
-            $stmt->execute([$assessmentId, $assessmentId, $enrollment['id']]);
-            $studentScore = $stmt->fetch();
+            $stmt->execute([$assessmentId, $enrollmentId]);
+            $markResult = $stmt->fetch();
+            $studentMark = $markResult ? (float)$markResult['mark'] : null;
+            
+            // Skip if no mark for this assessment
+            if ($studentMark === null) continue;
+            
+            // Calculate percentage score
+            $yourScore = ($studentMark / $maxMark) * 100;
             
             // Get class statistics
             $stmt = $pdo->prepare('
                 SELECT 
-                    AVG(am.mark) as avg_mark,
-                    MIN(am.mark) as min_mark,
-                    MAX(am.mark) as max_mark,
+                    AVG(am.mark / ?) * 100 as avg_percentage,
                     COUNT(am.mark) as student_count
                 FROM 
                     assessment_marks am
@@ -317,31 +430,51 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
                 WHERE 
                     am.assessment_id = ? AND am.mark IS NOT NULL
             ');
-            $stmt->execute([$assessmentId]);
+            $stmt->execute([$maxMark, $assessmentId]);
             $stats = $stmt->fetch();
+            $average = (float)$stats['avg_percentage'];
             
-            if ($studentScore && $stats['student_count'] > 0) {
-                $maxMark = $studentScore['max_mark'];
-                
-                $comparisonData[] = [
-                    'assessment_id' => $assessmentId,
-                    'assessment_name' => $assessmentName,
-                    'student_score' => $studentScore['mark'] ? (float)$studentScore['mark'] : null,
-                    'student_percentage' => $studentScore['mark'] ? round(($studentScore['mark'] / $maxMark) * 100, 2) : null,
-                    'class_average' => round((float)$stats['avg_mark'], 2),
-                    'class_average_percentage' => round(($stats['avg_mark'] / $maxMark) * 100, 2),
-                    'min_score' => (float)$stats['min_mark'],
-                    'max_score' => (float)$stats['max_mark'],
-                    'max_mark' => (float)$maxMark,
-                    'student_count' => (int)$stats['student_count']
-                ];
-            }
-        }
-        
-        $response->getBody()->write(json_encode([
+            // Get student position for this component
+            $stmt = $pdo->prepare('
+                SELECT COUNT(*) + 1 as position
+                FROM assessment_marks am
+                JOIN enrollments e ON am.enrollment_id = e.id
+                WHERE 
+                    am.assessment_id = ? 
+                    AND am.mark > ? 
+                    AND e.course_id = ?
+            ');
+            $stmt->execute([$assessmentId, $studentMark, $courseId]);
+            $position = (int)$stmt->fetch()['position'];
+            
+            $components[] = [
+                'id' => $assessmentId,
+                'name' => $assessmentName,
+                'weight' => $weight,
+                'yourScore' => round($yourScore, 1),
+                'average' => round($average, 1),
+                'difference' => round($yourScore - $average, 1),
+                'position' => $position
+            ];
+        }          // Debug information
+        error_log("Response data: components=" . count($components) . 
+                  ", classAverage=" . round($classAverage, 2) . 
+                  ", yourScore=" . round($studentOverallScore, 2) . 
+                  ", classSize=" . $classSize . 
+                  ", distribution=" . json_encode($distribution));
+
+        $responseData = [
             'success' => true,
-            'comparison_data' => $comparisonData
-        ]));
+            'courseName' => $course['code'] . ' - ' . $course['name'],
+            'components' => $components,
+            'percentile' => $percentile,
+            'classAverage' => round($classAverage, 2),
+            'yourScore' => round($studentOverallScore, 2),
+            'classSize' => $classSize,
+            'distribution' => $distribution
+        ];
+                    
+        $response->getBody()->write(json_encode($responseData));
         return $response->withHeader('Content-Type', 'application/json');
     });
     
