@@ -345,12 +345,14 @@ export default {
   margin: 0;
   color: #1D3557;
   font-size: 28px;
+  text-align: left;
 }
 
 .welcome-text {
   margin: 4px 0 0 0;
   color: #6c757d;
   font-size: 16px;
+  text-align: left;
 }
 
 .refresh-btn {
@@ -423,12 +425,14 @@ export default {
   font-weight: 700;
   color: #1D3557;
   margin-bottom: 4px;
+  text-align: left;
 }
 
 .card-label {
   color: #6c757d;
   font-size: 14px;
   font-weight: 500;
+  text-align: left;
 }
 
 .quick-actions {
@@ -438,6 +442,7 @@ export default {
 .quick-actions h3 {
   margin: 0 0 20px 0;
   color: #1D3557;
+  text-align: left;
 }
 
 .action-buttons {
@@ -495,6 +500,7 @@ export default {
 .section-header h3 {
   margin: 0;
   color: #1D3557;
+  text-align: left;
 }
 
 .view-all-link {
@@ -533,12 +539,14 @@ export default {
 .course-code {
   font-weight: 700;
   color: #1D3557;
+  text-align: left;
 }
 
 .course-title {
   font-size: 16px;
   font-weight: 500;
   color: #1D3557;
+  text-align: left;
 }
 
 .course-grade {
@@ -618,6 +626,7 @@ export default {
 .notification-section h3 {
   margin-bottom: 20px;
   color: #1D3557;
+  text-align: left;
 }
 
 .notification-list {
@@ -681,22 +690,25 @@ export default {
   color: #1D3557;
   margin-bottom: 4px;
   word-wrap: break-word;
+  text-align: left;
 }
 
 .notification-time {
   font-size: 12px;
   color: #6c757d;
+  text-align: left;
 }
 
 .empty-state {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
   gap: 8px;
   padding: 24px;
   background: #f8f9fa;
   border-radius: 8px;
+  text-align: left;
 }
 
 .empty-icon {

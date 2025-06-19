@@ -523,6 +523,7 @@ export default {
   font-weight: 600;
   color: #2d3748;
   margin: 0;
+  text-align: left;
 }
 
 .subtitle {

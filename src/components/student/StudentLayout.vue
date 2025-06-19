@@ -21,8 +21,8 @@
             </svg>
           </div>
           <div class="user-info">
-            <span class="user-name">{{ studentName }}</span>
-            <span class="user-id">{{ studentMatricNo }}</span>
+            <span class="user-name">{{ user?.full_name }}</span>
+            <span class="user-id">{{ user?.matric_no }}</span>
           </div>
           <button @click="logout" class="logout-btn">
             <svg class="logout-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -41,14 +41,15 @@
         <nav class="sidebar-nav">
           <router-link to="/student/dashboard" class="nav-item" active-class="active">
             <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6H8V5z"></path>
             </svg>
             <span class="nav-label">Dashboard</span>
           </router-link>
 
           <router-link to="/student/marks" class="nav-item" active-class="active">
             <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path>
             </svg>
             <span class="nav-label">Mark Breakdown</span>
           </router-link>
@@ -67,6 +68,13 @@
             <span class="nav-label">Ranking</span>
           </router-link>
 
+          <router-link to="/student/performance" class="nav-item" active-class="active">
+            <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+            </svg>
+            <span class="nav-label">Performance Trends</span>
+          </router-link>
+
           <router-link to="/student/simulator" class="nav-item" active-class="active">
             <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
@@ -76,23 +84,17 @@
 
           <router-link to="/student/remarks" class="nav-item" active-class="active">
             <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
             </svg>
             <span class="nav-label">Remark Requests</span>
-          </router-link>
-
-          <router-link to="/student/performance" class="nav-item" active-class="active">
-            <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-            </svg>
-            <span class="nav-label">Performance Trends</span>
+            <span v-if="unreadRemarks > 0" class="notification-badge">{{ unreadRemarks }}</span>
           </router-link>
         </nav>
       </div>
 
       <!-- Page Content -->
       <div class="page-content">
-        <router-view></router-view>
+        <router-view />
       </div>
     </div>
   </div>
@@ -103,45 +105,61 @@ export default {
   name: 'StudentLayout',
   data() {
     return {
-      studentName: '',
-      studentMatricNo: ''
-    }
+      user: null,
+      unreadRemarks: 0
+    };
+  },
+  mounted() {
+    this.user = JSON.parse(localStorage.getItem('user') || '{}');
+    this.fetchNotificationCount();
   },
   methods: {
     logout() {
-      localStorage.removeItem('user')
-      localStorage.removeItem('token')
-      this.$router.push('/login')
-    }
-  },
-  mounted() {
-    const user = JSON.parse(localStorage.getItem('user'))
-    if (user) {
-      this.studentName = user.full_name || user.name || 'Student'
-      this.studentMatricNo = user.matric_no || ''
+      localStorage.removeItem('user');
+      this.$router.push('/');
+    },
+    async fetchNotificationCount() {
+      try {
+        // Simulate fetching unread remark requests
+        this.unreadRemarks = Math.floor(Math.random() * 3); // Random 0-2 unread remark requests
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
+      }
     }
   }
-}
+};
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
 .student-layout {
-  display: flex;
-  flex-direction: column;
   min-height: 100vh;
+  background: #F1FAEE;
+  font-family: 'Roboto', sans-serif;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
 
 .top-nav {
+  background: white;
+  height: 70px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: #ffffff;
-  padding: 0.75rem 1.5rem;
+  padding: 0 32px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  z-index: 10;
+  position: relative;
+  z-index: 100;
+  margin: 0;
 }
 
-.nav-left, .nav-center, .nav-right {
+.nav-left {
   display: flex;
   align-items: center;
 }
@@ -149,171 +167,215 @@ export default {
 .logo {
   display: flex;
   align-items: center;
+  gap: 12px;
 }
 
 .logo-circle {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  width: 40px;
+  height: 40px;
   background: linear-gradient(135deg, #1D3557 0%, #457B9D 100%);
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-right: 0.75rem;
 }
 
 .logo-text {
   color: white;
-  font-weight: bold;
   font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1px;
 }
 
 .brand-name {
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 700;
   color: #1D3557;
 }
 
+.nav-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
 .role-badge {
-  padding: 0.25rem 1rem;
-  background: #e3f1fa;
-  color: #2980b9;
-  border-radius: 16px;
-  font-size: 0.85rem;
+  background: linear-gradient(135deg, #457B9D 0%, #1D3557 100%);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
   font-weight: 500;
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
 }
 
 .user-profile {
   display: flex;
   align-items: center;
+  gap: 16px;
 }
 
 .user-avatar {
   width: 40px;
   height: 40px;
+  background: #F1FAEE;
   border-radius: 50%;
-  background-color: #e3f1fa;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-right: 0.75rem;
+  border: 2px solid #457B9D;
 }
 
 .avatar-icon {
-  width: 24px;
-  height: 24px;
-  color: #2980b9;
+  width: 20px;
+  height: 20px;
+  color: #457B9D;
 }
 
 .user-info {
   display: flex;
   flex-direction: column;
-  margin-right: 1rem;
 }
 
 .user-name {
+  font-size: 14px;
   font-weight: 600;
-  font-size: 0.9rem;
-  color: #2c3e50;
+  color: #1D3557;
 }
 
 .user-id {
-  font-size: 0.8rem;
-  color: #7f8c8d;
+  font-size: 12px;
+  color: #6c757d;
 }
 
 .logout-btn {
   display: flex;
   align-items: center;
-  background-color: #e74c3c;
+  gap: 8px;
+  background: #E63946;
   color: white;
   border: none;
-  border-radius: 4px;
-  padding: 0.5rem 1rem;
-  font-size: 0.85rem;
+  padding: 8px 16px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
 }
 
 .logout-btn:hover {
-  background-color: #c0392b;
+  background: #c53030;
+  transform: translateY(-1px);
 }
 
 .logout-icon {
   width: 16px;
   height: 16px;
-  margin-right: 0.5rem;
 }
 
 .main-content {
   display: flex;
-  flex: 1;
+  min-height: calc(100vh - 70px);
 }
 
 .sidebar {
-  width: 250px;
-  background-color: #1D3557;
-  color: white;
-  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+  width: 280px;
+  background: white;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
+  padding: 24px 0;
 }
 
 .sidebar-nav {
-  padding: 1.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 16px;
+}
+
+.nav-section {
+  margin: 20px 0 8px 0;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-left: 16px;
+  margin-bottom: 8px;
+  display: block;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  padding: 0.75rem 1rem;
-  color: #ecf0f1;
+  gap: 12px;
+  padding: 12px 16px;
+  color: #495057;
   text-decoration: none;
-  border-radius: 6px;
-  margin-bottom: 0.5rem;
-  transition: all 0.2s;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  position: relative;
+  font-weight: 500;
 }
 
 .nav-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background: rgba(69, 123, 157, 0.1);
+  color: #1D3557;
+  transform: translateX(4px);
 }
 
 .nav-item.active {
-  background-color: #457B9D;
+  background: linear-gradient(135deg, #1D3557 0%, #457B9D 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(29, 53, 87, 0.3);
 }
 
 .nav-icon {
   width: 20px;
   height: 20px;
-  margin-right: 0.75rem;
+  flex-shrink: 0;
 }
 
 .nav-label {
-  font-size: 0.9rem;
-  font-weight: 500;
+  font-size: 14px;
+}
+
+.notification-badge {
+  background: #E63946;
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: auto;
 }
 
 .page-content {
   flex: 1;
-  padding: 1.5rem;
-  background-color: #f5f7fa;
+  padding: 32px;
   overflow-y: auto;
-  height: calc(100vh - 68px); /* Adjust based on top-nav height */
 }
 
 @media (max-width: 768px) {
-  .main-content {
-    flex-direction: column;
-  }
-
   .sidebar {
-    width: 100%;
-    height: auto;
+    width: 240px;
   }
   
-  .nav-center {
-    display: none;
+  .page-content {
+    padding: 20px;
   }
   
-  .user-name {
+  .top-nav {
+    padding: 0 16px;
+  }
+  
+  .user-info {
     display: none;
   }
 }

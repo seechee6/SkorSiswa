@@ -307,7 +307,7 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
         ');
         $stmt->execute([$enrollmentId]);
         $studentResult = $stmt->fetch();
-        $studentOverallScore = $studentResult ? (float)$studentResult['total_score'] : 0;
+        $studentOverallScore = $stmt->fetch() ? (float)$studentResult['total_score'] : 0;
         
         // Calculate class average overall score - ensure this matches the calculation in the marks endpoint
         $stmt = $pdo->prepare('
@@ -478,6 +478,161 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
         return $response->withHeader('Content-Type', 'application/json');
     });
     
+    // Get class ranking for a specific course
+    $group->get('/ranking/{student_id}/{course_id}', function (Request $request, Response $response, $args) use ($pdo) {
+        $studentId = $args['student_id'];
+        $courseId = $args['course_id'];
+        
+        try {
+            // Verify enrollment exists
+            $stmt = $pdo->prepare('SELECT id FROM enrollments WHERE student_id = ? AND course_id = ?');
+            $stmt->execute([$studentId, $courseId]);
+            $enrollment = $stmt->fetch();
+            
+            if (!$enrollment) {
+                $response->getBody()->write(json_encode(['error' => 'Student not enrolled in this course']));
+                return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+            }
+            
+            // Get course details
+            $stmt = $pdo->prepare('SELECT code, name FROM courses WHERE id = ?');
+            $stmt->execute([$courseId]);
+            $course = $stmt->fetch();
+            
+            if (!$course) {
+                $response->getBody()->write(json_encode(['error' => 'Course not found']));
+                return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+            }
+            
+            // Get all students in the course with their scores
+            $stmt = $pdo->prepare('
+                WITH student_scores AS (
+                    SELECT 
+                        e.student_id,
+                        u.full_name,
+                        SUM((am.mark / a.max_mark) * a.weight) AS total_score
+                    FROM 
+                        enrollments e
+                        JOIN users u ON e.student_id = u.id
+                        JOIN assessment_marks am ON e.id = am.enrollment_id
+                        JOIN assessments a ON am.assessment_id = a.id
+                    WHERE 
+                        e.course_id = ? AND am.mark IS NOT NULL
+                    GROUP BY 
+                        e.student_id, u.full_name
+                )
+                SELECT 
+                    student_id,
+                    full_name,
+                    total_score,
+                    ROW_NUMBER() OVER (ORDER BY total_score DESC) as rank
+                FROM student_scores
+                ORDER BY total_score DESC
+            ');
+            $stmt->execute([$courseId]);
+            $allStudents = $stmt->fetchAll();
+            
+            if (empty($allStudents)) {
+                $response->getBody()->write(json_encode(['error' => 'No graded assessments found for this course']));
+                return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+            }
+            
+            // Find current student's position and data
+            $yourRank = null;
+            $yourScore = null;
+            $yourGrade = null;
+            
+            foreach ($allStudents as $student) {
+                if ($student['student_id'] == $studentId) {
+                    $yourRank = (int)$student['rank'];
+                    $yourScore = (float)$student['total_score'];
+                    
+                    // Calculate grade
+                    if ($yourScore >= 90) $yourGrade = 'A+';
+                    elseif ($yourScore >= 80) $yourGrade = 'A';
+                    elseif ($yourScore >= 75) $yourGrade = 'A-';
+                    elseif ($yourScore >= 70) $yourGrade = 'B+';
+                    elseif ($yourScore >= 65) $yourGrade = 'B';
+                    elseif ($yourScore >= 60) $yourGrade = 'B-';
+                    elseif ($yourScore >= 55) $yourGrade = 'C+';
+                    elseif ($yourScore >= 50) $yourGrade = 'C';
+                    elseif ($yourScore >= 45) $yourGrade = 'D+';
+                    elseif ($yourScore >= 40) $yourGrade = 'D';
+                    else $yourGrade = 'F';
+                    break;
+                }
+            }
+            
+            if ($yourRank === null) {
+                $response->getBody()->write(json_encode(['error' => 'Student has no graded assessments in this course']));
+                return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+            }
+            
+            // Calculate percentile
+            $totalStudents = count($allStudents);
+            $percentile = round(100 - (($yourRank - 1) / $totalStudents) * 100);
+            
+            // Get all students with grades and rankings
+            $topStudents = [];
+            foreach ($allStudents as $student) {
+                $score = (float)$student['total_score'];
+                
+                // Calculate grade
+                if ($score >= 90) $grade = 'A+';
+                elseif ($score >= 80) $grade = 'A';
+                elseif ($score >= 75) $grade = 'A-';
+                elseif ($score >= 70) $grade = 'B+';
+                elseif ($score >= 65) $grade = 'B';
+                elseif ($score >= 60) $grade = 'B-';
+                elseif ($score >= 55) $grade = 'C+';
+                elseif ($score >= 50) $grade = 'C';
+                elseif ($score >= 45) $grade = 'D+';
+                elseif ($score >= 40) $grade = 'D';
+                else $grade = 'F';
+                
+                $topStudents[] = [
+                    'rank' => (int)$student['rank'],
+                    'name' => $student['full_name'],
+                    'score' => $score,
+                    'grade' => $grade,
+                    'isYou' => ($student['student_id'] == $studentId),
+                    'anonymousId' => (int)$student['rank']
+                ];
+            }
+            
+            // Get score distribution for histogram
+            $distribution = [0, 0, 0, 0, 0]; // 0-20, 21-40, 41-60, 61-80, 81-100
+            
+            foreach ($allStudents as $student) {
+                $score = (float)$student['total_score'];
+                if ($score >= 0 && $score < 20) $distribution[0]++;
+                elseif ($score >= 20 && $score < 40) $distribution[1]++;
+                elseif ($score >= 40 && $score < 60) $distribution[2]++;
+                elseif ($score >= 60 && $score < 80) $distribution[3]++;
+                else $distribution[4]++;
+            }
+            
+            $responseData = [
+                'success' => true,
+                'courseName' => $course['code'] . ' - ' . $course['name'],
+                'yourRank' => $yourRank,
+                'yourScore' => $yourScore,
+                'yourGrade' => $yourGrade,
+                'percentile' => $percentile,
+                'totalStudents' => $totalStudents,
+                'topStudents' => $topStudents,
+                'distribution' => $distribution
+            ];
+            
+            $response->getBody()->write(json_encode($responseData));
+            return $response->withHeader('Content-Type', 'application/json');
+            
+        } catch (Exception $e) {
+            $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
+            return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+        }
+    });
+
     // Get dashboard data for student
     $group->get('/dashboard/{student_id}', function (Request $request, Response $response, $args) use ($pdo) {
         $studentId = $args['student_id'];
