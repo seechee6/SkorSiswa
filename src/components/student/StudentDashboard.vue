@@ -241,44 +241,49 @@ export default {
           this.$router.push('/login')
           return
         }
-        
-        // Set student name from local storage
-        this.studentName = user.name || 'Student'
+          // Set student name from local storage
+        this.studentName = user.full_name || user.name || 'Student'
         
         const response = await api.student.getDashboard(user.id)
         const data = response.data
         
-        this.cgpa = data.cgpa
-        this.ranking = data.ranking
-        this.semesterProgress = data.semesterProgress
-          // Process courses data
-        this.currentCourses = data.currentCourses.map(course => {
-          return {
-            id: course.id,
-            code: course.code,
-            name: course.name,
-            grade: course.grade || this.calculateGrade(course.current_percentage || 0),
-            progress: course.progress || this.calculateProgress(course)
-          }
-        })
-          // Process notifications
-        this.notifications = data.notifications.map(notification => {
-          // Determine notification type based on message content
-          let type = 'general'
-          if (notification.message.includes('grade') || notification.message.includes('Grade')) type = 'grade'
-          else if (notification.message.includes('remark') || notification.message.includes('Remark')) type = 'remark'
-          else if (notification.message.includes('assignment') || notification.message.includes('exam') || 
-                  notification.message.includes('Assignment') || notification.message.includes('Exam')) type = 'assessment'
-          else if (notification.message.includes('deadline') || notification.message.includes('due') ||
-                  notification.message.includes('Deadline')) type = 'deadline'
+        if (data.success) {
+          this.cgpa = data.cgpa || '0.00'
+          this.ranking = data.ranking || '0 / 0'
+          this.semesterProgress = data.semesterProgress || 0
+            // Process courses data
+          this.currentCourses = data.currentCourses.map(course => {
+            return {
+              id: course.id,
+              code: course.code,
+              name: course.name,
+              grade: course.grade || 'N/A',
+              progress: course.progress || 0,
+              current_percentage: course.current_percentage || 0
+            }
+          })
           
-          return {
-            id: notification.id,
-            type: type,
-            message: notification.message,
-            time: this.formatTime(notification.created_at)
-          }
-        })
+          // Process notifications
+          this.notifications = data.notifications.map(notification => {
+            // Determine notification type based on message content
+            let type = 'general'
+            if (notification.message.includes('grade') || notification.message.includes('Grade')) type = 'grade'
+            else if (notification.message.includes('remark') || notification.message.includes('Remark')) type = 'remark'
+            else if (notification.message.includes('assignment') || notification.message.includes('exam') || 
+                    notification.message.includes('Assignment') || notification.message.includes('Exam')) type = 'assessment'
+            else if (notification.message.includes('deadline') || notification.message.includes('due') ||
+                    notification.message.includes('Deadline')) type = 'deadline'
+            
+            return {
+              id: notification.id,
+              type: type,
+              message: notification.message,
+              time: this.formatTime(notification.created_at)
+            }
+          })
+        } else {
+          throw new Error(data.error || 'Failed to load dashboard data')
+        }
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
         this.error = 'Failed to load dashboard data. Please try again.'
@@ -302,10 +307,6 @@ export default {
       if (marks >= 45) return 'D'
       if (marks >= 40) return 'E'
       return 'F'
-    },    calculateProgress(course) { // eslint-disable-line no-unused-vars
-      // In a real app, this would be calculated based on dates and completed components
-      // For now, we'll use a random value between 60-95%
-      return Math.floor(Math.random() * 35) + 60
     },
     formatTime(timestamp) {
       const date = new Date(timestamp)
@@ -345,12 +346,14 @@ export default {
   margin: 0;
   color: #1D3557;
   font-size: 28px;
+  text-align: left;
 }
 
 .welcome-text {
   margin: 4px 0 0 0;
   color: #6c757d;
   font-size: 16px;
+  text-align: left;
 }
 
 .refresh-btn {
@@ -423,12 +426,14 @@ export default {
   font-weight: 700;
   color: #1D3557;
   margin-bottom: 4px;
+  text-align: left;
 }
 
 .card-label {
   color: #6c757d;
   font-size: 14px;
   font-weight: 500;
+  text-align: left;
 }
 
 .quick-actions {
@@ -438,6 +443,7 @@ export default {
 .quick-actions h3 {
   margin: 0 0 20px 0;
   color: #1D3557;
+  text-align: left;
 }
 
 .action-buttons {
@@ -495,6 +501,7 @@ export default {
 .section-header h3 {
   margin: 0;
   color: #1D3557;
+  text-align: left;
 }
 
 .view-all-link {
@@ -533,12 +540,14 @@ export default {
 .course-code {
   font-weight: 700;
   color: #1D3557;
+  text-align: left;
 }
 
 .course-title {
   font-size: 16px;
   font-weight: 500;
   color: #1D3557;
+  text-align: left;
 }
 
 .course-grade {
@@ -618,6 +627,7 @@ export default {
 .notification-section h3 {
   margin-bottom: 20px;
   color: #1D3557;
+  text-align: left;
 }
 
 .notification-list {
@@ -681,22 +691,25 @@ export default {
   color: #1D3557;
   margin-bottom: 4px;
   word-wrap: break-word;
+  text-align: left;
 }
 
 .notification-time {
   font-size: 12px;
   color: #6c757d;
+  text-align: left;
 }
 
 .empty-state {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
   gap: 8px;
   padding: 24px;
   background: #f8f9fa;
   border-radius: 8px;
+  text-align: left;
 }
 
 .empty-icon {

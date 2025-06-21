@@ -18,9 +18,9 @@ import StudentDashboard from '../components/student/StudentDashboard.vue'
 import MarkBreakdown from '../components/student/MarkBreakdown.vue'
 import CompareWithCoursemates from '../components/student/CompareWithCoursemates.vue'
 import Ranking from '../components/student/Ranking.vue'
-import WhatIfSimulator from '../components/student/WhatIfSimulator.vue'
 import PerformanceTrends from '../components/student/PerformanceTrends.vue'
 import RemarkRequests from '../components/student/RemarkRequests.vue'
+import StudentNotifications from '../components/student/StudentNotifications.vue'
 import AdvisorDashboard from '../components/advisor/AdvisorDashboard.vue'
 import AdminLayout from '../components/admin/AdminLayout.vue'
 import AdminDashboard from '../components/admin/AdminDashboard.vue'
@@ -31,6 +31,7 @@ import AdminLecturerAssignments from '../components/admin/LecturerAssignments.vu
 import AdminPasswordManagement from '../components/admin/PasswordManagement.vue'
 import AdminLogs from '../components/admin/SystemLogs.vue'
 import Login from '../components/Login.vue'
+import RemarkReviews from '../components/lecturer/RemarkReviews.vue'
 
 const routes = [
   { path: '/', component: Login },
@@ -51,20 +52,23 @@ const routes = [
       { path: 'mark-breakdown', component: FullMarkBreakdown },
       { path: 'analytics', component: LecturerAnalytics },
       { path: 'trend-graphs', component: TrendGraphs },
-      { path: 'notifications', component: LecturerNotifications }
+      { path: 'notifications', component: LecturerNotifications },
+      { path: 'remark-reviews', component: RemarkReviews }
     ]
   },  {
     path: '/student',
     component: StudentLayout,
     children: [
-      { path: '', redirect: '/student/dashboard' },      { path: 'dashboard', component: StudentDashboard },
+      { path: '', redirect: '/student/dashboard' },      
+      { path: 'dashboard', component: StudentDashboard },      
       { path: 'marks', component: MarkBreakdown },
       { path: 'compare', component: CompareWithCoursemates },
       { path: 'ranking', component: Ranking },
-      { path: 'simulator', component: WhatIfSimulator },
       { path: 'performance', component: PerformanceTrends },
-      { path: 'remarks', component: RemarkRequests }
-    ]  },
+      { path: 'remarks', component: RemarkRequests },
+      { path: 'notifications', component: StudentNotifications }
+    ]  
+  },
   { path: '/advisor', component: AdvisorDashboard },
   {
     path: '/admin',
