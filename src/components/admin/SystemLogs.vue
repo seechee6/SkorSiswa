@@ -22,19 +22,38 @@
     </div>
 
     <div class="logs-table">
-      <table>
-        <thead>
+      <table>        <thead>
           <tr>
             <th>Timestamp</th>
             <th>User</th>
             <th>Activity Type</th>
             <th>Description</th>
             <th>Status</th>
-            <th>Actions</th>
           </tr>
-        </thead>
-        <tbody>
-          <tr v-for="log in filteredLogs" :key="log.id">
+        </thead>        <tbody>
+          <tr v-if="loading">
+            <td colspan="5" class="loading-cell">
+              <div class="loading-spinner">Loading system logs...</div>
+            </td>
+          </tr>
+          <tr v-else-if="error">
+            <td colspan="5" class="error-cell">
+              <div class="error-message">
+                <i class="fas fa-exclamation-triangle"></i>
+                {{ error }}
+                <button @click="fetchLogs" class="btn-retry">Retry</button>
+              </div>
+            </td>
+          </tr>
+          <tr v-else-if="logs.length === 0">
+            <td colspan="5" class="no-logs-cell">
+              <div class="no-logs-message">
+                <i class="fas fa-inbox"></i>
+                No system logs found
+              </div>
+            </td>
+          </tr>
+          <tr v-else v-for="log in filteredLogs" :key="log.id">
             <td>{{ formatDate(log.timestamp) }}</td>
             <td>{{ log.user }}</td>
             <td>
@@ -43,18 +62,6 @@
             <td>{{ log.description }}</td>
             <td>
               <span :class="['status', log.status]">{{ log.status }}</span>
-            </td>
-            <td>
-              <button 
-                v-if="!log.reviewed" 
-                @click="markAsReviewed(log.id)" 
-                class="btn-review"
-              >
-                Mark as Reviewed
-              </button>
-              <span v-else class="reviewed-text">
-                <i class="fas fa-check"></i> Reviewed
-              </span>
             </td>
           </tr>
         </tbody>
@@ -82,36 +89,41 @@
 </template>
 
 <script>
-import axios from 'axios';
+import axios from '@/api'
 
 export default {
   name: 'SystemLogs',
   data() {
     return {
       logs: [],
+      loading: false,
+      error: null,
       activityType: '',
       dateFilter: '',
       currentPage: 1,
       logsPerPage: 10,
+      totalLogs: 0,
       currentDate: new Date().toISOString().split('T')[0]
     }
   },
   computed: {
     filteredLogs() {
-      return this.logs.filter(log => {
-        const matchesType = !this.activityType || log.type === this.activityType;
-        const matchesDate = !this.dateFilter || 
-          log.timestamp.split('T')[0] === this.dateFilter;
-        return matchesType && matchesDate;
-      });
+      // Since we're doing server-side filtering now, just return logs
+      return this.logs;
     },
     totalPages() {
-      return Math.ceil(this.filteredLogs.length / this.logsPerPage);
+      return Math.ceil(this.totalLogs / this.logsPerPage);
+    }
+  },
+  watch: {
+    // Watch for filter changes and refetch data
+    activityType() {
+      this.currentPage = 1;
+      this.fetchLogs();
     },
-    paginatedLogs() {
-      const start = (this.currentPage - 1) * this.logsPerPage;
-      const end = start + this.logsPerPage;
-      return this.filteredLogs.slice(start, end);
+    dateFilter() {
+      this.currentPage = 1;
+      this.fetchLogs();
     }
   },
   created() {
@@ -119,31 +131,51 @@ export default {
   },
   methods: {
     async fetchLogs() {
+      this.loading = true;
+      this.error = null;
+      
       try {
-        const response = await axios.get('/api/admin/system-logs');
-        this.logs = response.data;
+        const params = {
+          limit: this.logsPerPage,
+          offset: (this.currentPage - 1) * this.logsPerPage
+        };
+        
+        if (this.activityType) {
+          params.type = this.activityType;
+        }
+        
+        if (this.dateFilter) {
+          params.date = this.dateFilter;
+        }
+        
+        const response = await axios.get('/api/admin/system-logs', { params });
+        
+        if (response.data.success) {
+          this.logs = response.data.logs;
+          this.totalLogs = response.data.total;
+        } else {
+          throw new Error(response.data.error || 'Failed to fetch system logs');
+        }
       } catch (error) {
         console.error('Error fetching system logs:', error);
+        this.error = error.response?.data?.error || error.message || 'Failed to fetch system logs';
+        this.logs = [];
+        this.totalLogs = 0;
+      } finally {
+        this.loading = false;
       }
-    },
-    formatDate(timestamp) {
+    },    formatDate(timestamp) {
       return new Date(timestamp).toLocaleString();
-    },
-    async markAsReviewed(logId) {
-      try {
-        await axios.patch(`/api/admin/system-logs/${logId}/review`);
-        await this.fetchLogs();
-      } catch (error) {
-        console.error('Error marking log as reviewed:', error);
-      }
     },
     changePage(page) {
       this.currentPage = page;
+      this.fetchLogs();
     },
     clearFilters() {
       this.activityType = '';
       this.dateFilter = '';
       this.currentPage = 1;
+      this.fetchLogs();
     }
   }
 }
@@ -260,6 +292,48 @@ th, td {
   border: none;
   border-radius: 4px;
   cursor: pointer;
+}
+
+/* Loading and error states */
+.loading-cell, .error-cell, .no-logs-cell {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.loading-spinner {
+  color: #007bff;
+  font-size: 16px;
+}
+
+.error-message {
+  color: #dc3545;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.btn-retry {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.btn-retry:hover {
+  background-color: #c82333;
+}
+
+.no-logs-message {
+  color: #6c757d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 16px;
 }
 
 @media (max-width: 768px) {
