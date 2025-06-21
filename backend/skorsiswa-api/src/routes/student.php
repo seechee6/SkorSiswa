@@ -297,8 +297,7 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
         // Get class size (total students enrolled in the course)
         $stmt = $pdo->prepare('SELECT COUNT(*) as class_size FROM enrollments WHERE course_id = ?');
         $stmt->execute([$courseId]);
-        $classSize = (int)$stmt->fetch()['class_size'];
-          // Calculate overall score for student
+        $classSize = (int)$stmt->fetch()['class_size'];        // Calculate overall score for student
         $stmt = $pdo->prepare('
             SELECT SUM((am.mark / a.max_mark) * a.weight) as total_score
             FROM assessment_marks am
@@ -307,7 +306,7 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
         ');
         $stmt->execute([$enrollmentId]);
         $studentResult = $stmt->fetch();
-        $studentOverallScore = $stmt->fetch() ? (float)$studentResult['total_score'] : 0;
+        $studentOverallScore = $studentResult ? (float)$studentResult['total_score'] : 0;
         
         // Calculate class average overall score - ensure this matches the calculation in the marks endpoint
         $stmt = $pdo->prepare('
