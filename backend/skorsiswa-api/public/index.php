@@ -1341,8 +1341,7 @@ $app->post('/advisors/{advisor_id}/advisees/{student_id}/notes', function (Reque
             return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
         }
         
-        $sql = "INSERT INTO advisor_notes (advisor_id, student_id, course_id, note) VALUES (?, ?, ?, ?)";
-        $stmt = $pdo->prepare($sql);
+        $sql = "INSERT INTO advisor_notes (advisor_id, student_id, course_id, note) VALUES (?, ?, ?, ?)";        $stmt = $pdo->prepare($sql);
         $stmt->execute([
             $advisor_id,
             $student_id,
@@ -1360,6 +1359,235 @@ $app->post('/advisors/{advisor_id}/advisees/{student_id}/notes', function (Reque
         $response->getBody()->write(json_encode([
             'success' => false,
             'message' => 'Failed to add note: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// =============================================
+// MEETINGS ENDPOINTS
+// =============================================
+
+// Create a new meeting
+$app->post('/advisors/{advisor_id}/meetings', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $advisor_id = $args['advisor_id'];
+        $data = $request->getParsedBody();
+        
+        // Verify advisor-student relationship
+        $stmt = $pdo->prepare("SELECT 1 FROM advisors WHERE advisor_id = ? AND student_id = ?");
+        $stmt->execute([$advisor_id, $data['student_id']]);
+        
+        if (!$stmt->fetch()) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'message' => 'Unauthorized access to student data'
+            ]));
+            return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
+        }
+          $sql = "INSERT INTO meetings (advisor_id, student_id, title, meeting_date, meeting_time, duration, location, meeting_link, meeting_type, status, agenda, notes, action_items) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            $advisor_id,
+            $data['student_id'],
+            $data['title'] ?? 'Advisor Meeting',
+            $data['meeting_date'],
+            $data['meeting_time'],
+            $data['duration'] ?? 60,
+            $data['location'] ?? '',
+            $data['meeting_link'] ?? '',
+            $data['meeting_type'] ?? 'academic',
+            $data['status'] ?? 'scheduled',
+            $data['agenda'] ?? '',
+            $data['notes'] ?? '',
+            $data['action_items'] ?? ''
+        ]);
+        
+        $meeting_id = $pdo->lastInsertId();
+        
+        // Create notification for student
+        createNotification($pdo, $data['student_id'], "New meeting scheduled with your advisor on {$data['meeting_date']} at {$data['meeting_time']}");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Meeting scheduled successfully',
+            'meeting_id' => $meeting_id
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'message' => 'Failed to schedule meeting: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Get all meetings for an advisor
+$app->get('/advisors/{advisor_id}/meetings', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $advisor_id = $args['advisor_id'];
+        $student_id = $request->getQueryParams()['student_id'] ?? null;
+        
+        $sql = "
+            SELECT 
+                m.*,
+                u.full_name as student_name,
+                u.matric_no as student_matric
+            FROM meetings m
+            JOIN users u ON m.student_id = u.id
+            WHERE m.advisor_id = ?
+        ";
+        
+        $params = [$advisor_id];
+        
+        if ($student_id) {
+            $sql .= " AND m.student_id = ?";
+            $params[] = $student_id;
+        }
+        
+        $sql .= " ORDER BY m.meeting_date DESC, m.meeting_time DESC";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $meetings = $stmt->fetchAll();
+        
+        // Convert to frontend format
+        foreach ($meetings as &$meeting) {
+            $meeting['student'] = [
+                'id' => $meeting['student_id'],
+                'name' => $meeting['student_name'],
+                'studentId' => $meeting['student_matric']
+            ];
+            $meeting['date'] = $meeting['meeting_date'];
+            $meeting['time'] = $meeting['meeting_time'];
+            $meeting['type'] = $meeting['meeting_type'];
+            $meeting['actionItems'] = $meeting['action_items'];
+        }
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'data' => $meetings
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'message' => 'Failed to fetch meetings: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Update a meeting
+$app->put('/advisors/{advisor_id}/meetings/{meeting_id}', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $advisor_id = $args['advisor_id'];
+        $meeting_id = $args['meeting_id'];
+        $data = $request->getParsedBody();
+        
+        // Verify the meeting belongs to this advisor
+        $stmt = $pdo->prepare("SELECT student_id FROM meetings WHERE id = ? AND advisor_id = ?");
+        $stmt->execute([$meeting_id, $advisor_id]);
+        $meeting = $stmt->fetch();
+        
+        if (!$meeting) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'message' => 'Meeting not found or unauthorized'
+            ]));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Build update query dynamically
+        $fields = [];
+        $params = [];
+        
+        $allowed_fields = ['title', 'meeting_date', 'meeting_time', 'duration', 'location', 'meeting_link', 'meeting_type', 'status', 'agenda', 'notes', 'action_items', 'next_meeting_date'];
+        
+        foreach ($allowed_fields as $field) {
+            if (isset($data[$field])) {
+                if ($field === 'action_items') {
+                    $fields[] = "action_items = ?";
+                    $params[] = $data[$field];
+                } else {
+                    $fields[] = "$field = ?";
+                    $params[] = $data[$field];
+                }
+            }
+        }
+        
+        if (empty($fields)) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'message' => 'No valid fields to update'
+            ]));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        $params[] = $meeting_id;
+        $sql = "UPDATE meetings SET " . implode(', ', $fields) . " WHERE id = ?";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        
+        // Create notification for student if status changed to completed
+        if (isset($data['status']) && $data['status'] === 'completed') {
+            createNotification($pdo, $meeting['student_id'], "Meeting with your advisor has been completed. Notes and action items have been added.");
+        }
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Meeting updated successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'message' => 'Failed to update meeting: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Delete a meeting
+$app->delete('/advisors/{advisor_id}/meetings/{meeting_id}', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $advisor_id = $args['advisor_id'];
+        $meeting_id = $args['meeting_id'];
+        
+        // Verify the meeting belongs to this advisor
+        $stmt = $pdo->prepare("SELECT student_id FROM meetings WHERE id = ? AND advisor_id = ?");
+        $stmt->execute([$meeting_id, $advisor_id]);
+        $meeting = $stmt->fetch();
+        
+        if (!$meeting) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'message' => 'Meeting not found or unauthorized'
+            ]));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Delete the meeting
+        $stmt = $pdo->prepare("DELETE FROM meetings WHERE id = ?");
+        $stmt->execute([$meeting_id]);
+        
+        // Create notification for student
+        createNotification($pdo, $meeting['student_id'], "A scheduled meeting with your advisor has been cancelled.");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Meeting deleted successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'message' => 'Failed to delete meeting: ' . $e->getMessage()
         ]));
         return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
     }

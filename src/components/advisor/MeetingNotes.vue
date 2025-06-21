@@ -1,5 +1,28 @@
 <template>
   <div class="meeting-notes">
+    <!-- Loading State -->
+    <div v-if="loading" class="loading-container">
+      <div class="loading-spinner"></div>
+      <p>Loading advisees...</p>
+    </div>
+
+    <!-- Error State -->
+    <div v-if="error" class="error-container">
+      <div class="error-message">
+        <svg class="error-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        {{ error }}
+      </div>
+      <button @click="fetchAdvisees" class="retry-btn">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        Retry      </button>
+    </div>
+
+    <!-- Main Content -->
+    <div v-if="!loading && !error" class="main-content">
     <!-- Dashboard Header -->
     <div class="dashboard-header">
       <div class="header-content">
@@ -12,12 +35,17 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
           Schedule Meeting
-        </button>
-        <button @click="exportMeetings" class="action-btn secondary">
+        </button>        <button @click="exportMeetings" class="action-btn secondary">
           <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           Export
+        </button>
+        <button @click="showQuickNotesModal" class="action-btn tertiary">
+          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          Quick Notes
         </button>
       </div>
     </div>
@@ -134,10 +162,10 @@
                 <svg class="sort-icon" :class="{ active: sortColumn === 'date' }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
                 </svg>
-              </th>
-              <th>Type</th>
+              </th>              <th>Type</th>
               <th>Status</th>
               <th>Duration</th>
+              <th>Location/Link</th>
               <th>Notes Preview</th>
               <th>Actions</th>
             </tr>
@@ -171,13 +199,29 @@
                 <span class="status-badge" :class="meeting.status">
                   {{ meeting.status }}
                 </span>
+              </td>              <td>{{ meeting.duration || '--' }} min</td>
+              <td>
+                <div class="location-link-info">
+                  <div v-if="meeting.location" class="location">📍 {{ meeting.location }}</div>
+                  <div v-if="meeting.meeting_link || meeting.meetingLink" class="meeting-link">
+                    <a :href="meeting.meeting_link || meeting.meetingLink" target="_blank" rel="noopener noreferrer" class="link-btn">
+                      🔗 Join Meeting
+                    </a>
+                  </div>
+                  <div v-if="!meeting.location && !meeting.meeting_link && !meeting.meetingLink" class="no-location">
+                    --
+                  </div>
+                </div>
               </td>
-              <td>{{ meeting.duration || '--' }} min</td>
               <td>
                 <div class="notes-preview">{{ truncateNotes(meeting.notes) }}</div>
               </td>
               <td>
-                <div class="action-buttons">
+                <div class="action-buttons">                  <button @click="addNotes(meeting)" class="action-btn notes-btn" title="Add/Edit Notes">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                  </button>
                   <button @click="editMeeting(meeting)" class="action-btn edit-btn" title="Edit Meeting">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
@@ -288,13 +332,12 @@
           </button>
         </div>
         <div class="modal-body">
-          <form @submit.prevent="saveMeeting">
-            <div class="form-group">
+          <form @submit.prevent="saveMeeting">            <div class="form-group">
               <label>Student</label>
               <select v-model="meetingForm.studentId" required class="form-control">
                 <option value="">Select Student</option>
-                <option v-for="student in advisees" :key="student.id" :value="student.id">
-                  {{ student.name }} ({{ student.id }})
+                <option v-for="student in advisees" :key="student.studentId" :value="student.studentId">
+                  {{ student.name }} ({{ student.studentId }})
                 </option>
               </select>
             </div>
@@ -323,10 +366,14 @@
                   <option value="routine">Routine Check-in</option>
                 </select>
               </div>
-            </div>
-            <div class="form-group">
+            </div>            <div class="form-group">
               <label>Meeting Location</label>
               <input v-model="meetingForm.location" type="text" placeholder="Office, Online, etc." class="form-control">
+            </div>
+            <div class="form-group">
+              <label>Meeting Link <small class="text-muted">(Optional - Zoom, Teams, etc.)</small></label>
+              <input v-model="meetingForm.meetingLink" type="url" placeholder="https://zoom.us/j/..." class="form-control">
+              <small class="text-muted">Paste the meeting link for virtual meetings</small>
             </div>
             <div class="form-group">
               <label>Agenda/Purpose</label>
@@ -399,20 +446,143 @@
             <h5>Meeting Notes</h5>
             <p>{{ selectedMeeting?.notes || 'No notes available' }}</p>
             
-            <h5>Action Items</h5>
-            <p>{{ selectedMeeting?.actionItems || 'No action items specified' }}</p>
+            <h5>Action Items</h5>            <p>{{ selectedMeeting?.actionItems || 'No action items specified' }}</p>
+          </div>        </div>
+      </div>
+    </div>
+
+    <!-- Add/Edit Notes Modal -->
+    <div v-if="showAddNotesModal" class="modal-overlay" @click="closeAddNotesModal">
+      <div class="modal large" @click.stop>
+        <div class="modal-header">
+          <h4>{{ selectedMeetingForNotes ? 'Add Meeting Notes' : 'Add Notes' }} - {{ selectedMeetingForNotes?.student?.name }}</h4>
+          <button @click="closeAddNotesModal" class="close-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>        <div class="modal-body">
+          <div class="meeting-info" v-if="selectedMeetingForNotes && selectedMeetingForNotes.student.name">
+            <div class="info-row">
+              <span class="info-label">Meeting Date:</span>
+              <span>{{ formatDate(selectedMeetingForNotes.date) }} at {{ selectedMeetingForNotes.time }}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Type:</span>
+              <span class="meeting-type-badge" :class="selectedMeetingForNotes.type">{{ formatMeetingType(selectedMeetingForNotes.type) }}</span>
+            </div>
+            <div class="info-row" v-if="selectedMeetingForNotes.agenda">
+              <span class="info-label">Agenda:</span>
+              <span>{{ selectedMeetingForNotes.agenda }}</span>
+            </div>
           </div>
+          
+          <form @submit.prevent="saveNotes">
+            <!-- Student selector for quick notes -->
+            <div class="form-group" v-if="!selectedMeetingForNotes.student.name">
+              <label>Select Student</label>
+              <select v-model="notesForm.selectedStudentId" required class="form-control">
+                <option value="">Choose a student...</option>
+                <option v-for="student in advisees" :key="student.studentId" :value="student.studentId">
+                  {{ student.name }} ({{ student.studentId }})
+                </option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Meeting Notes</label>
+              <textarea 
+                v-model="notesForm.notes" 
+                rows="8" 
+                placeholder="Enter detailed meeting notes here..."
+                class="form-control"
+                required
+              ></textarea>
+              <small class="form-hint">Record key discussion points, student concerns, and observations</small>
+            </div>
+            
+            <div class="form-group">
+              <label>Action Items & Follow-up</label>
+              <textarea 
+                v-model="notesForm.actionItems" 
+                rows="4" 
+                placeholder="List action items and follow-up tasks..."
+                class="form-control"
+              ></textarea>
+              <small class="form-hint">What needs to be done next? Any referrals or resources to provide?</small>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label>Meeting Duration (minutes)</label>
+                <input 
+                  v-model="notesForm.duration" 
+                  type="number" 
+                  min="5" 
+                  max="180" 
+                  class="form-control"
+                  placeholder="60"
+                >
+              </div>
+              <div class="form-group">
+                <label>Next Meeting Date (optional)</label>
+                <input 
+                  v-model="notesForm.nextMeetingDate" 
+                  type="date" 
+                  class="form-control"
+                >
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label>
+                <input 
+                  v-model="notesForm.markAsCompleted" 
+                  type="checkbox" 
+                  class="checkbox"
+                > 
+                Mark this meeting as completed
+              </label>
+            </div>
+            
+            <div class="form-group">
+              <label>
+                <input 
+                  v-model="notesForm.saveToSystem" 
+                  type="checkbox" 
+                  class="checkbox"
+                  checked
+                > 
+                Save notes to student's permanent record
+              </label>
+              <small class="form-hint">This will add the notes to the student's advisor notes in the system</small>
+            </div>
+            
+            <div class="form-actions">
+              <button type="button" @click="closeAddNotesModal" class="cancel-btn">Cancel</button>
+              <button type="submit" class="save-btn" :disabled="!notesForm.notes.trim()">
+                {{ notesForm.saveToSystem ? 'Save Notes & Update Record' : 'Save Notes' }}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
+    </div> <!-- End main-content -->
   </div>
 </template>
 
 <script>
+import { advisorService } from '../../services/advisor.js';
+
 export default {
   name: 'MeetingNotes',
   data() {
     return {
+      currentUser: JSON.parse(localStorage.getItem('user') || '{}'),
+      advisees: [],
+      meetings: [],
+      loading: false,
+      error: null,
       searchQuery: '',
       statusFilter: '',
       typeFilter: '',
@@ -423,80 +593,40 @@ export default {
       itemsPerPage: 10,
       selectAll: false,
       selectedMeetings: [],
-      viewMode: 'table',
-      showScheduleModal: false,
+      viewMode: 'table',      showScheduleModal: false,
       showNotesModal: false,
-      showBulkModal: false,
+      showAddNotesModal: false,
       editingMeeting: null,
-      selectedMeeting: null,
-      currentDate: new Date(),
-      
-      meetingForm: {
+      selectedMeeting: null,      selectedMeetingForNotes: null,
+      currentDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1), // First day of current month
+        meetingForm: {
         studentId: '',
         date: '',
         time: '',
         duration: 60,
         type: 'academic',
         location: '',
+        meetingLink: '',
         agenda: '',
         notes: '',
         actionItems: '',
         status: 'scheduled'
+      },notesForm: {
+        notes: '',
+        actionItems: '',
+        duration: '',
+        nextMeetingDate: '',
+        markAsCompleted: false,
+        saveToSystem: true,
+        selectedStudentId: ''
       },
-
-      // Sample data
-      meetings: [
-        {
-          id: 1,
-          student: { id: 'STU001', name: 'Alice Johnson', avatar: 'AJ' },
-          date: '2024-01-15',
-          time: '10:00',
-          duration: 45,
-          type: 'academic',
-          status: 'completed',
-          location: 'Office 203',
-          agenda: 'Discuss academic progress and course selection for next semester',
-          notes: 'Student is performing well in most courses. Struggling with Mathematics. Recommended tutoring services.',
-          actionItems: 'Register for tutoring, meet again in 2 weeks'
-        },
-        {
-          id: 2,
-          student: { id: 'STU002', name: 'Bob Smith', avatar: 'BS' },
-          date: '2024-01-16',
-          time: '14:30',
-          duration: 30,
-          type: 'career',
-          status: 'scheduled',
-          location: 'Online',
-          agenda: 'Career planning discussion',
-          notes: '',
-          actionItems: ''
-        },
-        {
-          id: 3,
-          student: { id: 'STU003', name: 'Carol Davis', avatar: 'CD' },
-          date: '2024-01-17',
-          time: '09:00',
-          duration: 60,
-          type: 'crisis',
-          status: 'completed',
-          location: 'Office 203',
-          agenda: 'Emergency meeting - academic probation',
-          notes: 'Student facing personal challenges affecting academic performance. Discussed support resources.',
-          actionItems: 'Connect with counseling services, academic support plan'
-        }
-      ],
-
-      advisees: [
-        { id: 'STU001', name: 'Alice Johnson' },
-        { id: 'STU002', name: 'Bob Smith' },
-        { id: 'STU003', name: 'Carol Davis' },
-        { id: 'STU004', name: 'David Wilson' },
-        { id: 'STU005', name: 'Emma Brown' }
-      ],
 
       dayHeaders: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
     }
+  },
+  async mounted() {
+    await this.fetchAdvisees();
+    await this.loadMeetingsFromBackend();
   },
 
   computed: {
@@ -587,19 +717,26 @@ export default {
     },
 
     newMeetingsThisWeek() {
-      return 3; // Mock data
+      const today = new Date();
+      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return this.meetings.filter(meeting => {
+        const meetingDate = new Date(meeting.date);
+        return meetingDate >= weekAgo && meetingDate <= today;
+      }).length;
     },
 
     completionRate() {
       const total = this.meetings.length;
+      if (total === 0) return 0;
       const completed = this.meetings.filter(m => m.status === 'completed').length;
       return Math.round((completed / total) * 100);
     },
 
     averageMeetingDuration() {
       const completed = this.meetings.filter(m => m.duration);
+      if (completed.length === 0) return 0;
       const total = completed.reduce((sum, m) => sum + m.duration, 0);
-      return Math.round(total / completed.length) || 0;
+      return Math.round(total / completed.length);
     },
 
     currentMonthYear() {
@@ -609,9 +746,14 @@ export default {
       });
     },    calendarDates() {
       const dates = [];
-      const firstDay = new Date(this.currentDate.getFullYear(), this.currentDate.getMonth(), 1);
+      const currentYear = this.currentDate.getFullYear();
+      const currentMonth = this.currentDate.getMonth();
+      const firstDay = new Date(currentYear, currentMonth, 1);
       const startDate = new Date(firstDay);
       startDate.setDate(startDate.getDate() - firstDay.getDay());
+
+      // Cache today's date string to avoid creating new Date objects in the loop
+      const todayString = new Date().toISOString().split('T')[0];
 
       for (let i = 0; i < 42; i++) {
         const date = new Date(startDate);
@@ -623,8 +765,8 @@ export default {
         dates.push({
           date: dateString,
           day: date.getDate(),
-          currentMonth: date.getMonth() === this.currentDate.getMonth(),
-          isToday: dateString === new Date().toISOString().split('T')[0],
+          currentMonth: date.getMonth() === currentMonth,
+          isToday: dateString === todayString,
           meetings: meetingsOnDate
         });
       }
@@ -634,6 +776,63 @@ export default {
   },
 
   methods: {
+    // Fetch advisees using existing service
+    async fetchAdvisees() {
+      if (!this.currentUser || !this.currentUser.id) {
+        this.error = 'User not authenticated';
+        return;
+      }
+
+      this.loading = true;
+      this.error = null;
+      
+      try {
+        const response = await advisorService.getAdvisees(this.currentUser.id);
+        
+        if (response.success) {
+          this.advisees = response.data || [];
+        } else {
+          this.error = response.message || 'Failed to fetch advisees';
+        }
+      } catch (error) {
+        console.error('Error fetching advisees:', error);
+        this.error = 'Failed to load advisee data. Please try again.';
+      } finally {
+        this.loading = false;
+      }
+    },    // Load meetings from backend instead of localStorage
+    async loadMeetingsFromBackend() {
+      try {
+        console.log('Loading meetings from backend for advisor:', this.currentUser.id);
+        const response = await advisorService.getMeetings(this.currentUser.id);
+        
+        if (response && response.success && response.data) {
+          this.meetings = response.data;
+          console.log('Loaded meetings from backend:', this.meetings);
+        } else {
+          console.log('No meetings found or API returned unsuccessful response');
+          this.meetings = [];
+        }
+      } catch (error) {
+        console.error('Error loading meetings from backend:', error);
+        // Fallback to empty array if backend fails
+        this.meetings = [];
+      }
+    },
+
+    // Load meetings from localStorage (simple storage) - kept for backward compatibility
+    loadMeetingsFromStorage() {
+      const storedMeetings = localStorage.getItem('advisor_meetings');
+      if (storedMeetings) {
+        this.meetings = JSON.parse(storedMeetings);
+      }
+    },
+
+    // Save meetings to localStorage
+    saveMeetingsToStorage() {
+      localStorage.setItem('advisor_meetings', JSON.stringify(this.meetings));
+    },
+
     // Search and Filter
     clearFilters() {
       this.searchQuery = '';
@@ -676,9 +875,20 @@ export default {
       } else {
         this.selectedMeetings = [];
       }
+    },    // Meeting Actions
+    addNotes(meeting) {
+      this.selectedMeetingForNotes = meeting;
+      this.notesForm = {
+        notes: meeting.notes || '',
+        actionItems: meeting.actionItems || '',
+        duration: meeting.duration || '',
+        nextMeetingDate: '',
+        markAsCompleted: meeting.status !== 'completed',
+        saveToSystem: true
+      };
+      this.showAddNotesModal = true;
     },
 
-    // Meeting Actions
     editMeeting(meeting) {
       this.editingMeeting = meeting;
       this.meetingForm = {
@@ -699,22 +909,45 @@ export default {
     viewNotes(meeting) {
       this.selectedMeeting = meeting;
       this.showNotesModal = true;
-    },
-
-    markComplete(meeting) {
-      meeting.status = 'completed';
-      // Add API call here
-    },
-
-    reschedule(meeting) {
+    },    async markComplete(meeting) {
+      try {
+        meeting.status = 'completed';
+          // Find the student
+        const student = this.advisees.find(s => s.studentId === meeting.student.id);
+        if (student) {
+          // Update meeting status in backend
+          await advisorService.updateMeetingStatus(
+            this.currentUser.id,
+            student.id, // Use numeric ID
+            meeting
+          );
+        }
+        
+        this.saveMeetingsToStorage();
+        alert('Meeting marked as completed!');
+      } catch (error) {
+        console.error('Error marking meeting as complete:', error);
+        alert('Failed to update meeting status. Please try again.');
+        // Revert the status change on error
+        meeting.status = 'scheduled';
+      }
+    },    reschedule(meeting) {
       this.editMeeting(meeting);
-    },
-
-    deleteMeeting(meeting) {
+    },    async deleteMeeting(meeting) {
       if (confirm('Are you sure you want to delete this meeting?')) {
-        const index = this.meetings.findIndex(m => m.id === meeting.id);
-        if (index > -1) {
-          this.meetings.splice(index, 1);
+        try {
+          // Delete meeting from backend using the meetings API
+          if (meeting.id) {
+            await advisorService.deleteMeeting(this.currentUser.id, meeting.id);
+          }
+
+          // Reload meetings from backend to get updated list
+          await this.loadMeetingsFromBackend();
+          
+          alert('Meeting deleted successfully!');
+        } catch (error) {
+          console.error('Error deleting meeting:', error);
+          alert('Failed to delete meeting. Please try again.');
         }
       }
     },
@@ -724,14 +957,26 @@ export default {
       this.showScheduleModal = false;
       this.editingMeeting = null;
       this.resetMeetingForm();
-    },
-
-    closeNotesModal() {
+    },    closeNotesModal() {
       this.showNotesModal = false;
       this.selectedMeeting = null;
     },
 
-    resetMeetingForm() {
+    closeAddNotesModal() {
+      this.showAddNotesModal = false;
+      this.selectedMeetingForNotes = null;
+      this.resetNotesForm();
+    },    resetNotesForm() {
+      this.notesForm = {
+        notes: '',
+        actionItems: '',
+        duration: '',
+        nextMeetingDate: '',
+        markAsCompleted: false,
+        saveToSystem: true,
+        selectedStudentId: ''
+      };
+    },    resetMeetingForm() {
       this.meetingForm = {
         studentId: '',
         date: '',
@@ -739,36 +984,187 @@ export default {
         duration: 60,
         type: 'academic',
         location: '',
+        meetingLink: '',
         agenda: '',
         notes: '',
         actionItems: '',
         status: 'scheduled'
       };
-    },
+    },async saveNotes() {
+      try {
+        const meeting = this.selectedMeetingForNotes;
+        let student;
 
-    saveMeeting() {
-      if (this.editingMeeting) {
-        // Update existing meeting
-        const index = this.meetings.findIndex(m => m.id === this.editingMeeting.id);
-        if (index > -1) {
-          const student = this.advisees.find(s => s.id === this.meetingForm.studentId);
-          this.meetings[index] = {
-            ...this.editingMeeting,
-            student: student,
-            ...this.meetingForm
-          };
+        // Handle quick notes vs regular meeting notes
+        if (meeting.student && meeting.student.name) {
+          // Regular meeting notes - find student by student object
+          student = this.advisees.find(s => s.id === meeting.student.id);
+        } else {
+          // Quick notes - find student by selected ID
+          student = this.advisees.find(s => s.studentId === this.notesForm.selectedStudentId);
+          if (student) {
+            // Update the temporary meeting with student info
+            meeting.student = {
+              id: student.id, 
+              name: student.name,
+              avatar: this.getInitials(student.name)
+            };
+          }
         }
-      } else {
-        // Create new meeting
-        const student = this.advisees.find(s => s.id === this.meetingForm.studentId);
-        const newMeeting = {
-          id: Date.now(),
-          student: student,
-          ...this.meetingForm
-        };
-        this.meetings.push(newMeeting);
+        
+        if (!student) {
+          alert('Please select a valid student');
+          return;
+        }        // Update existing meeting or create new one for quick notes
+        if (meeting.id.toString().startsWith('quick-note-')) {
+          // This is a quick note - create a new meeting record
+          const meetingData = {
+            title: 'Advisor Notes',
+            date: meeting.date,
+            time: meeting.time,
+            duration: parseInt(this.notesForm.duration) || 30,
+            location: 'Advisor Office',
+            meetingLink: '',
+            type: 'routine',
+            status: 'completed',
+            agenda: 'Advisor Note',
+            notes: this.notesForm.notes,
+            actionItems: this.notesForm.actionItems
+          };
+
+          await advisorService.scheduleMeeting(
+            this.currentUser.id,
+            student.id,
+            meetingData
+          );
+        } else {
+          // Update existing meeting with notes
+          await advisorService.updateMeeting(
+            this.currentUser.id,
+            meeting.id,
+            {
+              notes: this.notesForm.notes,
+              action_items: this.notesForm.actionItems,
+              duration: parseInt(this.notesForm.duration) || meeting.duration,
+              status: this.notesForm.markAsCompleted ? 'completed' : meeting.status
+            }
+          );
+        }
+
+        // Schedule next meeting if date provided
+        if (this.notesForm.nextMeetingDate) {          const nextMeetingData = {
+            title: 'Follow-up Meeting',
+            date: this.notesForm.nextMeetingDate,
+            time: '10:00', // Default time
+            duration: 60,
+            location: '',
+            meetingLink: '',
+            type: meeting.type || 'routine',
+            status: 'scheduled',
+            agenda: 'Follow-up discussion'
+          };
+
+          await advisorService.scheduleMeeting(
+            this.currentUser.id,
+            student.id,
+            nextMeetingData
+          );
+        }        // Reload meetings from backend to get updated data
+        await this.loadMeetingsFromBackend();
+
+        // Close modal and reset form
+        this.closeNotesModal();
+        alert('Notes saved successfully!');
+      } catch (error) {
+        console.error('Error saving notes:', error);
+        alert('Failed to save notes. Please try again.');
       }
-      this.closeScheduleModal();
+    },async saveMeeting() {
+      try {
+        const student = this.advisees.find(s => s.studentId === this.meetingForm.studentId);
+        
+        console.log('Current user:', this.currentUser);
+        console.log('Selected student:', student);
+        console.log('All advisees:', this.advisees);
+        
+        if (!student) {
+          alert('Please select a valid student');
+          return;
+        }        if (this.editingMeeting) {
+          // Update existing meeting
+          const index = this.meetings.findIndex(m => m.id === this.editingMeeting.id);
+          if (index > -1) {
+            this.meetings[index] = {
+              ...this.editingMeeting,
+              student: { 
+                id: student.id, // Use numeric ID for consistency 
+                name: student.name,
+                avatar: this.getInitials(student.name)
+              },
+              ...this.meetingForm
+            };
+
+            // Update meeting in backend using the new meetings API
+            await advisorService.updateMeeting(
+              this.currentUser.id,
+              this.editingMeeting.id, // Use meeting ID, not student ID
+              {
+                ...this.meetingForm,
+                student_id: student.id
+              }
+            );
+          }        } else {
+          // Create new meeting using the new meetings API
+          const newMeetingData = {
+            title: this.meetingForm.title || 'Advisor Meeting',
+            date: this.meetingForm.date,
+            time: this.meetingForm.time,
+            duration: this.meetingForm.duration || 60,
+            location: this.meetingForm.location || '',
+            meetingLink: this.meetingForm.meetingLink || '',
+            type: this.meetingForm.type,
+            status: this.meetingForm.status || 'scheduled',
+            agenda: this.meetingForm.agenda || '',
+            notes: this.meetingForm.notes || '',
+            actionItems: this.meetingForm.actionItems || ''
+          };
+
+          console.log('Calling scheduleMeeting with:', {
+            advisorId: this.currentUser.id,
+            studentId: student.id,
+            meetingData: newMeetingData
+          });
+          
+          const response = await advisorService.scheduleMeeting(
+            this.currentUser.id,
+            student.id,
+            newMeetingData
+          );
+
+          // If successful, reload meetings from backend to get the latest data
+          if (response && response.success) {
+            await this.loadMeetingsFromBackend();
+          }
+        }
+
+        // No longer need localStorage storage, everything is in the backend
+        this.closeScheduleModal();
+        
+        // Show success message
+        alert('Meeting saved successfully!');
+      } catch (error) {
+        console.error('Error saving meeting:', error);
+        
+        // Show more detailed error message
+        let errorMessage = 'Failed to save meeting. ';
+        if (error.response && error.response.status === 403) {
+          errorMessage += 'You may not have permission to add notes for this student. Please check if you are assigned as their advisor.';
+        } else {
+          errorMessage += 'Please try again.';
+        }
+        
+        alert(errorMessage);
+      }
     },
 
     // Calendar Navigation
@@ -778,12 +1174,56 @@ export default {
 
     nextMonth() {
       this.currentDate = new Date(this.currentDate.getFullYear(), this.currentDate.getMonth() + 1, 1);
+    },    // Export
+    exportMeetings() {
+      const csvContent = [
+        ['Student', 'Date', 'Time', 'Type', 'Status', 'Duration', 'Notes'].join(','),
+        ...this.meetings.map(meeting => [
+          `"${meeting.student.name}"`,
+          meeting.date,
+          meeting.time,
+          meeting.type,
+          meeting.status,
+          meeting.duration || '',
+          `"${meeting.notes || ''}"`
+        ].join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'meetings.csv';
+      a.click();
+      window.URL.revokeObjectURL(url);
     },
 
-    // Export
-    exportMeetings() {
-      // Mock export functionality
-      console.log('Exporting meetings...');
+    // Quick Notes Modal for adding notes without a scheduled meeting
+    showQuickNotesModal() {
+      // Create a temporary meeting for quick notes
+      this.selectedMeetingForNotes = {
+        id: 'quick-note-' + Date.now(),
+        student: { id: '', name: '' },
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toTimeString().split(':').slice(0,2).join(':'),
+        type: 'routine',
+        status: 'completed',
+        location: '',
+        agenda: 'Quick advisor note',
+        notes: '',
+        actionItems: ''
+      };
+      
+      this.notesForm = {
+        notes: '',
+        actionItems: '',
+        duration: '',
+        nextMeetingDate: '',
+        markAsCompleted: false,
+        saveToSystem: true
+      };
+      
+      this.showAddNotesModal = true;
     },
 
     // Utility Functions
@@ -824,6 +1264,90 @@ export default {
   padding: 24px;
   background-color: #f8fafc;
   min-height: 100vh;
+}
+
+/* Loading State */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f4f6;
+  border-top: 4px solid #457B9D;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-container p {
+  color: #6b7280;
+  font-size: 16px;
+  margin: 0;
+}
+
+/* Error State */
+.error-container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 40px;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.error-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #dc2626;
+  font-size: 16px;
+  margin-bottom: 20px;
+}
+
+.error-icon {
+  width: 24px;
+  height: 24px;
+  color: #dc2626;
+}
+
+.retry-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #457B9D;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin: 0 auto;
+}
+
+.retry-btn:hover {
+  background: #1D3557;
+}
+
+.retry-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* Dashboard Header - Following lecturer pattern */
@@ -887,6 +1411,16 @@ export default {
 
 .action-btn.secondary:hover {
   background: #A8DADC;
+  transform: translateY(-1px);
+}
+
+.action-btn.tertiary {
+  background: #E9C46A;
+  color: #1D3557;
+}
+
+.action-btn.tertiary:hover {
+  background: #F4A261;
   transform: translateY(-1px);
 }
 
@@ -1253,6 +1787,15 @@ export default {
   height: 16px;
 }
 
+.notes-btn {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.notes-btn:hover {
+  background: #fde68a;
+}
+
 .edit-btn {
   background: #f3f4f6;
   color: #374151;
@@ -1593,6 +2136,19 @@ export default {
 textarea.form-control {
   resize: vertical;
   min-height: 80px;
+  font-family: inherit;
+}
+
+.form-hint {
+  color: #6b7280;
+  font-size: 12px;
+  margin-top: 4px;
+  display: block;
+}
+
+.checkbox {
+  margin-right: 8px;
+  width: auto;
 }
 
 .form-actions {
@@ -1636,6 +2192,27 @@ textarea.form-control {
 }
 
 /* Meeting Details */
+.meeting-info {
+  background: #f9fafb;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 12px;
+}
+
+.info-label {
+  font-weight: 500;
+  color: #374151;
+  width: 120px;
+  flex-shrink: 0;
+}
+
 .meeting-details {
   background: #f9fafb;
   padding: 20px;
@@ -1704,7 +2281,6 @@ textarea.form-control {
   .table-container {
     overflow-x: scroll;
   }
-
   .data-table {
     min-width: 800px;
   }
@@ -1717,5 +2293,41 @@ textarea.form-control {
     width: 95%;
     margin: 20px;
   }
+}
+
+/* Meeting link styling */
+.location-link-info {
+  font-size: 0.9rem;
+}
+
+.location {
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.meeting-link {
+  margin-top: 4px;
+}
+
+.link-btn {
+  display: inline-block;
+  padding: 4px 8px;
+  background: #e3f2fd;
+  color: #1976d2;
+  text-decoration: none;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.link-btn:hover {
+  background: #bbdefb;
+  text-decoration: none;
+  color: #0d47a1;
+}
+
+.no-location {
+  color: #999;
+  font-style: italic;
 }
 </style>
