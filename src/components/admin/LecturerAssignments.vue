@@ -3,14 +3,25 @@
         <div class="header">
             <h2>Lecturer Assignments</h2>
             <p>Manage lecturer assignments to courses</p>
-        </div>
-
-        <div class="filters">
-            <input v-model="search" placeholder="Search lecturers or courses..." class="search-input">
+        </div>        <div class="filters">
+            <input v-model="search" placeholder="Search courses..." class="search-input">
             <select v-model="semesterFilter" class="semester-filter">
                 <option value="">All Semesters</option>
                 <option v-for="semester in semesters" :key="semester" :value="semester">
                     {{ semester }}
+                </option>
+            </select>
+            <select v-model="yearFilter" class="year-filter">
+                <option value="">All Years</option>
+                <option v-for="year in availableYears" :key="year" :value="year">
+                    {{ year }}
+                </option>
+            </select>
+            <select v-model="lecturerFilter" class="lecturer-filter">
+                <option value="">All Lecturers</option>
+                <option value="unassigned">Unassigned</option>
+                <option v-for="lecturer in lecturers" :key="lecturer.id" :value="lecturer.id">
+                    {{ lecturer.name }}
                 </option>
             </select>
         </div>
@@ -53,33 +64,40 @@ export default {
         SearchableDropdown
     },
     data() {
-        return {
-            courses: [],
+        return {            courses: [],
             lecturers: [],
             search: '',
             semesterFilter: '',
+            yearFilter: '',
+            lecturerFilter: '',
             semesters: [
-                '2024/2025-1',
-                '2024/2025-2',
-                '2025/2026-1',
-                '2025/2026-2',
-                '2026/2027-1',
-                '2026/2027-2'
-            ]
+                'SEM 1',
+                'SEM 2'
+            ],
+            availableYears: []
         }
     },
-    computed: {
-        filteredCourses() {
+    computed: {        filteredCourses() {
             return this.courses.filter(course => {
                 const matchesSearch =
                     course.code.toLowerCase().includes(this.search.toLowerCase()) ||
                     course.name.toLowerCase().includes(this.search.toLowerCase()) ||
                     (course.lecturer_name && course.lecturer_name.toLowerCase().includes(this.search.toLowerCase()));
 
-                const matchesSemester = !this.semesterFilter ||
-                    `${course.semester} ${course.year}` === this.semesterFilter;
+                const matchesSemester = !this.semesterFilter || course.semester === this.semesterFilter;
+                
+                const matchesYear = !this.yearFilter || course.year === this.yearFilter;
+                
+                let matchesLecturer = true;
+                if (this.lecturerFilter) {
+                    if (this.lecturerFilter === 'unassigned') {
+                        matchesLecturer = !course.lecturer_id;
+                    } else {
+                        matchesLecturer = course.lecturer_id && course.lecturer_id.toString() === this.lecturerFilter.toString();
+                    }
+                }
 
-                return matchesSearch && matchesSemester;
+                return matchesSearch && matchesSemester && matchesYear && matchesLecturer;
             });
         }
     },
@@ -91,11 +109,18 @@ export default {
             try {
                 const response = await api.get('/courses');
                 this.courses = response.data;
+                this.extractAvailableYears();
             } catch (error) {
                 console.error('Error fetching courses:', error);
                 // Removed alert - just log the error
             }
-        }, async fetchLecturers() {
+        },
+        
+        extractAvailableYears() {
+            // Extract unique years from courses and sort them
+            const years = [...new Set(this.courses.map(course => course.year))];
+            this.availableYears = years.sort();
+        },async fetchLecturers() {
             try {
                 // Fetch all users and filter for lecturers
                 const response = await api.get('/api/admin/users');
@@ -159,17 +184,28 @@ export default {
     display: flex;
     gap: 15px;
     margin-bottom: 20px;
+    flex-wrap: wrap;
 }
 
 .search-input,
-.semester-filter {
+.semester-filter,
+.year-filter,
+.lecturer-filter {
     padding: 8px;
     border: 1px solid #ddd;
     border-radius: 4px;
 }
 
 .search-input {
+    flex: 2;
+    min-width: 200px;
+}
+
+.semester-filter,
+.year-filter,
+.lecturer-filter {
     flex: 1;
+    min-width: 150px;
 }
 
 .assignments-table {
@@ -204,6 +240,14 @@ th {
 @media (max-width: 768px) {
     .filters {
         flex-direction: column;
+    }
+    
+    .search-input,
+    .semester-filter,
+    .year-filter,
+    .lecturer-filter {
+        width: 100%;
+        min-width: auto;
     }
 
     .assignments-table {

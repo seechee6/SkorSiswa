@@ -188,8 +188,8 @@ export default {
         course_id: '',
         student_id: ''
       },      semesters: [
-        '1',
-        '2'
+        'SEM 1',
+        'SEM 2'
       ],
       availableYears: []
     }
