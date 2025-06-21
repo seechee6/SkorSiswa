@@ -1052,4 +1052,404 @@ $app->post('/test/create-notification', function (Request $request, Response $re
 // Include student routes
 require __DIR__ . '/../src/routes/student.php';
 
+// ===================== REMARK REQUESTS =====================
+// Get all remark requests for a student
+$app->get('/students/{student_id}/remark-requests', function (Request $request, Response $response, $args) use ($pdo) {
+    $studentId = $args['student_id'];
+    
+    try {
+        $stmt = $pdo->prepare('
+            SELECT 
+                rr.*,
+                a.name as assessment_name,
+                a.max_mark,
+                c.code as course_code,
+                c.name as course_name,
+                u.full_name as lecturer_name
+            FROM remark_requests rr
+            JOIN assessments a ON rr.assessment_id = a.id
+            JOIN enrollments e ON rr.enrollment_id = e.id
+            JOIN courses c ON e.course_id = c.id
+            JOIN users u ON c.lecturer_id = u.id
+            WHERE rr.student_id = ?
+            ORDER BY rr.created_at DESC
+        ');
+        $stmt->execute([$studentId]);
+        $requests = $stmt->fetchAll();
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'requests' => $requests
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Create a new remark request
+$app->post('/remark-requests', function (Request $request, Response $response) use ($pdo) {
+    $data = $request->getParsedBody();
+    
+    try {
+        // Validate required fields
+        if (!isset($data['student_id'], $data['assessment_id'], $data['justification'], $data['requested_mark'])) {
+            $response->getBody()->write(json_encode(['error' => 'Missing required fields']));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Get enrollment ID and current mark
+        $stmt = $pdo->prepare('
+            SELECT e.id as enrollment_id, am.mark as current_mark, c.lecturer_id, a.max_mark
+            FROM enrollments e
+            JOIN courses c ON e.course_id = c.id
+            JOIN assessments a ON a.course_id = c.id
+            LEFT JOIN assessment_marks am ON am.enrollment_id = e.id AND am.assessment_id = a.id
+            WHERE e.student_id = ? AND a.id = ?
+        ');
+        $stmt->execute([$data['student_id'], $data['assessment_id']]);
+        $enrollmentData = $stmt->fetch();
+        
+        if (!$enrollmentData) {
+            $response->getBody()->write(json_encode(['error' => 'Invalid assessment or enrollment not found']));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Check if there's already a pending request for this assessment
+        $stmt = $pdo->prepare('
+            SELECT id FROM remark_requests 
+            WHERE student_id = ? AND assessment_id = ? AND status IN ("pending", "under_review")
+        ');
+        $stmt->execute([$data['student_id'], $data['assessment_id']]);
+        $existingRequest = $stmt->fetch();
+        
+        if ($existingRequest) {
+            $response->getBody()->write(json_encode(['error' => 'You already have a pending remark request for this assessment']));
+            return $response->withStatus(409)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Validate requested mark
+        if ($data['requested_mark'] > $enrollmentData['max_mark'] || $data['requested_mark'] < 0) {
+            $response->getBody()->write(json_encode(['error' => 'Requested mark must be between 0 and maximum mark']));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Create the remark request
+        $stmt = $pdo->prepare('
+            INSERT INTO remark_requests 
+            (student_id, enrollment_id, assessment_id, current_mark, requested_mark, justification, lecturer_id) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ');
+        $stmt->execute([
+            $data['student_id'],
+            $enrollmentData['enrollment_id'],
+            $data['assessment_id'],
+            $enrollmentData['current_mark'] ?? 0,
+            $data['requested_mark'],
+            $data['justification'],
+            $enrollmentData['lecturer_id']
+        ]);
+        
+        $requestId = $pdo->lastInsertId();
+        
+        // Create notification for lecturer
+        $stmt = $pdo->prepare('
+            SELECT a.name as assessment_name, c.code as course_code, u.full_name as student_name
+            FROM assessments a
+            JOIN courses c ON a.course_id = c.id
+            JOIN users u ON u.id = ?
+            WHERE a.id = ?
+        ');
+        $stmt->execute([$data['student_id'], $data['assessment_id']]);
+        $notificationData = $stmt->fetch();
+        
+        $message = "New remark request from {$notificationData['student_name']} for {$notificationData['assessment_name']} in {$notificationData['course_code']}";
+        createNotification($pdo, $enrollmentData['lecturer_id'], $message);
+        
+        // Create notification for student
+        createNotification($pdo, $data['student_id'], "Your remark request for {$notificationData['assessment_name']} has been submitted and is under review");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'request_id' => $requestId,
+            'message' => 'Remark request submitted successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Update a remark request (student can edit pending requests)
+$app->put('/remark-requests/{id}', function (Request $request, Response $response, $args) use ($pdo) {
+    $requestId = $args['id'];
+    $data = $request->getParsedBody();
+    
+    try {
+        // Check if request exists and is editable
+        $stmt = $pdo->prepare('SELECT * FROM remark_requests WHERE id = ? AND status = "pending"');
+        $stmt->execute([$requestId]);
+        $existingRequest = $stmt->fetch();
+        
+        if (!$existingRequest) {
+            $response->getBody()->write(json_encode(['error' => 'Remark request not found or cannot be edited']));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Validate student ownership
+        if ($existingRequest['student_id'] != $data['student_id']) {
+            $response->getBody()->write(json_encode(['error' => 'Unauthorized to edit this request']));
+            return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Update the request
+        $stmt = $pdo->prepare('
+            UPDATE remark_requests 
+            SET requested_mark = ?, justification = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ');
+        $stmt->execute([$data['requested_mark'], $data['justification'], $requestId]);
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Remark request updated successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Cancel a remark request
+$app->delete('/remark-requests/{id}', function (Request $request, Response $response, $args) use ($pdo) {
+    $requestId = $args['id'];
+    $data = $request->getParsedBody();
+    
+    try {
+        // Check if request exists and is cancellable
+        $stmt = $pdo->prepare('SELECT * FROM remark_requests WHERE id = ? AND status IN ("pending", "under_review")');
+        $stmt->execute([$requestId]);
+        $existingRequest = $stmt->fetch();
+        
+        if (!$existingRequest) {
+            $response->getBody()->write(json_encode(['error' => 'Remark request not found or cannot be cancelled']));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Validate student ownership
+        if ($existingRequest['student_id'] != $data['student_id']) {
+            $response->getBody()->write(json_encode(['error' => 'Unauthorized to cancel this request']));
+            return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Delete the request
+        $stmt = $pdo->prepare('DELETE FROM remark_requests WHERE id = ?');
+        $stmt->execute([$requestId]);
+        
+        // Notify lecturer about cancellation
+        createNotification($pdo, $existingRequest['lecturer_id'], "A remark request has been cancelled by the student");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Remark request cancelled successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Get remark requests for lecturer to review
+$app->get('/lecturers/{lecturer_id}/remark-requests', function (Request $request, Response $response, $args) use ($pdo) {
+    $lecturerId = $args['lecturer_id'];
+    
+    try {
+        $stmt = $pdo->prepare('
+            SELECT 
+                rr.*,
+                a.name as assessment_name,
+                a.max_mark,
+                c.code as course_code,
+                c.name as course_name,
+                u.full_name as student_name,
+                u.matric_no as student_matric
+            FROM remark_requests rr
+            JOIN assessments a ON rr.assessment_id = a.id
+            JOIN enrollments e ON rr.enrollment_id = e.id
+            JOIN courses c ON e.course_id = c.id
+            JOIN users u ON rr.student_id = u.id
+            WHERE rr.lecturer_id = ?
+            ORDER BY rr.created_at DESC
+        ');
+        $stmt->execute([$lecturerId]);
+        $requests = $stmt->fetchAll();
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'requests' => $requests
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Lecturer responds to remark request
+$app->post('/remark-requests/{id}/respond', function (Request $request, Response $response, $args) use ($pdo) {
+    $requestId = $args['id'];
+    $data = $request->getParsedBody();
+    
+    try {
+        // Validate required fields
+        if (!isset($data['status'], $data['lecturer_response'])) {
+            $response->getBody()->write(json_encode(['error' => 'Status and response are required']));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Validate status
+        if (!in_array($data['status'], ['approved', 'rejected', 'under_review'])) {
+            $response->getBody()->write(json_encode(['error' => 'Invalid status']));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Get the request
+        $stmt = $pdo->prepare('SELECT * FROM remark_requests WHERE id = ?');
+        $stmt->execute([$requestId]);
+        $remarkRequest = $stmt->fetch();
+        
+        if (!$remarkRequest) {
+            $response->getBody()->write(json_encode(['error' => 'Remark request not found']));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Validate lecturer ownership
+        if ($remarkRequest['lecturer_id'] != $data['lecturer_id']) {
+            $response->getBody()->write(json_encode(['error' => 'Unauthorized to respond to this request']));
+            return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Start transaction
+        $pdo->beginTransaction();
+        
+        // Update the request
+        $stmt = $pdo->prepare('
+            UPDATE remark_requests 
+            SET status = ?, lecturer_response = ?, reviewed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ');
+        $stmt->execute([$data['status'], $data['lecturer_response'], $requestId]);
+        
+        // If approved, update the actual mark
+        if ($data['status'] === 'approved') {
+            $stmt = $pdo->prepare('
+                UPDATE assessment_marks 
+                SET mark = ? 
+                WHERE enrollment_id = ? AND assessment_id = ?
+            ');
+            $stmt->execute([
+                $remarkRequest['requested_mark'],
+                $remarkRequest['enrollment_id'],
+                $remarkRequest['assessment_id']
+            ]);
+            
+            // Create notification for mark update
+            $stmt = $pdo->prepare('
+                SELECT a.name as assessment_name, c.code as course_code
+                FROM assessments a
+                JOIN courses c ON a.course_id = c.id
+                WHERE a.id = ?
+            ');
+            $stmt->execute([$remarkRequest['assessment_id']]);
+            $assessmentInfo = $stmt->fetch();
+            
+            $message = "Your remark request for {$assessmentInfo['assessment_name']} in {$assessmentInfo['course_code']} has been approved. Your mark has been updated to {$remarkRequest['requested_mark']}.";
+        } else {
+            $message = "Your remark request has been {$data['status']}. Please check the lecturer's response for details.";
+        }
+        
+        // Create notification for student
+        createNotification($pdo, $remarkRequest['student_id'], $message);
+        
+        $pdo->commit();
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Response submitted successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Get student's courses with assessment details for remark request form
+$app->get('/students/{student_id}/courses-with-assessments', function (Request $request, Response $response, $args) use ($pdo) {
+    $studentId = $args['student_id'];
+    
+    try {
+        $stmt = $pdo->prepare('
+            SELECT 
+                c.id as course_id,
+                c.code,
+                c.name as course_name,
+                a.id as assessment_id,
+                a.name as assessment_name,
+                a.max_mark,
+                am.mark as current_mark
+            FROM enrollments e
+            JOIN courses c ON e.course_id = c.id
+            JOIN assessments a ON a.course_id = c.id
+            LEFT JOIN assessment_marks am ON am.enrollment_id = e.id AND am.assessment_id = a.id
+            WHERE e.student_id = ? AND am.mark IS NOT NULL
+            ORDER BY c.code, a.name
+        ');
+        $stmt->execute([$studentId]);
+        $results = $stmt->fetchAll();
+        
+        // Group by course
+        $courses = [];
+        foreach ($results as $row) {
+            $courseId = $row['course_id'];
+            if (!isset($courses[$courseId])) {
+                $courses[$courseId] = [
+                    'id' => $courseId,
+                    'code' => $row['code'],
+                    'name' => $row['course_name'],
+                    'assessments' => []
+                ];
+            }
+            
+            $courses[$courseId]['assessments'][] = [
+                'id' => $row['assessment_id'],
+                'name' => $row['assessment_name'],
+                'max_mark' => $row['max_mark'],
+                'current_mark' => $row['current_mark']
+            ];
+        }
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'courses' => array_values($courses)
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
 $app->run();

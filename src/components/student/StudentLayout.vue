@@ -73,22 +73,16 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
             </svg>
             <span class="nav-label">Performance Trends</span>
-          </router-link>
-
-          <router-link to="/student/remarks" class="nav-item" active-class="active">
+          </router-link>          <router-link to="/student/remarks" class="nav-item" active-class="active">
             <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
             </svg>
             <span class="nav-label">Remark Requests</span>
-            <span v-if="unreadRemarks > 0" class="notification-badge">{{ unreadRemarks }}</span>
-          </router-link>
-
-          <router-link to="/student/notifications" class="nav-item" active-class="active">
+          </router-link>          <router-link to="/student/notifications" class="nav-item" active-class="active">
             <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5-5v5M6 17h5l-5-5v5m0 0V7a2 2 0 012-2h4a2 2 0 012 2v6"></path>
             </svg>
             <span class="nav-label">Notifications</span>
-            <span v-if="hasNewNotifications" class="notification-badge">New</span>
           </router-link>
         </nav>
       </div>
@@ -103,11 +97,9 @@
 
 <script>
 export default {
-  name: 'StudentLayout',
-  data() {
+  name: 'StudentLayout',  data() {
     return {
-      user: null,
-      unreadRemarks: 0
+      user: null
     };
   },
   mounted() {
@@ -118,11 +110,9 @@ export default {
     logout() {
       localStorage.removeItem('user');
       this.$router.push('/');
-    },
-    async fetchNotificationCount() {
+    },    async fetchNotificationCount() {
       try {
-        // Simulate fetching unread remark requests
-        this.unreadRemarks = Math.floor(Math.random() * 3); // Random 0-2 unread remark requests
+        // No random generation needed
       } catch (error) {
         console.error('Error fetching notifications:', error);
       }

@@ -48,9 +48,11 @@
           <div v-if="remark.lecturer_response" class="remark-response">
             <h4>Lecturer Response:</h4>
             <p>{{ remark.lecturer_response }}</p>
-          </div>
-          <div class="remark-actions" v-if="remark.status === 'Pending'">
+          </div>          <div class="remark-actions" v-if="remark.status === 'Pending'">
             <button @click="editRequest(remark)" class="edit-btn">Edit</button>
+            <button @click="confirmCancel(remark.id)" class="cancel-btn">Cancel</button>
+          </div>
+          <div class="remark-actions" v-else-if="remark.status === 'Under Review'">
             <button @click="confirmCancel(remark.id)" class="cancel-btn">Cancel</button>
           </div>
         </div>
@@ -172,79 +174,77 @@ export default {
       }
     }
   },
-  methods: {
-    async fetchRemarks() {
+  methods: {    async fetchRemarks() {
       this.loading = true
       this.error = ''
       
       try {
         const user = JSON.parse(localStorage.getItem('user'))
-        const response = await api.get(`/users/${user.id}/remarks`)
-        this.remarks = response.data
+        const response = await api.get(`/students/${user.id}/remark-requests`)
+        this.remarks = response.data.requests.map(request => ({
+          id: request.id,
+          component_name: request.assessment_name,
+          course_name: `${request.course_code} - ${request.course_name}`,
+          course_id: request.course_id || 0,
+          component_id: request.assessment_id,
+          current_mark: request.current_mark,
+          max_mark: request.max_mark,
+          requested_mark: request.requested_mark,
+          status: this.capitalizeStatus(request.status),
+          justification: request.justification,
+          lecturer_response: request.lecturer_response,
+          created_at: request.created_at
+        }))
       } catch (error) {
         this.error = 'Failed to load remark requests'
         console.error('Error fetching remarks:', error)
       } finally {
         this.loading = false
       }
-    },
-    async fetchCourses() {
+    },    async fetchCourses() {
       try {
         const user = JSON.parse(localStorage.getItem('user'))
-        const response = await api.get(`/users/${user.id}/courses`)
-        this.courses = response.data
+        const response = await api.get(`/students/${user.id}/courses-with-assessments`)
+        this.courses = response.data.courses
       } catch (error) {
         this.error = 'Failed to load courses'
         console.error('Error fetching courses:', error)
       }
-    },
-    async fetchComponents() {
+    },    async fetchComponents() {
       if (!this.requestForm.course_id) return
       
       try {
-        const response = await api.get(`/courses/${this.requestForm.course_id}/components`)
-        this.components = response.data
+        const selectedCourse = this.courses.find(c => c.id == this.requestForm.course_id)
+        this.components = selectedCourse ? selectedCourse.assessments : []
         this.requestForm.component_id = ''
         this.currentMark = null
+        this.currentMaxMark = null
       } catch (error) {
         this.error = 'Failed to load assessment components'
         console.error('Error fetching components:', error)
       }
-    },
-    async updateCurrentMark() {
+    },    async updateCurrentMark() {
       if (!this.requestForm.component_id) {
         this.currentMark = null
+        this.currentMaxMark = null
         return
       }
       
       try {
-        const user = JSON.parse(localStorage.getItem('user'))
-        const enrollment = await api.get(`/courses/${this.requestForm.course_id}/enrollment/${user.id}`)
-        const enrollmentId = enrollment.data.id
-        
-        const marksRes = await api.get(`/enrollments/${enrollmentId}/marks`)
-        const componentId = parseInt(this.requestForm.component_id)
-        const markEntry = marksRes.data.find(m => m.component_id === componentId)
-        
-        const component = this.components.find(c => c.id === componentId)
-        this.currentMaxMark = component.max_mark
-        
-        if (markEntry) {
-          this.currentMark = markEntry.mark
+        const selectedComponent = this.components.find(c => c.id == this.requestForm.component_id)
+        if (selectedComponent) {
+          this.currentMark = selectedComponent.current_mark
+          this.currentMaxMark = selectedComponent.max_mark
           this.requestForm.requested_mark = Math.min(
-            Math.ceil(markEntry.mark * 1.1), // Increase by 10% as default
-            component.max_mark
+            Math.ceil(selectedComponent.current_mark * 1.1), // Increase by 10% as default
+            selectedComponent.max_mark
           )
-        } else {
-          this.currentMark = 0
-          this.requestForm.requested_mark = 0
         }
       } catch (error) {
         this.error = 'Failed to retrieve current mark'
         console.error('Error fetching mark:', error)
       }
-    },
-    editRequest(remark) {
+    },    editRequest(remark) {
       this.editMode = true
       this.requestForm = {
         id: remark.id,
@@ -253,12 +253,15 @@ export default {
         requested_mark: remark.requested_mark,
         justification: remark.justification
       }
-      this.fetchComponents()
+      
+      // Set current mark data
       this.currentMark = remark.current_mark
       this.currentMaxMark = remark.max_mark
+      
+      // Fetch components for the selected course
+      this.fetchComponents()
       this.showNewRequestForm = true
-    },
-    async submitRequest() {
+    },    async submitRequest() {
       if (this.isSubmitting) return
       
       this.isSubmitting = true
@@ -267,20 +270,22 @@ export default {
       try {
         const user = JSON.parse(localStorage.getItem('user'))
         const requestData = {
-          ...this.requestForm,
-          user_id: user.id
+          student_id: user.id,
+          assessment_id: this.requestForm.component_id,
+          requested_mark: this.requestForm.requested_mark,
+          justification: this.requestForm.justification
         }
         
         if (this.editMode) {
-          await api.put(`/remarks/${this.requestForm.id}`, requestData)
+          await api.put(`/remark-requests/${this.requestForm.id}`, requestData)
         } else {
-          await api.post('/remarks', requestData)
+          await api.post('/remark-requests', requestData)
         }
         
         this.closeModal()
         this.fetchRemarks()
       } catch (error) {
-        this.error = `Failed to ${this.editMode ? 'update' : 'submit'} remark request`
+        this.error = error.response?.data?.error || `Failed to ${this.editMode ? 'update' : 'submit'} remark request`
         console.error('Error with remark request:', error)
       } finally {
         this.isSubmitting = false
@@ -289,18 +294,20 @@ export default {
     confirmCancel(id) {
       this.cancelId = id
       this.showCancelConfirm = true
-    },
-    async cancelRequest() {
+    },    async cancelRequest() {
       if (this.isSubmitting) return
       
       this.isSubmitting = true
       
       try {
-        await api.delete(`/remarks/${this.cancelId}`)
+        const user = JSON.parse(localStorage.getItem('user'))
+        await api.delete(`/remark-requests/${this.cancelId}`, {
+          data: { student_id: user.id }
+        })
         this.showCancelConfirm = false
         this.fetchRemarks()
       } catch (error) {
-        this.error = 'Failed to cancel remark request'
+        this.error = error.response?.data?.error || 'Failed to cancel remark request'
         console.error('Error cancelling remark:', error)
       } finally {
         this.isSubmitting = false
@@ -326,9 +333,19 @@ export default {
         'Pending': 'pending',
         'Approved': 'approved',
         'Rejected': 'rejected',
-        'Cancelled': 'cancelled'
+        'Cancelled': 'cancelled',
+        'Under Review': 'under-review'
       }
       return statusClasses[status] || 'pending'
+    },
+    capitalizeStatus(status) {
+      const statusMap = {
+        'pending': 'Pending',
+        'under_review': 'Under Review',
+        'approved': 'Approved',
+        'rejected': 'Rejected'
+      }
+      return statusMap[status] || status
     }
   },
   mounted() {
@@ -424,6 +441,11 @@ export default {
 .status-badge.cancelled {
   background: #f5f6fa;
   color: #7f8c8d;
+}
+
+.status-badge.under-review {
+  background: #e3f2fd;
+  color: #1976d2;
 }
 
 .remark-details {

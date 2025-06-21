@@ -24,6 +24,7 @@ import StudentNotifications from '../components/student/StudentNotifications.vue
 import AdvisorDashboard from '../components/advisor/AdvisorDashboard.vue'
 import AdminDashboard from '../components/admin/AdminDashboard.vue'
 import Login from '../components/Login.vue'
+import RemarkReviews from '../components/lecturer/RemarkReviews.vue'
 
 const routes = [
   { path: '/', component: Login },
@@ -44,7 +45,8 @@ const routes = [
       { path: 'mark-breakdown', component: FullMarkBreakdown },
       { path: 'analytics', component: LecturerAnalytics },
       { path: 'trend-graphs', component: TrendGraphs },
-      { path: 'notifications', component: LecturerNotifications }
+      { path: 'notifications', component: LecturerNotifications },
+      { path: 'remark-reviews', component: RemarkReviews }
     ]
   },  {
     path: '/student',

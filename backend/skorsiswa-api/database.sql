@@ -122,11 +122,22 @@ CREATE TABLE advisor_notes (
 
 CREATE TABLE remark_requests (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT NOT NULL,
     enrollment_id INT NOT NULL,
-    reason TEXT NOT NULL,
-    status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+    assessment_id INT NOT NULL,
+    current_mark DECIMAL(5,2) NOT NULL,
+    requested_mark DECIMAL(5,2) NOT NULL,
+    justification TEXT NOT NULL,
+    status ENUM('pending', 'approved', 'rejected', 'under_review') DEFAULT 'pending',
+    lecturer_response TEXT NULL,
+    lecturer_id INT NOT NULL,
+    reviewed_at DATETIME NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (enrollment_id) REFERENCES enrollments(id)
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id) REFERENCES users(id),
+    FOREIGN KEY (enrollment_id) REFERENCES enrollments(id),
+    FOREIGN KEY (assessment_id) REFERENCES assessments(id),
+    FOREIGN KEY (lecturer_id) REFERENCES users(id)
 );
 
 CREATE TABLE system_logs (

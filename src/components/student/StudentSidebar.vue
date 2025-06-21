@@ -35,20 +35,16 @@
       </svg>
       <span class="nav-label">Performance & Simulator</span>
     </router-link>
-    
-    <router-link to="/student/remarks" class="nav-item" active-class="active">
+      <router-link to="/student/remarks" class="nav-item" active-class="active">
       <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
       </svg>
       <span class="nav-label">Remark Requests</span>
-      <span v-if="unreadRemarks > 0" class="notification-badge">{{ unreadRemarks }}</span>
-    </router-link>
-      <router-link to="/student/notifications" class="nav-item" active-class="active">
+    </router-link>      <router-link to="/student/notifications" class="nav-item" active-class="active">
       <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5 5v-5zM9 17h5l-5 5v-5zM21 12H3M21 6H3"></path>
       </svg>
       <span class="nav-label">Notifications</span>
-      <span v-if="unreadNotifications > 0" class="notification-badge">{{ unreadNotifications }}</span>
     </router-link>
   </nav>
 </template>
@@ -57,46 +53,7 @@
 import api from '../../api'
 
 export default {
-  name: 'StudentSidebar',
-  data() {
-    return {
-      unreadRemarks: 0,
-      unreadNotifications: 0
-    }
-  },
-  methods: {
-    async fetchNotificationCount() {
-      try {
-        const user = JSON.parse(localStorage.getItem('user'))
-        if (user && user.id) {
-          const response = await api.get(`/student/notifications/${user.id}`)
-          if (response.data.success) {
-            this.unreadNotifications = response.data.unread_count || 0
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching notification count:', error)
-        // Fail silently to not disrupt sidebar functionality
-      }
-    }
-  },
-  mounted() {
-    // Simulate fetching unread remark requests
-    this.unreadRemarks = Math.floor(Math.random() * 3); // Random 0-2 unread remark requests
-    
-    // Fetch real notification count
-    this.fetchNotificationCount()
-    
-    // Refresh notification count every 30 seconds
-    this.notificationInterval = setInterval(() => {
-      this.fetchNotificationCount()
-    }, 30000)
-  },
-  beforeUnmount() {
-    if (this.notificationInterval) {
-      clearInterval(this.notificationInterval)
-    }
-  }
+  name: 'StudentSidebar'
 }
 </script>
 

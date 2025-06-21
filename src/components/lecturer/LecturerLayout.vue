@@ -66,13 +66,19 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
             </svg>
             <span class="nav-label">Manage Marks</span>
-          </router-link>
-
-          <router-link to="/lecturer/feedback" class="nav-item" active-class="active">
+          </router-link>          <router-link to="/lecturer/feedback" class="nav-item" active-class="active">
             <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
             </svg>
             <span class="nav-label">Feedback</span>
+          </router-link>
+
+          <router-link to="/lecturer/remark-reviews" class="nav-item" active-class="active">
+            <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            <span class="nav-label">Remark Reviews</span>
+            <span v-if="pendingRemarksCount > 0" class="notification-badge">{{ pendingRemarksCount }}</span>
           </router-link>
 
           <div class="nav-section">
@@ -104,17 +110,21 @@
 </template>
 
 <script>
+import api from '../../api'
+
 export default {
   name: 'LecturerLayout',
   data() {
     return {
       user: null,
-      unreadCount: 0
+      unreadCount: 0,
+      pendingRemarksCount: 0
     };
   },
   mounted() {
     this.user = JSON.parse(localStorage.getItem('user') || '{}');
     this.fetchNotificationCount();
+    this.fetchPendingRemarksCount();
   },
   methods: {
     logout() {
@@ -127,6 +137,16 @@ export default {
         this.unreadCount = 3; // Placeholder
       } catch (error) {
         console.error('Error fetching notifications:', error);
+      }
+    },
+    async fetchPendingRemarksCount() {
+      try {
+        if (this.user?.id) {
+          const response = await api.get(`/lecturers/${this.user.id}/remark-requests?status=pending`);
+          this.pendingRemarksCount = response.data.requests ? response.data.requests.length : 0;
+        }
+      } catch (error) {
+        console.error('Error fetching pending remarks count:', error);
       }
     }
   }
