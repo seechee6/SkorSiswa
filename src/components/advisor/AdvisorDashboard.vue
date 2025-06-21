@@ -301,25 +301,31 @@ export default {
 
 <style scoped>
 .advisor-dashboard {
-  padding: 0 16px;
+  padding: 24px;
+  background-color: #f8fafc;
+  min-height: 100vh;
 }
 
 .dashboard-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  margin-bottom: 32px;
+  padding: 24px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .header-content h2 {
-  margin: 0;
+  margin: 0 0 8px 0;
   font-size: 28px;
   font-weight: 700;
   color: #1D3557;
 }
 
 .welcome-text {
-  margin: 8px 0 0;
+  margin: 0;
   color: #6c757d;
   font-size: 16px;
 }
@@ -328,19 +334,19 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
-  background-color: #fff;
-  border: 1px solid #dee2e6;
-  padding: 8px 16px;
-  border-radius: 6px;
+  background: #F1FAEE;
+  color: #1D3557;
+  border: none;
+  padding: 12px 16px;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
   font-size: 14px;
-  color: #1D3557;
+  font-weight: 500;
 }
 
 .refresh-btn:hover {
-  border-color: #457B9D;
-  background-color: #f8f9fa;
+  background: #A8DADC;
   transform: translateY(-1px);
 }
 
@@ -354,9 +360,13 @@ export default {
 .card {
   background: white;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-  border: 1px solid #f1f3f4;
+  transition: transform 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-2px);
 }
 
 .overview-card {

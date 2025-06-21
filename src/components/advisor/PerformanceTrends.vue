@@ -1,9 +1,10 @@
 <template>
   <div class="performance-trends">
-    <div class="header-section">
-      <div class="title-section">
-        <h3>Performance Trend Graphs</h3>
-        <p class="page-description">Visual trend analysis and performance tracking for advisees</p>
+    <!-- Dashboard Header -->
+    <div class="dashboard-header">
+      <div class="header-content">
+        <h2>Performance Trend Graphs</h2>
+        <p class="welcome-text">Visual trend analysis and performance tracking for advisees</p>
       </div>
       <div class="header-actions">
         <select v-model="selectedTimeframe" @change="updateTrends" class="timeframe-select">
@@ -17,7 +18,7 @@
             {{ student.name }}
           </option>
         </select>
-        <button @click="exportTrends" class="export-btn">
+        <button @click="exportTrends" class="action-btn primary">
           <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
           </svg>
@@ -570,23 +571,27 @@ export default {
   min-height: 100vh;
 }
 
-/* Header Section */
-.header-section {
+/* Dashboard Header - Following lecturer pattern */
+.dashboard-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
+  align-items: center;
+  margin-bottom: 32px;
+  padding: 24px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.title-section h3 {
-  color: #1f2937;
+.header-content h2 {
+  color: #1D3557;
   font-size: 28px;
   font-weight: 700;
   margin: 0 0 8px 0;
 }
 
-.page-description {
-  color: #6b7280;
+.welcome-text {
+  color: #6c757d;
   font-size: 16px;
   margin: 0;
 }
@@ -597,37 +602,75 @@ export default {
   align-items: center;
 }
 
-.timeframe-select, .student-select, .chart-select {
+.timeframe-select, .student-select {
   padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
   font-size: 14px;
   background: white;
   outline: none;
   cursor: pointer;
+  transition: border-color 0.2s;
 }
 
-.timeframe-select:focus, .student-select:focus, .chart-select:focus {
-  border-color: #3b82f6;
+.timeframe-select:focus, .student-select:focus {
+  border-color: #457B9D;
 }
 
-.export-btn {
+.action-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 12px 16px;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
   border: none;
   cursor: pointer;
   transition: all 0.2s;
-  background: #10b981;
+}
+
+.action-btn.primary {
+  background: #457B9D;
   color: white;
 }
 
-.export-btn:hover {
-  background: #059669;
+.action-btn.primary:hover {
+  background: #1D3557;
+  transform: translateY(-1px);
+}
+
+.btn-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Trend Overview */
+.trend-overview {
+  margin-bottom: 32px;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn.primary {
+  background: #457B9D;
+  color: white;
+}
+
+.action-btn.primary:hover {
+  background: #1D3557;
+  transform: translateY(-1px);
 }
 
 .btn-icon {

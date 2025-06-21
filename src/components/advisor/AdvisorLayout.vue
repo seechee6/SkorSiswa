@@ -54,13 +54,6 @@
             <span class="nav-label">Advisee List</span>
           </router-link>
 
-          <router-link to="/advisor/mark-breakdown" class="nav-item" active-class="active">
-            <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-            </svg>
-            <span class="nav-label">Mark Breakdown</span>
-          </router-link>
-
           <router-link to="/advisor/at-risk-students" class="nav-item" active-class="active">
             <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
@@ -87,10 +80,9 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
             </svg>
             <span class="nav-label">Course Performance</span>
-          </router-link>
-
-          <div class="nav-section">
-            <span class="section-title">Analytics</span>
+          </router-link>          <div class="nav-section">
+            <span class="section-title">Analytics & Reports</span>
+            
             <router-link to="/advisor/performance-analytics" class="nav-item" active-class="active">
               <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
@@ -144,23 +136,32 @@ export default {
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
 .advisor-layout {
   min-height: 100vh;
-  background: #f8f9fa;
+  background: #F1FAEE;
+  font-family: 'Roboto', sans-serif;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
 
 .top-nav {
-  background: #1D3557;
-  color: white;
-  padding: 0 24px;
+  background: white;
+  height: 70px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 64px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  position: sticky;
-  top: 0;
+  padding: 0 32px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: relative;
   z-index: 100;
+  margin: 0;
 }
 
 .nav-left {
@@ -175,9 +176,9 @@ export default {
 }
 
 .logo-circle {
-  width: 36px;
-  height: 36px;
-  background: #457B9D;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #1D3557 0%, #457B9D 100%);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -185,30 +186,31 @@ export default {
 }
 
 .logo-text {
-  font-size: 14px;
-  font-weight: 700;
   color: white;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1px;
 }
 
 .brand-name {
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 700;
-  color: #F1FAEE;
+  color: #1D3557;
 }
 
 .nav-center {
-  display: flex;
-  align-items: center;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .role-badge {
-  background: #457B9D;
+  background: linear-gradient(135deg, #457B9D 0%, #1D3557 100%);
   color: white;
-  padding: 6px 16px;
+  padding: 8px 16px;
   border-radius: 20px;
   font-size: 14px;
-  font-weight: 600;
-  border: 2px solid #F1FAEE;
+  font-weight: 500;
 }
 
 .nav-right {
@@ -219,61 +221,59 @@ export default {
 .user-profile {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
 .user-avatar {
-  width: 36px;
-  height: 36px;
-  background: #457B9D;
+  width: 40px;
+  height: 40px;
+  background: #F1FAEE;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 2px solid #457B9D;
 }
 
 .avatar-icon {
   width: 20px;
   height: 20px;
-  color: white;
+  color: #457B9D;
 }
 
 .user-info {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
 }
 
 .user-name {
   font-size: 14px;
   font-weight: 600;
-  color: white;
+  color: #1D3557;
 }
 
 .user-id {
   font-size: 12px;
-  color: #A8DADC;
+  color: #6c757d;
 }
 
 .logout-btn {
-  background: transparent;
-  border: 1px solid #457B9D;
-  color: #F1FAEE;
-  padding: 8px 16px;
-  border-radius: 20px;
-  cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
+  background: #E63946;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  transition: all 0.2s;
-  margin-left: 16px;
+  transition: all 0.3s ease;
 }
 
 .logout-btn:hover {
-  background: #457B9D;
-  color: white;
+  background: #c53030;
   transform: translateY(-1px);
 }
 
@@ -284,42 +284,61 @@ export default {
 
 .main-content {
   display: flex;
-  min-height: calc(100vh - 64px);
+  min-height: calc(100vh - 70px);
 }
 
 .sidebar {
   width: 280px;
   background: white;
-  border-right: 1px solid #e9ecef;
-  box-shadow: 2px 0 8px rgba(0,0,0,0.06);
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
+  padding: 24px 0;
 }
 
 .sidebar-nav {
-  padding: 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 16px;
+}
+
+.nav-section {
+  margin: 20px 0 8px 0;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-left: 16px;
+  margin-bottom: 8px;
+  display: block;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  padding: 12px 24px;
-  color: #6c757d;
-  text-decoration: none;
-  transition: all 0.2s;
   gap: 12px;
-  border-left: 3px solid transparent;
+  padding: 12px 16px;
+  color: #495057;
+  text-decoration: none;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  position: relative;
+  font-weight: 500;
 }
 
 .nav-item:hover {
-  background: #f8f9fa;
+  background: rgba(69, 123, 157, 0.1);
   color: #1D3557;
-  border-left-color: #A8DADC;
+  transform: translateX(4px);
 }
 
 .nav-item.active {
-  background: #E8F4FD;
-  color: #1D3557;
-  border-left-color: #457B9D;
-  font-weight: 600;
+  background: linear-gradient(135deg, #1D3557 0%, #457B9D 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(29, 53, 87, 0.3);
 }
 
 .nav-icon {
@@ -332,59 +351,36 @@ export default {
   font-size: 14px;
 }
 
-.nav-section {
-  margin-top: 32px;
-  padding-top: 16px;
-  border-top: 1px solid #e9ecef;
-}
-
-.section-title {
-  display: block;
-  font-size: 12px;
+.notification-badge {
+  background: #E63946;
+  color: white;
+  font-size: 10px;
   font-weight: 600;
-  color: #6c757d;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 0 24px 12px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: auto;
 }
 
 .page-content {
   flex: 1;
   padding: 32px;
-  background: #f8f9fa;
-  overflow-x: auto;
+  overflow-y: auto;
 }
 
-/* Responsive Design */
 @media (max-width: 768px) {
-  .main-content {
-    flex-direction: column;
-  }
-  
   .sidebar {
-    width: 100%;
-    order: 2;
+    width: 240px;
   }
   
   .page-content {
-    order: 1;
-    padding: 16px;
+    padding: 20px;
   }
   
-  .nav-item {
-    padding: 16px 24px;
+  .top-nav {
+    padding: 0 16px;
   }
   
   .user-info {
-    display: none;
-  }
-  
-  .logout-btn {
-    margin-left: 8px;
-    padding: 8px 12px;
-  }
-  
-  .logout-btn span {
     display: none;
   }
 }

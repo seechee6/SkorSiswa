@@ -1,11 +1,12 @@
 <template>
-  <div>
-    <h3>Advisee Management</h3>
-    
-    <!-- Search and Filter Controls -->
-    <div class="card controls-section">
-      <div class="controls-header">
-        <h4>Search & Filter Advisees</h4>
+  <div class="advisee-list">
+    <!-- Dashboard Header -->
+    <div class="dashboard-header">
+      <div class="header-content">
+        <h2>Advisee Management</h2>
+        <p class="welcome-text">Manage and monitor your advisees' academic progress</p>
+      </div>
+      <div class="header-actions">
         <button @click="refreshAdvisees" class="refresh-btn">
           <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
             <path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/>
@@ -13,6 +14,12 @@
           </svg>
           Refresh
         </button>
+      </div>
+    </div>
+    
+    <!-- Search and Filter Controls -->
+    <div class="card controls-section">      <div class="controls-header">
+        <h4>Search & Filter Advisees</h4>
       </div>
       
       <div class="controls-grid">
@@ -120,10 +127,20 @@
           <div class="header-cell">Last Meeting</div>
           <div class="header-cell">Actions</div>
         </div>
-        
-        <div v-if="loading" class="loading-state">
+          <div v-if="loading" class="loading-state">
           <div class="loading-spinner"></div>
           <p>Loading advisees...</p>
+        </div>
+        
+        <div v-else-if="error" class="error-state">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.098 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+          </svg>
+          <h4>Error Loading Data</h4>
+          <p>{{ error }}</p>
+          <button @click="refreshAdvisees" class="retry-btn">
+            Try Again
+          </button>
         </div>
         
         <div v-else-if="filteredAdvisees.length === 0" class="empty-state">
@@ -134,12 +151,14 @@
           <p>Try adjusting your search criteria or filters.</p>
         </div>
         
-        <div v-else class="table-body">
-          <div 
+        <div v-else class="table-body">          <div 
             v-for="advisee in paginatedAdvisees" 
             :key="advisee.id" 
             class="table-row"
-            :class="{ 'at-risk': advisee.status === 'at-risk' }"
+            :class="{ 
+              'at-risk': advisee.isAtRisk || advisee.status === 'at-risk' || advisee.status === 'probation',
+              'excellent': advisee.status === 'excellent' 
+            }"
           >
             <div class="cell student-cell">
               <div class="student-info">
@@ -172,11 +191,20 @@
                 </div>
               </div>
             </div>
-            
-            <div class="cell">
-              <span class="status-badge" :class="advisee.status">
-                {{ getStatusLabel(advisee.status) }}
-              </span>
+              <div class="cell">
+              <div class="status-container">
+                <span class="status-badge" :class="advisee.status">
+                  {{ getStatusLabel(advisee.status) }}
+                </span>
+                <div v-if="advisee.isAtRisk && advisee.atRiskReason && advisee.atRiskReason.length > 0" 
+                     class="at-risk-reasons"
+                     :title="advisee.atRiskReason.join(', ')">
+                  <svg class="warning-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.098 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                  </svg>
+                  <span class="reason-text">{{ advisee.atRiskReason.join(', ') }}</span>
+                </div>
+              </div>
             </div>
             
             <div class="cell">
@@ -265,6 +293,9 @@
 </template>
 
 <script>
+import advisorService from '../../services/advisor.js';
+import auth from '../../utils/auth.js';
+
 export default {
   name: 'AdviseeList',
   data() {
@@ -276,68 +307,26 @@ export default {
       programFilter: '',
       currentPage: 1,
       itemsPerPage: 10,
-      advisees: [
-        {
-          id: 1,
-          name: 'Alice Johnson',
-          studentId: 'CS2021001',
-          program: 'CS',
-          year: 3,
-          gpa: 3.8,
-          status: 'excellent',
-          lastMeeting: '2024-01-15',
-          lastMeetingType: 'Academic Review',
-          email: 'alice.johnson@university.edu'
-        },
-        {
-          id: 2,
-          name: 'Bob Smith',
-          studentId: 'IS2022003',
-          program: 'IS',
-          year: 2,
-          gpa: 2.1,
-          status: 'at-risk',
-          lastMeeting: '2024-01-10',
-          lastMeetingType: 'Support Meeting',
-          email: 'bob.smith@university.edu'
-        },
-        {
-          id: 3,
-          name: 'Carol Davis',
-          studentId: 'SE2020005',
-          program: 'SE',
-          year: 4,
-          gpa: 3.2,
-          status: 'active',
-          lastMeeting: '2024-01-12',
-          lastMeetingType: 'Career Planning',
-          email: 'carol.davis@university.edu'
-        },
-        {
-          id: 4,
-          name: 'David Wilson',
-          studentId: 'IT2023007',
-          program: 'IT',
-          year: 1,
-          gpa: 1.8,
-          status: 'probation',
-          lastMeeting: '2024-01-08',
-          lastMeetingType: 'Academic Warning',
-          email: 'david.wilson@university.edu'
-        },
-        {
-          id: 5,
-          name: 'Emma Brown',
-          studentId: 'CS2021009',
-          program: 'CS',
-          year: 3,
-          gpa: 3.9,
-          status: 'excellent',
-          lastMeeting: '2024-01-14',
-          lastMeetingType: 'Research Discussion',
-          email: 'emma.brown@university.edu'
-        }
-      ]
+      advisees: [],
+      error: null,
+      currentUser: null
+    }
+  },
+  async created() {
+    // Get current user from auth utility
+    this.currentUser = auth.getCurrentUser();
+    
+    if (this.currentUser && this.currentUser.id) {
+      // Check if user is an advisor
+      if (!auth.isAdvisor()) {
+        this.error = 'Access denied. This page is only accessible to advisors.';
+        return;
+      }
+      await this.fetchAdvisees();
+    } else {
+      this.error = 'User not authenticated. Please log in.';
+      // Optionally redirect to login
+      this.$router.push('/');
     }
   },
   computed: {
@@ -362,21 +351,49 @@ export default {
     },
     totalPages() {
       return Math.ceil(this.filteredAdvisees.length / this.itemsPerPage);
-    },
-    atRiskCount() {
-      return this.advisees.filter(advisee => advisee.status === 'at-risk' || advisee.status === 'probation').length;
+    },    atRiskCount() {
+      return this.advisees.filter(advisee => 
+        advisee.isAtRisk || 
+        advisee.status === 'at-risk' || 
+        advisee.status === 'probation'
+      ).length;
     },
     excellentCount() {
       return this.advisees.filter(advisee => advisee.status === 'excellent').length;
     }
-  },
-  methods: {
-    refreshAdvisees() {
+  },  methods: {
+    async fetchAdvisees() {
+      if (!this.currentUser || !this.currentUser.id) {
+        this.error = 'User not authenticated';
+        return;
+      }
+
       this.loading = true;
-      // Simulate API call
-      setTimeout(() => {
+      this.error = null;
+      
+      try {
+        const response = await advisorService.getAdvisees(this.currentUser.id);
+        
+        if (response.success) {
+          this.advisees = response.data || [];
+        } else {
+          this.error = response.message || 'Failed to fetch advisees';
+        }
+      } catch (error) {
+        console.error('Error fetching advisees:', error);
+        this.error = 'Failed to load advisee data. Please try again.';
+        
+        // If it's a network error, you might want to show a more specific message
+        if (error.code === 'NETWORK_ERROR') {
+          this.error = 'Network error. Please check your connection and try again.';
+        }
+      } finally {
         this.loading = false;
-      }, 1000);
+      }
+    },
+    
+    async refreshAdvisees() {
+      await this.fetchAdvisees();
     },
     getGpaClass(gpa) {
       if (gpa >= 3.5) return 'excellent';
@@ -400,13 +417,12 @@ export default {
         month: 'short', 
         day: 'numeric' 
       });
-    },
-    viewAdviseeDetails(advisee) {
+    },    viewAdviseeDetails(advisee) {
       this.$router.push({ 
         name: 'AdvisorMarkBreakdown', 
-        params: { studentId: advisee.studentId } 
+        params: { studentId: advisee.id }
       });
-    },    scheduleMeeting(advisee) {
+    },scheduleMeeting(advisee) {
       this.$router.push({ 
         name: 'AdvisorMeetingNotes', 
         query: { studentId: advisee.studentId, action: 'schedule' } 
@@ -417,31 +433,85 @@ export default {
         name: 'AdvisorAdviseeReports', 
         query: { studentId: advisee.studentId } 
       });
-    },
-    exportAdviseeList() {
-      const csvContent = "data:text/csv;charset=utf-8," 
-        + "Name,Student ID,Program,Year,GPA,Status,Last Meeting\n"
-        + this.filteredAdvisees.map(advisee => 
-            `${advisee.name},${advisee.studentId},${advisee.program},${advisee.year},${advisee.gpa},${advisee.status},${advisee.lastMeeting}`
-          ).join("\n");
+    },    exportAdviseeList() {
+      if (this.filteredAdvisees.length === 0) {
+        alert('No data to export');
+        return;
+      }
       
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", "advisee_list.csv");
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      try {
+        advisorService.exportAdviseesToCSV(this.filteredAdvisees);
+      } catch (error) {
+        console.error('Error exporting data:', error);
+        alert('Failed to export data. Please try again.');
+      }
     }
   }
 }
 </script>
 
 <style scoped>
+.advisee-list {
+  padding: 24px;
+  background-color: #f8fafc;
+  min-height: 100vh;
+}
+
+/* Dashboard Header - Following lecturer pattern */
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+  padding: 24px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.header-content h2 {
+  color: #1D3557;
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+}
+
+.welcome-text {
+  color: #6c757d;
+  font-size: 16px;
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #F1FAEE;
+  color: #1D3557;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover {
+  background: #A8DADC;
+  transform: translateY(-1px);
+}
+
 .card {
   background: white;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   margin-bottom: 24px;
   overflow: hidden;
 }
@@ -459,27 +529,9 @@ export default {
 
 .controls-header h4 {
   margin: 0;
-  color: #1f2937;
+  color: #1D3557;
   font-size: 18px;
   font-weight: 600;
-}
-
-.refresh-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: #f3f4f6;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  color: #374151;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.refresh-btn:hover {
-  background: #e5e7eb;
-  transform: translateY(-1px);
 }
 
 .controls-grid {
@@ -506,7 +558,7 @@ export default {
 .search-input {
   width: 100%;
   padding: 12px 12px 12px 44px;
-  border: 2px solid #e5e7eb;
+  border: 2px solid #dee2e6;
   border-radius: 8px;
   font-size: 14px;
   transition: border-color 0.2s;
@@ -514,12 +566,12 @@ export default {
 
 .search-input:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: #457B9D;
 }
 
 .filter-select {
   padding: 12px;
-  border: 2px solid #e5e7eb;
+  border: 2px solid #dee2e6;
   border-radius: 8px;
   font-size: 14px;
   background: white;
@@ -529,7 +581,7 @@ export default {
 
 .filter-select:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: #457B9D;
 }
 
 .stats-grid {
@@ -611,14 +663,14 @@ export default {
 
 .header-section h4 {
   margin: 0;
-  color: #1f2937;
+  color: #1D3557;
   font-size: 20px;
   font-weight: 600;
 }
 
 .subtitle {
   margin: 4px 0 0 0;
-  color: #6b7280;
+  color: #6c757d;
   font-size: 14px;
 }
 
@@ -627,7 +679,7 @@ export default {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: #3b82f6;
+  background: #457B9D;
   color: white;
   border: none;
   border-radius: 8px;
@@ -637,7 +689,7 @@ export default {
 }
 
 .export-btn:hover {
-  background: #2563eb;
+  background: #1D3557;
   transform: translateY(-1px);
 }
 
@@ -677,6 +729,11 @@ export default {
 .table-row.at-risk {
   background: #fef2f2;
   border-left: 4px solid #ef4444;
+}
+
+.table-row.excellent {
+  background: #f0f9ff;
+  border-left: 4px solid #06b6d4;
 }
 
 .cell {
@@ -894,13 +951,18 @@ export default {
 }
 
 .loading-state,
-.empty-state {
+.empty-state,
+.error-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
   color: #6b7280;
+}
+
+.error-state {
+  color: #dc2626;
 }
 
 .loading-spinner {
@@ -918,15 +980,37 @@ export default {
   100% { transform: rotate(360deg); }
 }
 
-.empty-state svg {
+.empty-state svg,
+.error-state svg {
   width: 48px;
   height: 48px;
   margin-bottom: 16px;
 }
 
-.empty-state h4 {
+.empty-state h4,
+.error-state h4 {
   margin: 0 0 8px 0;
   color: #374151;
+}
+
+.error-state h4 {
+  color: #dc2626;
+}
+
+.retry-btn {
+  margin-top: 16px;
+  padding: 10px 20px;
+  background: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.retry-btn:hover {
+  background: #b91c1c;
 }
 
 .pagination {
@@ -962,6 +1046,38 @@ export default {
   color: #6b7280;
   font-size: 14px;
   margin: 0 16px;
+}
+
+.status-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.at-risk-reasons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #dc2626;
+  background: #fef2f2;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #fecaca;
+}
+
+.warning-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.reason-text {
+  font-weight: 500;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 768px) {

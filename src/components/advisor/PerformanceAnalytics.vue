@@ -1,9 +1,10 @@
 <template>
   <div class="performance-analytics">
-    <div class="header-section">
-      <div class="title-section">
-        <h3>Performance Analytics & Trends</h3>
-        <p class="page-description">Advanced analytics and performance insights for your advisees</p>
+    <!-- Dashboard Header -->
+    <div class="dashboard-header">
+      <div class="header-content">
+        <h2>Performance Analytics & Trends</h2>
+        <p class="welcome-text">Advanced analytics and performance insights for your advisees</p>
       </div>
       <div class="header-actions">
         <div class="time-range-selector">
@@ -13,13 +14,13 @@
             <option value="all_time">All Time</option>
           </select>
         </div>
-        <button @click="exportAnalytics" class="export-btn">
+        <button @click="exportAnalytics" class="action-btn primary">
           <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
           </svg>
           Export Report
         </button>
-        <button @click="refreshData" class="refresh-btn">
+        <button @click="refreshData" class="action-btn secondary">
           <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
           </svg>
@@ -505,23 +506,27 @@ export default {
   min-height: 100vh;
 }
 
-/* Header Section */
-.header-section {
+/* Dashboard Header - Following lecturer pattern */
+.dashboard-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
+  align-items: center;
+  margin-bottom: 32px;
+  padding: 24px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.title-section h3 {
-  color: #1f2937;
+.header-content h2 {
+  color: #1D3557;
   font-size: 28px;
   font-weight: 700;
   margin: 0 0 8px 0;
 }
 
-.page-description {
-  color: #6b7280;
+.welcome-text {
+  color: #6c757d;
   font-size: 16px;
   margin: 0;
 }
@@ -532,25 +537,27 @@ export default {
   align-items: center;
 }
 
-.range-select, .chart-select {
+.range-select {
   padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
   font-size: 14px;
   background: white;
   outline: none;
   cursor: pointer;
+  transition: border-color 0.2s;
+  margin-right: 8px;
 }
 
-.range-select:focus, .chart-select:focus {
-  border-color: #3b82f6;
+.range-select:focus {
+  border-color: #457B9D;
 }
 
-.export-btn, .refresh-btn {
+.action-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 12px 16px;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
@@ -559,24 +566,24 @@ export default {
   transition: all 0.2s;
 }
 
-.export-btn {
-  background: #10b981;
+.action-btn.primary {
+  background: #457B9D;
   color: white;
 }
 
-.export-btn:hover {
-  background: #059669;
+.action-btn.primary:hover {
+  background: #1D3557;
+  transform: translateY(-1px);
 }
 
-.refresh-btn {
-  background: white;
-  color: #374151;
-  border: 1px solid #d1d5db;
+.action-btn.secondary {
+  background: #F1FAEE;
+  color: #1D3557;
 }
 
-.refresh-btn:hover {
-  background: #f9fafb;
-  border-color: #9ca3af;
+.action-btn.secondary:hover {
+  background: #A8DADC;
+  transform: translateY(-1px);
 }
 
 .btn-icon {

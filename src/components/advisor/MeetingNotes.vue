@@ -1,24 +1,19 @@
 <template>
   <div class="meeting-notes">
-    <div class="header-section">
-      <div class="title-section">
-        <h3>Meeting Notes & Advisor Sessions</h3>
-        <p class="page-description">Schedule and manage advisor meetings with advisees</p>
+    <!-- Dashboard Header -->
+    <div class="dashboard-header">
+      <div class="header-content">
+        <h2>Meeting Notes & Advisor Sessions</h2>
+        <p class="welcome-text">Schedule and manage advisor meetings with advisees</p>
       </div>
       <div class="header-actions">
-        <button @click="showScheduleModal = true" class="add-btn">
+        <button @click="showScheduleModal = true" class="action-btn primary">
           <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
           Schedule Meeting
         </button>
-        <button @click="showBulkModal = true" class="secondary-btn">
-          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5V10l-5-5V20zm0 0H7a2 2 0 01-2-2V4a2 2 0 012-2h10v16z" />
-          </svg>
-          Bulk Schedule
-        </button>
-        <button @click="exportMeetings" class="export-btn">
+        <button @click="exportMeetings" class="action-btn secondary">
           <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
@@ -831,23 +826,27 @@ export default {
   min-height: 100vh;
 }
 
-/* Header Section */
-.header-section {
+/* Dashboard Header - Following lecturer pattern */
+.dashboard-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
+  align-items: center;
+  margin-bottom: 32px;
+  padding: 24px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.title-section h3 {
-  color: #1f2937;
+.header-content h2 {
+  color: #1D3557;
   font-size: 28px;
   font-weight: 700;
   margin: 0 0 8px 0;
 }
 
-.page-description {
-  color: #6b7280;
+.welcome-text {
+  color: #6c757d;
   font-size: 16px;
   margin: 0;
 }
@@ -855,13 +854,14 @@ export default {
 .header-actions {
   display: flex;
   gap: 12px;
+  align-items: center;
 }
 
-.add-btn, .secondary-btn, .export-btn {
+.action-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 12px 16px;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
@@ -870,34 +870,24 @@ export default {
   transition: all 0.2s;
 }
 
-.add-btn {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+.action-btn.primary {
+  background: #457B9D;
   color: white;
 }
 
-.add-btn:hover {
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+.action-btn.primary:hover {
+  background: #1D3557;
   transform: translateY(-1px);
 }
 
-.secondary-btn {
-  background: white;
-  color: #374151;
-  border: 1px solid #d1d5db;
+.action-btn.secondary {
+  background: #F1FAEE;
+  color: #1D3557;
 }
 
-.secondary-btn:hover {
-  background: #f9fafb;
-  border-color: #9ca3af;
-}
-
-.export-btn {
-  background: #10b981;
-  color: white;
-}
-
-.export-btn:hover {
-  background: #059669;
+.action-btn.secondary:hover {
+  background: #A8DADC;
+  transform: translateY(-1px);
 }
 
 .btn-icon {

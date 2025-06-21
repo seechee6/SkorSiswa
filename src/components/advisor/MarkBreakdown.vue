@@ -82,26 +82,28 @@
               <th class="center-align">Grade</th>
               <th class="center-align">Progress</th>
             </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(course, index) in currentSemester.courses" :key="index">
-              <td class="code-cell">{{ course.code }}</td>
-              <td>{{ course.name }}</td>
-              <td class="center-align">{{ course.credits }}</td>
+          </thead>          <tbody>
+            <tr v-for="(course, index) in performanceData" :key="index" @click="selectCourse(course)" class="course-row">
+              <td class="code-cell">{{ course.course_code }}</td>
+              <td>{{ course.course_name }}</td>
+              <td class="center-align">{{ course.credits || 3 }}</td>
               <td class="center-align">
-                {{ course.assignment.earned }}/{{ course.assignment.total }}
-                <div class="weight">({{ course.assignment.weight }}%)</div>
+                {{ course.assessment_total_marks || 0 }}/{{ course.assessment_max_marks || 100 }}
+                <div class="weight">(70%)</div>
+                <div class="percentage">{{ calculateAssessmentPercentage(course) }}%</div>
               </td>
               <td class="center-align">
-                {{ course.midterms.earned }}/{{ course.midterms.total }}
-                <div class="weight">({{ course.midterms.weight }}%)</div>
+                <!-- Midterm placeholder - you can extend this later -->
+                -/-
+                <div class="weight">(Included in Assessments)</div>
               </td>
               <td class="center-align">
-                {{ course.finalExam.earned }}/{{ course.finalExam.total }}
-                <div class="weight">({{ course.finalExam.weight }}%)</div>
+                {{ course.final_exam_mark || 0 }}/{{ course.final_exam_max_mark || 100 }}
+                <div class="weight">(30%)</div>
+                <div class="percentage">{{ calculateFinalExamPercentage(course) }}%</div>
               </td>
               <td class="total-cell">
-                {{ calculateTotal(course) }}%
+                {{ calculateTotalPercentage(course) }}%
               </td>
               <td class="grade-cell">
                 <span :class="getGradeClass(course.grade)">{{ course.grade }}</span>
@@ -110,8 +112,8 @@
                 <div class="progress-bar">
                   <div 
                     class="progress" 
-                    :style="{ width: calculateTotal(course) + '%' }" 
-                    :class="getProgressClass(calculateTotal(course))"
+                    :style="{ width: calculateTotalPercentage(course) + '%' }" 
+                    :class="getProgressClass(calculateTotalPercentage(course))"
                   ></div>
                 </div>
               </td>
@@ -314,257 +316,373 @@
 </template>
 
 <script>
+import advisorService from '../../services/advisor.js';
+import auth from '../../utils/auth.js';
+
 export default {
   name: 'MarkBreakdown',
+  props: {
+    studentId: {
+      type: String,
+      required: true
+    }
+  },
   data() {
     return {
+      loading: true,
+      error: null,
+      currentUser: null,
       student: {
-        name: 'John Smith',
-        id: 'S12345',
-        program: 'Computer Science',
-        yearOfStudy: 2,
-        cgpa: 3.42,
-        riskLevel: 'high',
-        creditsEarned: 48
+        id: '',
+        name: '',
+        matric_no: '',
+        program: '',
+        yearOfStudy: 1,
+        cgpa: 0.0,
+        riskLevel: 'low',
+        creditsEarned: 0
       },
-      semesters: [
-        {
-          id: 'current',
-          name: 'Current Semester (Spring 2025)',
-          gpa: 3.38,
-          totalCredits: 15,
-          averagePercentage: 81.2,
-          averageGrade: 'A-',
-          courses: [
-            {
-              code: 'CS2001',
-              name: 'Data Structures and Algorithms',
-              credits: 3,
-              assignment: { earned: 17, total: 20, weight: 20 },
-              midterms: { earned: 26, total: 30, weight: 30 },
-              finalExam: { earned: 42, total: 50, weight: 50 },
-              grade: 'B+',
-              assessments: {
-                assignments: [
-                  { name: 'Assignment 1', dueDate: '15 Jan 2025', weight: 5, earned: 4, total: 5, grade: 'A', status: 'Completed' },
-                  { name: 'Assignment 2', dueDate: '01 Feb 2025', weight: 5, earned: 3, total: 5, grade: 'B', status: 'Completed' },
-                  { name: 'Assignment 3', dueDate: '20 Feb 2025', weight: 5, earned: 5, total: 5, grade: 'A+', status: 'Completed' },
-                  { name: 'Assignment 4', dueDate: '10 Mar 2025', weight: 5, earned: 5, total: 5, grade: 'A+', status: 'Completed' }
-                ],
-                midterms: [
-                  { name: 'Midterm Exam', date: '28 Feb 2025', weight: 30, earned: 26, total: 30, grade: 'A-', status: 'Completed' }
-                ],
-                final: [
-                  { name: 'Final Exam', date: '05 May 2025', weight: 50, earned: 42, total: 50, grade: 'B+', status: 'Completed' }
-                ]
-              }
-            },
-            {
-              code: 'CS2002',
-              name: 'Database Systems',
-              credits: 3,
-              assignment: { earned: 19, total: 20, weight: 20 },
-              midterms: { earned: 25, total: 30, weight: 30 },
-              finalExam: { earned: 47, total: 50, weight: 50 },
-              grade: 'A',
-              assessments: {
-                assignments: [
-                  { name: 'Assignment 1', dueDate: '20 Jan 2025', weight: 5, earned: 5, total: 5, grade: 'A+', status: 'Completed' },
-                  { name: 'Assignment 2', dueDate: '10 Feb 2025', weight: 5, earned: 4, total: 5, grade: 'A', status: 'Completed' },
-                  { name: 'Assignment 3', dueDate: '01 Mar 2025', weight: 5, earned: 5, total: 5, grade: 'A+', status: 'Completed' },
-                  { name: 'Assignment 4', dueDate: '20 Mar 2025', weight: 5, earned: 5, total: 5, grade: 'A+', status: 'Completed' }
-                ],
-                midterms: [
-                  { name: 'Midterm Exam', date: '05 Mar 2025', weight: 30, earned: 25, total: 30, grade: 'A-', status: 'Completed' }
-                ],
-                final: [
-                  { name: 'Final Exam', date: '10 May 2025', weight: 50, earned: 47, total: 50, grade: 'A', status: 'Completed' }
-                ]
-              }
-            },
-            {
-              code: 'MATH201',
-              name: 'Linear Algebra',
-              credits: 3,
-              assignment: { earned: 15, total: 20, weight: 20 },
-              midterms: { earned: 22, total: 30, weight: 30 },
-              finalExam: { earned: 38, total: 50, weight: 50 },
-              grade: 'B',
-              assessments: {
-                assignments: [
-                  { name: 'Assignment 1', dueDate: '12 Jan 2025', weight: 5, earned: 4, total: 5, grade: 'A', status: 'Completed' },
-                  { name: 'Assignment 2', dueDate: '29 Jan 2025', weight: 5, earned: 3, total: 5, grade: 'B', status: 'Completed' },
-                  { name: 'Assignment 3', dueDate: '15 Feb 2025', weight: 5, earned: 4, total: 5, grade: 'A', status: 'Completed' },
-                  { name: 'Assignment 4', dueDate: '05 Mar 2025', weight: 5, earned: 4, total: 5, grade: 'A', status: 'Completed' }
-                ],
-                midterms: [
-                  { name: 'Midterm Exam', date: '25 Feb 2025', weight: 30, earned: 22, total: 30, grade: 'B', status: 'Completed' }
-                ],
-                final: [
-                  { name: 'Final Exam', date: '08 May 2025', weight: 50, earned: 38, total: 50, grade: 'B', status: 'Completed' }
-                ]
-              }
-            },
-            {
-              code: 'CS2003',
-              name: 'Operating Systems',
-              credits: 3,
-              assignment: { earned: 18, total: 20, weight: 20 },
-              midterms: { earned: 28, total: 30, weight: 30 },
-              finalExam: { earned: 43, total: 50, weight: 50 },
-              grade: 'A-',
-              assessments: {
-                assignments: [
-                  { name: 'Assignment 1', dueDate: '18 Jan 2025', weight: 5, earned: 4, total: 5, grade: 'A', status: 'Completed' },
-                  { name: 'Assignment 2', dueDate: '05 Feb 2025', weight: 5, earned: 5, total: 5, grade: 'A+', status: 'Completed' },
-                  { name: 'Assignment 3', dueDate: '25 Feb 2025', weight: 5, earned: 4, total: 5, grade: 'A', status: 'Completed' },
-                  { name: 'Assignment 4', dueDate: '15 Mar 2025', weight: 5, earned: 5, total: 5, grade: 'A+', status: 'Completed' }
-                ],
-                midterms: [
-                  { name: 'Midterm Exam', date: '02 Mar 2025', weight: 30, earned: 28, total: 30, grade: 'A', status: 'Completed' }
-                ],
-                final: [
-                  { name: 'Final Exam', date: '12 May 2025', weight: 50, earned: 43, total: 50, grade: 'A-', status: 'Completed' }
-                ]
-              }
-            },
-            {
-              code: 'ENG201',
-              name: 'Technical Communication',
-              credits: 3,
-              assignment: { earned: 19, total: 20, weight: 20 },
-              midterms: { earned: 27, total: 30, weight: 30 },
-              finalExam: { earned: 46, total: 50, weight: 50 },
-              grade: 'A',
-              assessments: {
-                assignments: [
-                  { name: 'Assignment 1', dueDate: '10 Jan 2025', weight: 5, earned: 5, total: 5, grade: 'A+', status: 'Completed' },
-                  { name: 'Assignment 2', dueDate: '25 Jan 2025', weight: 5, earned: 5, total: 5, grade: 'A+', status: 'Completed' },
-                  { name: 'Assignment 3', dueDate: '12 Feb 2025', weight: 5, earned: 4, total: 5, grade: 'A', status: 'Completed' },
-                  { name: 'Assignment 4', dueDate: '01 Mar 2025', weight: 5, earned: 5, total: 5, grade: 'A+', status: 'Completed' }
-                ],
-                midterms: [
-                  { name: 'Midterm Exam', date: '20 Feb 2025', weight: 30, earned: 27, total: 30, grade: 'A', status: 'Completed' }
-                ],
-                final: [
-                  { name: 'Final Exam', date: '02 May 2025', weight: 50, earned: 46, total: 50, grade: 'A', status: 'Completed' }
-                ]
-              }
-            }
-          ]
-        },
-        {
-          id: 'prev1',
-          name: 'Fall 2024',
-          gpa: 3.25,
-          totalCredits: 15,
-          averagePercentage: 79.5,
-          averageGrade: 'B+',
-          courses: [
-            // Course data would be here
-          ]
-        },
-        {
-          id: 'prev2',
-          name: 'Spring 2024',
-          gpa: 3.65,
-          totalCredits: 18,
-          averagePercentage: 85.8,
-          averageGrade: 'A',
-          courses: [
-            // Course data would be here
-          ]
-        }
-      ],
-      selectedSemester: 'current',
-      selectedCourse: null,
-      selectedTab: 'assignments',
+      performanceData: [],
+      selectedCourse: null,      selectedTab: 'assignments',
       assessmentTabs: [
         { id: 'assignments', name: 'Assignments' },
         { id: 'midterms', name: 'Midterms' },
         { id: 'final', name: 'Final Exam' }
-      ],
-      advisorNotes: [
-        {
-          date: '10 Jun 2025',
-          content: 'John has shown improvement in his Database Systems class. Recommended additional practice with algorithmic problems to strengthen his understanding of Data Structures and Algorithms.'
-        },
-        {
-          date: '01 May 2025',
-          content: 'Expressed concern about Linear Algebra performance. Referred to the math tutoring center for additional help.'
-        }
-      ],
+      ],advisorNotes: [],
       showNoteForm: false,
       newNote: {
         content: ''
+      },
+      selectedSemester: 1,
+      semesters: [
+        { id: 1, name: 'Semester 1, 2024' },
+        { id: 2, name: 'Semester 2, 2024' }
+      ]
+    }
+  },computed: {
+    currentSemesterCourses() {
+      // Group courses by semester/year and return current semester
+      return this.performanceData.filter(course => 
+        course.year === 2024 && course.semester === 1
+      );
+    },
+    currentSemester() {
+      const courses = this.currentSemesterCourses;
+      if (courses.length === 0) {
+        return {
+          gpa: 0.0,
+          courses: [],
+          totalCredits: 0,
+          averagePercentage: 0,
+          averageGrade: 'N/A'
+        };
       }
+      
+      // Calculate semester GPA
+      const totalPoints = courses.reduce((sum, course) => {
+        return sum + this.convertGradeToPoints(course.grade || 'F');
+      }, 0);
+      const gpa = totalPoints / courses.length;
+      
+      // Calculate total credits
+      const totalCredits = courses.reduce((sum, course) => {
+        return sum + (parseInt(course.credits) || 3);
+      }, 0);
+      
+      // Calculate average percentage
+      const totalPercentage = courses.reduce((sum, course) => {
+        return sum + parseFloat(this.calculateTotalPercentage(course));
+      }, 0);
+      const averagePercentage = totalPercentage / courses.length;
+      
+      // Determine average grade
+      const averageGrade = this.convertPercentageToGrade(averagePercentage);
+      
+      return {
+        gpa: gpa,
+        courses: courses,
+        totalCredits: totalCredits,
+        averagePercentage: averagePercentage,
+        averageGrade: averageGrade
+      };
+    },
+    overallGPA() {
+      if (this.performanceData.length === 0) return 0.0;
+      
+      const totalPoints = this.performanceData.reduce((sum, course) => {
+        return sum + this.convertGradeToPoints(course.grade);
+      }, 0);
+      
+      return (totalPoints / this.performanceData.length).toFixed(2);
     }
   },
-  computed: {
-    currentSemester() {
-      return this.semesters.find(s => s.id === this.selectedSemester)
+  async created() {
+    this.currentUser = auth.getCurrentUser();
+    
+    if (!this.currentUser || !auth.isAdvisor()) {
+      this.error = 'Access denied. Advisor authentication required.';
+      return;
     }
+    
+    await this.fetchStudentPerformance();
   },
   methods: {
+    async fetchStudentPerformance() {
+      this.loading = true;
+      this.error = null;
+      
+      try {
+        const response = await advisorService.getAdviseePerformance(
+          this.currentUser.id, 
+          this.studentId
+        );
+          if (response.success) {
+          this.performanceData = response.data || [];
+          console.log('Performance data received:', this.performanceData);
+          
+          // Set basic student info from first course data or default
+          if (this.performanceData.length > 0) {
+            // We need to get student basic info separately or from advisee list
+            this.student.id = this.studentId;
+            this.student.cgpa = parseFloat(this.overallGPA);
+            this.updateRiskLevel();
+          }
+          
+          // Also fetch student basic info from advisees
+          await this.fetchStudentBasicInfo();
+          
+        } else {
+          this.error = response.message || 'Failed to fetch student performance data';
+        }
+      } catch (error) {
+        console.error('Error fetching student performance:', error);
+        this.error = 'Failed to load student performance data. Please try again.';
+      } finally {
+        this.loading = false;
+      }
+    },
+    
+    async fetchStudentBasicInfo() {
+      try {
+        // Get student basic info from advisees list
+        const adviseesResponse = await advisorService.getAdvisees(this.currentUser.id);
+        if (adviseesResponse.success) {
+          const studentInfo = adviseesResponse.data.find(s => s.id == this.studentId);
+          if (studentInfo) {
+            this.student.name = studentInfo.name;
+            this.student.matric_no = studentInfo.studentId;
+            this.student.program = studentInfo.program;
+            this.student.yearOfStudy = studentInfo.year;
+            this.student.cgpa = studentInfo.gpa;
+            this.updateRiskLevel();
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching student basic info:', error);
+      }
+    },
+    
+    updateRiskLevel() {
+      if (this.student.cgpa >= 3.5) {
+        this.student.riskLevel = 'low';
+      } else if (this.student.cgpa >= 2.5) {
+        this.student.riskLevel = 'medium';
+      } else {
+        this.student.riskLevel = 'high';
+      }
+    },
+      convertGradeToPoints(grade) {
+      const gradePoints = {
+        'A': 4.0, 'A-': 3.7, 'B+': 3.3, 'B': 3.0, 'B-': 2.7,
+        'C+': 2.3, 'C': 2.0, 'C-': 1.7, 'D': 1.0, 'F': 0.0
+      };
+      return gradePoints[grade] || 0.0;
+    },
+      convertPercentageToGrade(percentage) {
+      if (percentage >= 85) return 'A';
+      if (percentage >= 80) return 'A-';
+      if (percentage >= 75) return 'B+';
+      if (percentage >= 70) return 'B';
+      if (percentage >= 65) return 'B-';
+      if (percentage >= 60) return 'C+';
+      if (percentage >= 55) return 'C';
+      if (percentage >= 50) return 'C-';
+      if (percentage >= 45) return 'D';
+      return 'F';
+    },
+    
+    getCurrentSemesterName() {
+      // You can customize this based on your semester naming convention
+      return 'Semester 1, 2024';
+    },
+    
     getInitials(name) {
+      if (!name) return 'ST';
       return name
         .split(' ')
         .map(word => word[0])
         .join('')
-        .toUpperCase()
+        .toUpperCase();
     },
+    
     getCgpaClass(cgpa) {
-      if (cgpa >= 3.5) return 'cgpa-excellent'
-      if (cgpa >= 3.0) return 'cgpa-good'
-      if (cgpa >= 2.5) return 'cgpa-average'
-      return 'cgpa-concern'
+      if (cgpa >= 3.5) return 'cgpa-excellent';
+      if (cgpa >= 3.0) return 'cgpa-good';
+      if (cgpa >= 2.5) return 'cgpa-average';
+      return 'cgpa-concern';
     },
-    calculateTotal(course) {
-      const assignmentContribution = (course.assignment.earned / course.assignment.total) * course.assignment.weight
-      const midtermsContribution = (course.midterms.earned / course.midterms.total) * course.midterms.weight
-      const finalExamContribution = (course.finalExam.earned / course.finalExam.total) * course.finalExam.weight
+    
+    calculateAssessmentTotal(course) {
+      if (!course.assessments || course.assessments.length === 0) {
+        return 0;
+      }
       
-      return (assignmentContribution + midtermsContribution + finalExamContribution).toFixed(1)
+      const totalMarks = course.assessments.reduce((sum, assessment) => {
+        return sum + (parseFloat(assessment.student_mark) || 0);
+      }, 0);
+      
+      return totalMarks.toFixed(1);
     },
+    
+    calculateAssessmentPercentage(course) {
+      if (!course.assessment_max_marks || course.assessment_max_marks === 0) {
+        return 0;
+      }
+      
+      return ((course.assessment_total_marks / course.assessment_max_marks) * 100).toFixed(1);
+    },
+    
+    calculateFinalExamPercentage(course) {
+      if (!course.final_exam_max_mark || course.final_exam_max_mark === 0) {
+        return 0;
+      }
+      
+      return ((course.final_exam_mark / course.final_exam_max_mark) * 100).toFixed(1);
+    },
+      calculateTotalPercentage(course) {
+      // The backend already calculates the correct total mark out of 100
+      // We should use the total_mark from backend instead of recalculating
+      if (course.total_mark !== undefined) {
+        return parseFloat(course.total_mark).toFixed(1);
+      }
+      
+      // Fallback calculation (if total_mark is not provided)
+      // Use the weighted scores, not raw percentages
+      const assessmentWeighted = course.assessment_weighted_score || 0;  // Out of 70
+      const finalExamWeighted = course.final_exam_weighted_score || 0;   // Out of 30
+      
+      return (parseFloat(assessmentWeighted) + parseFloat(finalExamWeighted)).toFixed(1);
+    },
+    
     getGradeClass(grade) {
-      if (grade === 'A+' || grade === 'A') return 'grade-a'
-      if (grade === 'A-' || grade === 'B+') return 'grade-b-plus'
-      if (grade === 'B' || grade === 'B-') return 'grade-b'
-      if (grade === 'C+' || grade === 'C') return 'grade-c'
-      return 'grade-concern'
+      if (grade === 'A+' || grade === 'A') return 'grade-a';
+      if (grade === 'A-' || grade === 'B+') return 'grade-b-plus';
+      if (grade === 'B' || grade === 'B-') return 'grade-b';
+      if (grade === 'C+' || grade === 'C') return 'grade-c';
+      return 'grade-concern';
     },
-    getProgressClass(percentage) {
-      if (percentage >= 85) return 'progress-excellent'
-      if (percentage >= 75) return 'progress-good'
-      if (percentage >= 60) return 'progress-average'
-      return 'progress-concern'
+      getProgressClass(percentage) {
+      if (percentage >= 85) return 'progress-excellent';
+      if (percentage >= 75) return 'progress-good';
+      if (percentage >= 60) return 'progress-average';
+      return 'progress-concern';
     },
+    
+    selectCourse(course) {
+      // Set selected course for detailed breakdown
+      this.selectedCourse = {
+        code: course.course_code,
+        name: course.course_name,
+        assessments: {
+          assignments: [
+            {
+              name: 'Assignment 1',
+              dueDate: '2024-03-15',
+              weight: 20,
+              earned: course.assessment_total_marks * 0.4 || 0,
+              total: course.assessment_max_marks * 0.4 || 40,
+              grade: this.convertPercentageToGrade((course.assessment_total_marks * 0.4 / (course.assessment_max_marks * 0.4)) * 100 || 0),
+              status: 'Completed'
+            },
+            {
+              name: 'Assignment 2',
+              dueDate: '2024-04-15',
+              weight: 30,
+              earned: course.assessment_total_marks * 0.6 || 0,
+              total: course.assessment_max_marks * 0.6 || 60,
+              grade: this.convertPercentageToGrade((course.assessment_total_marks * 0.6 / (course.assessment_max_marks * 0.6)) * 100 || 0),
+              status: 'Completed'
+            }
+          ],
+          midterms: [
+            {
+              name: 'Midterm Exam',
+              date: '2024-04-20',
+              weight: 20,
+              earned: course.assessment_total_marks * 0.2 || 0,
+              total: course.assessment_max_marks * 0.2 || 20,
+              grade: this.convertPercentageToGrade((course.assessment_total_marks * 0.2 / (course.assessment_max_marks * 0.2)) * 100 || 0),
+              status: 'Completed'
+            }
+          ],
+          final: [
+            {
+              name: 'Final Exam',
+              date: '2024-05-15',
+              weight: 30,
+              earned: course.final_exam_mark || 0,
+              total: course.final_exam_max_mark || 100,
+              grade: this.convertPercentageToGrade(this.calculateFinalExamPercentage(course)),
+              status: 'Completed'
+            }
+          ]
+        }
+      };
+    },
+    
     printReport() {
-      window.print()
+      window.print();
     },
-    getCurrentSemesterName() {
-      return this.currentSemester ? this.currentSemester.name : ''
+    
+    async addNote() {
+      this.showNoteForm = true;
     },
-    addNote() {
-      this.showNoteForm = true
-    },
-    saveNote() {
-      if (this.newNote.content.trim()) {
-        const today = new Date()
-        const formattedDate = today.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+    
+    async saveNote() {
+      if (!this.newNote.content.trim()) return;
+      
+      try {
+        await advisorService.addAdviseeNote(
+          this.currentUser.id,
+          this.studentId,
+          this.newNote.content,
+          1 // Default course ID
+        );
+        
+        // Add to local notes list
+        const today = new Date();
+        const formattedDate = today.toLocaleDateString('en-US', { 
+          day: '2-digit', 
+          month: 'short', 
+          year: 'numeric' 
+        });
         
         this.advisorNotes.unshift({
           date: formattedDate,
           content: this.newNote.content
-        })
+        });
         
-        this.showNoteForm = false
-        this.newNote.content = ''
+        this.showNoteForm = false;
+        this.newNote.content = '';
+      } catch (error) {
+        console.error('Error saving note:', error);
+        alert('Failed to save note. Please try again.');
       }
     },
+    
     cancelNote() {
-      this.showNoteForm = false
-      this.newNote.content = ''
+      this.showNoteForm = false;
+      this.newNote.content = '';
     }
   }
 }

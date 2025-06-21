@@ -152,7 +152,7 @@ INSERT INTO users (matric_no, staff_id, full_name, email, password_hash, role_id
 ('STU001', NULL, 'Alice Brown', 'alice.brown@student.university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 3),
 ('STU002', NULL, 'Bob Wilson', 'bob.wilson@student.university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 3),
 ('STU003', NULL, 'Charlie Davis', 'charlie.davis@student.university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 3),
-(NULL, 'ADV001', 'Prof. Mary Taylor', 'mary.taylor@university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 4);
+(NULL, 'A001', 'Prof. Mary Taylor', 'mary.taylor@university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 4);
 
 -- Insert sample courses
 INSERT INTO courses (code, name, semester, year, lecturer_id) VALUES
