@@ -1391,12 +1391,14 @@ $app->get('/api/admin/current-admin', function (Request $request, Response $resp
             $response->getBody()->write(json_encode(['error' => 'Admin user not found']));
             return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
         }
-        
-        $response->getBody()->write(json_encode($admin));
+          $response->getBody()->write(json_encode($admin));
         return $response->withHeader('Content-Type', 'application/json');
     } catch (Exception $e) {
         error_log("Get current admin error: " . $e->getMessage());
         $response->getBody()->write(json_encode(['error' => 'Failed to get admin info']));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
 
 // Delete user (Admin only)
 $app->delete('/api/admin/users/{id}', function (Request $request, Response $response, $args) use ($pdo) {
