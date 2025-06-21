@@ -792,4 +792,133 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
         return $response->withHeader('Content-Type', 'application/json');
     });
     
+    // Get performance trends for a student
+    $group->get('/performance/{student_id}', function (Request $request, Response $response, $args) use ($pdo) {
+        $studentId = $args['student_id'];
+        
+        try {
+            // Verify student exists
+            $stmt = $pdo->prepare('SELECT * FROM users WHERE id = ? AND role_id = (SELECT id FROM roles WHERE name = "student")');
+            $stmt->execute([$studentId]);
+            $student = $stmt->fetch();
+            
+            if (!$student) {
+                $response->getBody()->write(json_encode(['error' => 'Student not found']));
+                return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+            }
+            
+            // Get all courses enrolled by the student with performance data
+            $stmt = $pdo->prepare('
+                SELECT 
+                    c.id,
+                    c.code,
+                    c.name,
+                    c.semester,
+                    c.year,
+                    u.full_name AS lecturer_name,
+                    e.id AS enrollment_id
+                FROM 
+                    enrollments e
+                    JOIN courses c ON e.course_id = c.id
+                    JOIN users u ON c.lecturer_id = u.id
+                WHERE 
+                    e.student_id = ?
+                ORDER BY 
+                    c.year ASC, c.semester ASC
+            ');
+            $stmt->execute([$studentId]);
+            $courses = $stmt->fetchAll();
+            
+            $performanceData = [];
+            
+            foreach ($courses as $course) {
+                $courseId = $course['id'];
+                $enrollmentId = $course['enrollment_id'];
+                
+                // Calculate overall percentage for this course
+                $stmt = $pdo->prepare('
+                    SELECT 
+                        SUM((am.mark / a.max_mark) * a.weight) AS current_percentage
+                    FROM 
+                        assessment_marks am
+                        JOIN assessments a ON am.assessment_id = a.id
+                    WHERE 
+                        am.enrollment_id = ? AND am.mark IS NOT NULL
+                ');
+                $stmt->execute([$enrollmentId]);
+                $result = $stmt->fetch();
+                $currentPercentage = $result['current_percentage'] ?? 0;
+                
+                // Calculate grade based on percentage
+                $grade = null;
+                if ($currentPercentage >= 90) $grade = 'A+';
+                elseif ($currentPercentage >= 80) $grade = 'A';
+                elseif ($currentPercentage >= 75) $grade = 'A-';
+                elseif ($currentPercentage >= 70) $grade = 'B+';
+                elseif ($currentPercentage >= 65) $grade = 'B';
+                elseif ($currentPercentage >= 60) $grade = 'B-';
+                elseif ($currentPercentage >= 55) $grade = 'C+';
+                elseif ($currentPercentage >= 50) $grade = 'C';
+                elseif ($currentPercentage >= 45) $grade = 'D+';
+                elseif ($currentPercentage >= 40) $grade = 'D';
+                else $grade = 'F';
+                
+                // Determine status based on whether assessments are completed
+                $stmt = $pdo->prepare('
+                    SELECT 
+                        COUNT(a.id) as total_assessments,
+                        COUNT(am.mark) as completed_assessments
+                    FROM 
+                        assessments a
+                        LEFT JOIN assessment_marks am ON a.id = am.assessment_id AND am.enrollment_id = ?
+                    WHERE 
+                        a.course_id = ?
+                ');
+                $stmt->execute([$enrollmentId, $courseId]);
+                $assessmentStatus = $stmt->fetch();
+                
+                $status = 'In Progress';
+                if ($assessmentStatus['completed_assessments'] == $assessmentStatus['total_assessments'] && $assessmentStatus['total_assessments'] > 0) {
+                    $status = 'Completed';
+                } elseif ($assessmentStatus['completed_assessments'] == 0) {
+                    $status = 'Pending';
+                }
+                  // Assume 3 credit hours per course (you can adjust this or add a credit_hours field to courses table)
+                $creditHours = 3;
+                
+                // Format semester for display
+                $semesterDisplay = $course['semester'];
+                if ($course['semester'] === 'Fall') {
+                    $semesterDisplay = 'Semester 1';
+                } elseif ($course['semester'] === 'Spring') {
+                    $semesterDisplay = 'Semester 2';
+                }
+                
+                $performanceData[] = [
+                    'id' => $courseId,
+                    'semester' => $semesterDisplay . ' ' . $course['year'],
+                    'code' => $course['code'],
+                    'name' => $course['name'],
+                    'creditHours' => $creditHours,
+                    'grade' => $grade,
+                    'percentage' => round((float)$currentPercentage, 2),
+                    'status' => $status,
+                    'lecturer' => $course['lecturer_name']
+                ];
+            }
+            
+            $response->getBody()->write(json_encode([
+                'success' => true,
+                'data' => $performanceData
+            ]));
+            return $response->withHeader('Content-Type', 'application/json');
+            
+        } catch (Exception $e) {
+            $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
+            return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+        }
+    });
+
+    // ...existing code...
+    
 });
