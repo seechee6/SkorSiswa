@@ -1,4 +1,5 @@
 <?php
+error_log("API Request: " . $_SERVER['REQUEST_URI']);
 require __DIR__ . '/../vendor/autoload.php';
 
 use Psr\Http\Message\ResponseInterface as Response;
@@ -18,8 +19,18 @@ $app->addBodyParsingMiddleware();
 // CORS middleware
 $app->add(function ($request, $handler) {
     $response = $handler->handle($request);
+    
+    // Get the origin from the request
+    $origin = $request->getHeaderLine('Origin');
+    
+    // Allow any localhost origin
+    $allowedOrigin = '*';
+    if (preg_match('/^https?:\/\/localhost(:\d+)?$/', $origin)) {
+        $allowedOrigin = $origin;
+    }
+    
     return $response
-        ->withHeader('Access-Control-Allow-Origin', 'http://localhost:8081')
+        ->withHeader('Access-Control-Allow-Origin', $allowedOrigin)
         ->withHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Origin, Authorization')
         ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
         ->withHeader('Access-Control-Allow-Credentials', 'true');
@@ -27,8 +38,17 @@ $app->add(function ($request, $handler) {
 
 // Handle preflight OPTIONS requests for CORS
 $app->options('/{routes:.+}', function ($request, $response, $args) {
+    // Get the origin from the request
+    $origin = $request->getHeaderLine('Origin');
+    
+    // Allow any localhost origin
+    $allowedOrigin = '*';
+    if (preg_match('/^https?:\/\/localhost(:\d+)?$/', $origin)) {
+        $allowedOrigin = $origin;
+    }
+    
     return $response
-        ->withHeader('Access-Control-Allow-Origin', 'http://localhost:8081')
+        ->withHeader('Access-Control-Allow-Origin', $allowedOrigin)
         ->withHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Origin, Authorization')
         ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
         ->withHeader('Access-Control-Allow-Credentials', 'true')
@@ -164,17 +184,60 @@ $app->post('/courses', function (Request $request, Response $response) use ($pdo
 // Update course
 $app->put('/courses/{id}', function (Request $request, Response $response, $args) use ($pdo) {
     $data = $request->getParsedBody();
-    $fields = [];
-    $params = [];
-    foreach (['code','name','lecturer_id','semester','year'] as $f) {
-        if (isset($data[$f])) { $fields[] = "$f = ?"; $params[] = $data[$f]; }
+    
+    try {
+        // Get the current course data before updating
+        $stmt = $pdo->prepare('SELECT c.*, u.full_name as current_lecturer_name FROM courses c LEFT JOIN users u ON c.lecturer_id = u.id WHERE c.id = ?');
+        $stmt->execute([$args['id']]);
+        $currentCourse = $stmt->fetch();
+        
+        if (!$currentCourse) {
+            $response->getBody()->write(json_encode(['success' => false, 'error' => 'Course not found']));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        $fields = [];
+        $params = [];
+        foreach (['code','name','lecturer_id','semester','year'] as $f) {
+            if (isset($data[$f])) { $fields[] = "$f = ?"; $params[] = $data[$f]; }
+        }
+        $params[] = $args['id'];
+        $sql = 'UPDATE courses SET ' . implode(', ', $fields) . ' WHERE id = ?';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        
+        // Log lecturer assignment changes
+        if (isset($data['lecturer_id'])) {
+            $newLecturerId = $data['lecturer_id'];
+            $currentLecturerId = $currentCourse['lecturer_id'];
+            
+            if ($newLecturerId != $currentLecturerId) {
+                if ($newLecturerId) {
+                    // Get new lecturer info
+                    $stmt = $pdo->prepare('SELECT full_name, staff_id FROM users WHERE id = ?');
+                    $stmt->execute([$newLecturerId]);
+                    $newLecturer = $stmt->fetch();
+                    
+                    if ($newLecturer) {
+                        $action = "Assigned lecturer {$newLecturer['full_name']} ({$newLecturer['staff_id']}) to course {$currentCourse['code']} - {$currentCourse['name']}";
+                        logSystemActivity($pdo, $newLecturerId, $action);
+                    }
+                } else {
+                    // Lecturer was unassigned
+                    $action = "Unassigned lecturer from course {$currentCourse['code']} - {$currentCourse['name']}";
+                    logSystemActivity($pdo, $currentLecturerId, $action);
+                }
+            }
+        }
+        
+        $response->getBody()->write(json_encode(['success' => true]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        error_log("Course update error: " . $e->getMessage());
+        $response->getBody()->write(json_encode(['success' => false, 'error' => 'Database error']));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
     }
-    $params[] = $args['id'];
-    $sql = 'UPDATE courses SET ' . implode(', ', $fields) . ' WHERE id = ?';
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    $response->getBody()->write(json_encode(['success' => true]));
-    return $response->withHeader('Content-Type', 'application/json');
 });
 
 // Delete course
@@ -1031,7 +1094,8 @@ $app->get('/debug/users', function (Request $request, Response $response) use ($
         return $response->withHeader('Content-Type', 'application/json');
     } catch (Exception $e) {
         $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');    }
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
 });
 
 // Test endpoint to manually create a notification (for demonstration)
@@ -1051,6 +1115,763 @@ $app->post('/test/create-notification', function (Request $request, Response $re
 
 // Include student routes
 require __DIR__ . '/../src/routes/student.php';
+
+// Simple test endpoint for debugging
+$app->get('/test', function (Request $request, Response $response) {
+    $response->getBody()->write(json_encode(['message' => 'Backend is working!', 'timestamp' => date('Y-m-d H:i:s')]));
+    return $response->withHeader('Content-Type', 'application/json');
+});
+
+// ===================== ADMIN USER MANAGEMENT =====================
+// Get all users (Admin only)
+$app->get('/api/admin/users', function (Request $request, Response $response) use ($pdo) {
+    try {
+        $stmt = $pdo->query('
+            SELECT u.id, u.full_name as name, u.matric_no, u.staff_id, u.email, 
+                   r.name as role, u.created_at,
+                   "active" as status
+            FROM users u 
+            JOIN roles r ON u.role_id = r.id 
+            ORDER BY u.created_at DESC
+        ');
+        $users = $stmt->fetchAll();
+        
+        $response->getBody()->write(json_encode($users));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Create new user (Admin only)
+$app->post('/api/admin/users', function (Request $request, Response $response) use ($pdo) {
+    try {
+        $data = $request->getParsedBody();
+        
+        // Get role ID from role name
+        $stmt = $pdo->prepare('SELECT id FROM roles WHERE name = ?');
+        $stmt->execute([$data['role']]);
+        $role = $stmt->fetch();
+        
+        if (!$role) {
+            $response->getBody()->write(json_encode(['error' => 'Invalid role']));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Hash password
+        $hashedPassword = password_hash($data['password'], PASSWORD_DEFAULT);
+        
+        // Insert user based on role
+        if ($data['role'] === 'student') {
+            $stmt = $pdo->prepare('
+                INSERT INTO users (full_name, matric_no, email, password_hash, role_id) 
+                VALUES (?, ?, ?, ?, ?)
+            ');
+            $stmt->execute([$data['name'], $data['matric_no'], $data['email'], $hashedPassword, $role['id']]);
+        } else {
+            // For non-students, use staff_id (can be generated or provided)
+            $staff_id = isset($data['staff_id']) ? $data['staff_id'] : 'STAFF' . str_pad(rand(1000, 9999), 4, '0', STR_PAD_LEFT);
+            $stmt = $pdo->prepare('
+                INSERT INTO users (full_name, staff_id, email, password_hash, role_id) 
+                VALUES (?, ?, ?, ?, ?)
+            ');
+            $stmt->execute([$data['name'], $staff_id, $data['email'], $hashedPassword, $role['id']]);
+        }
+        
+        $userId = $pdo->lastInsertId();
+        logSystemActivity($pdo, $userId, 'User created by admin');
+        
+        $response->getBody()->write(json_encode(['success' => true, 'id' => $userId]));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Update user (Admin only)
+$app->put('/api/admin/users/{id}', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $data = $request->getParsedBody();
+        $userId = $args['id'];
+        
+        // Get role ID from role name
+        $stmt = $pdo->prepare('SELECT id FROM roles WHERE name = ?');
+        $stmt->execute([$data['role']]);
+        $role = $stmt->fetch();
+        
+        if (!$role) {
+            $response->getBody()->write(json_encode(['error' => 'Invalid role']));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        $stmt = $pdo->prepare('
+            UPDATE users 
+            SET full_name = ?, email = ?, role_id = ? 
+            WHERE id = ?
+        ');
+        $stmt->execute([$data['name'], $data['email'], $role['id'], $userId]);
+        
+        logSystemActivity($pdo, $userId, 'User updated by admin');
+        
+        $response->getBody()->write(json_encode(['success' => true]));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Toggle user status (Admin only) - Since there's no is_active column, we'll just return success
+$app->patch('/api/admin/users/{id}/status', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $userId = $args['id'];
+        
+        // For now, just log the action since there's no is_active column in the database
+        logSystemActivity($pdo, $userId, 'User status toggle requested by admin');
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'User status feature not yet implemented in database schema'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Reset user password (Admin only)
+// Set new password for user (admin)
+$app->put('/api/admin/users/{id}/password', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $userId = $args['id'];
+        $data = $request->getParsedBody();
+        
+        if (!isset($data['new_password']) || empty($data['new_password'])) {
+            $response->getBody()->write(json_encode(['error' => 'New password is required']));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        if (strlen($data['new_password']) < 6) {
+            $response->getBody()->write(json_encode(['error' => 'Password must be at least 6 characters long']));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Get user information for logging
+        $stmt = $pdo->prepare('SELECT full_name, email FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+        
+        if (!$user) {
+            $response->getBody()->write(json_encode(['error' => 'User not found']));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Hash the new password
+        $hashedPassword = password_hash($data['new_password'], PASSWORD_DEFAULT);
+        
+        // Update the password
+        $stmt = $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+        $stmt->execute([$hashedPassword, $userId]);
+        
+        // Log the activity
+        logSystemActivity($pdo, $userId, "Password updated by admin for user: {$user['full_name']} ({$user['email']})");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Password updated successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        error_log("Password update error: " . $e->getMessage());
+        $response->getBody()->write(json_encode(['error' => 'Failed to update password']));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Legacy reset-password endpoint (kept for backward compatibility)
+$app->post('/api/admin/users/{id}/reset-password', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $userId = $args['id'];
+        
+        // Generate a temporary password
+        $tempPassword = 'temp' . rand(1000, 9999);
+        $hashedPassword = password_hash($tempPassword, PASSWORD_DEFAULT);
+        
+        $stmt = $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+        $stmt->execute([$hashedPassword, $userId]);
+        
+        logSystemActivity($pdo, $userId, 'Password reset by admin');
+        
+        // In a real system, you'd send an email here
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Password reset successful',
+            'temp_password' => $tempPassword // Remove this in production
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');    }
+});
+
+// Admin change own password
+$app->put('/api/admin/change-my-password', function (Request $request, Response $response) use ($pdo) {
+    try {
+        $data = $request->getParsedBody();
+        
+        if (!isset($data['current_password']) || !isset($data['new_password'])) {
+            $response->getBody()->write(json_encode(['error' => 'Current password and new password are required']));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        if (strlen($data['new_password']) < 6) {
+            $response->getBody()->write(json_encode(['error' => 'New password must be at least 6 characters long']));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // For this example, we'll use a simple session check
+        // In a real app, you'd get the user ID from the session/JWT token
+        // For now, let's assume we get it from a header or find the admin user
+          // Get admin user (assuming there's only one admin for this demo)
+        $stmt = $pdo->prepare('SELECT u.id, u.full_name, u.password_hash FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name = "admin" LIMIT 1');
+        $stmt->execute();
+        $admin = $stmt->fetch();
+        
+        if (!$admin) {
+            $response->getBody()->write(json_encode(['error' => 'Admin user not found']));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Verify current password
+        if (!password_verify($data['current_password'], $admin['password_hash'])) {
+            $response->getBody()->write(json_encode(['error' => 'Current password is incorrect']));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Check if new password is different from current
+        if (password_verify($data['new_password'], $admin['password_hash'])) {
+            $response->getBody()->write(json_encode(['error' => 'New password must be different from current password']));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Hash the new password
+        $hashedPassword = password_hash($data['new_password'], PASSWORD_DEFAULT);
+        
+        // Update the password
+        $stmt = $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+        $stmt->execute([$hashedPassword, $admin['id']]);
+        
+        // Log the activity
+        logSystemActivity($pdo, $admin['id'], "Admin {$admin['full_name']} changed their own password");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Password changed successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        error_log("Admin password change error: " . $e->getMessage());
+        $response->getBody()->write(json_encode(['error' => 'Failed to change password']));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Get current admin info
+$app->get('/api/admin/current-admin', function (Request $request, Response $response) use ($pdo) {
+    try {
+        // Get admin user (assuming there's only one admin for this demo)
+        $stmt = $pdo->prepare('SELECT u.id, u.full_name, u.email FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name = "admin" LIMIT 1');
+        $stmt->execute();
+        $admin = $stmt->fetch();
+        
+        if (!$admin) {
+            $response->getBody()->write(json_encode(['error' => 'Admin user not found']));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        $response->getBody()->write(json_encode($admin));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        error_log("Get current admin error: " . $e->getMessage());
+        $response->getBody()->write(json_encode(['error' => 'Failed to get admin info']));
+
+// Delete user (Admin only)
+$app->delete('/api/admin/users/{id}', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $userId = $args['id'];
+        
+        // Get user information before deletion for logging
+        $stmt = $pdo->prepare('SELECT full_name, email, role_id FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+        
+        if (!$user) {
+            $response->getBody()->write(json_encode(['error' => 'User not found']));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Check if user has associated data that would prevent deletion
+        // Check enrollments
+        $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM enrollments WHERE student_id = ?');
+        $stmt->execute([$userId]);
+        $enrollmentCount = $stmt->fetch()['count'];
+        
+        // Check if user is assigned as lecturer to any courses
+        $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM courses WHERE lecturer_id = ?');
+        $stmt->execute([$userId]);
+        $courseCount = $stmt->fetch()['count'];
+        
+        if ($enrollmentCount > 0 || $courseCount > 0) {
+            $response->getBody()->write(json_encode([
+                'error' => 'Cannot delete user. User has associated enrollments or courses.'
+            ]));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Delete the user
+        $stmt = $pdo->prepare('DELETE FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        
+        // Log the deletion
+        logSystemActivity($pdo, $userId, "User deleted by admin: {$user['full_name']} ({$user['email']})");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'User deleted successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        error_log("User deletion error: " . $e->getMessage());
+        $response->getBody()->write(json_encode(['error' => 'Failed to delete user']));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// ===================== ADMIN COURSE MANAGEMENT =====================
+// Get all courses (admin view)
+$app->get('/api/admin/courses', function (Request $request, Response $response) use ($pdo) {
+    try {
+        $stmt = $pdo->query('SELECT c.*, u.full_name AS lecturer_name FROM courses c LEFT JOIN users u ON c.lecturer_id = u.id ORDER BY c.code');
+        $courses = $stmt->fetchAll();
+        
+        $response->getBody()->write(json_encode($courses));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Create new course (admin only)
+$app->post('/api/admin/courses', function (Request $request, Response $response) use ($pdo) {
+    try {
+        $data = $request->getParsedBody();
+        
+        $stmt = $pdo->prepare('INSERT INTO courses (code, name, lecturer_id, semester, year) VALUES (?, ?, ?, ?, ?)');
+        $stmt->execute([
+            $data['code'],
+            $data['name'],
+            $data['lecturer_id'] ?? null,
+            $data['semester'],
+            $data['year']
+        ]);
+        
+        $courseId = $pdo->lastInsertId();
+        
+        // Log the activity
+        logSystemActivity($pdo, 1, "Created course: {$data['code']} - {$data['name']}");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Course created successfully',
+            'course_id' => $courseId
+        ]));
+        return $response->withStatus(201)->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Update course (admin only)
+$app->put('/api/admin/courses/{id}', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $courseId = $args['id'];
+        $data = $request->getParsedBody();
+        
+        $stmt = $pdo->prepare('UPDATE courses SET code = ?, name = ?, lecturer_id = ?, semester = ?, year = ? WHERE id = ?');
+        $stmt->execute([
+            $data['code'],
+            $data['name'],
+            $data['lecturer_id'] ?? null,
+            $data['semester'],
+            $data['year'],
+            $courseId
+        ]);
+        
+        // Log the activity
+        logSystemActivity($pdo, 1, "Updated course ID: {$courseId}");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Course updated successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Delete course (admin only)
+$app->delete('/api/admin/courses/{id}', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $courseId = $args['id'];
+        
+        // First check if course has enrollments
+        $stmt = $pdo->prepare('SELECT COUNT(*) as enrollment_count FROM enrollments WHERE course_id = ?');
+        $stmt->execute([$courseId]);
+        $result = $stmt->fetch();
+        
+        if ($result['enrollment_count'] > 0) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'message' => 'Cannot delete course with existing enrollments'
+            ]));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Get course details for logging
+        $stmt = $pdo->prepare('SELECT code, name FROM courses WHERE id = ?');
+        $stmt->execute([$courseId]);
+        $course = $stmt->fetch();
+        
+        if (!$course) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'message' => 'Course not found'
+            ]));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Delete the course
+        $stmt = $pdo->prepare('DELETE FROM courses WHERE id = ?');
+        $stmt->execute([$courseId]);
+        
+        // Log the activity
+        logSystemActivity($pdo, 1, "Deleted course: {$course['code']} - {$course['name']}");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Course deleted successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// ===================== ADMIN ENROLLMENT MANAGEMENT =====================
+// Get all enrollments (admin view)
+$app->get('/api/admin/enrollments', function (Request $request, Response $response) use ($pdo) {
+    try {
+        $stmt = $pdo->query('
+            SELECT e.*, 
+                   u.full_name AS student_name, u.matric_no, u.email,
+                   c.name as course_name, c.code as course_code, c.semester, c.year,
+                   l.full_name as lecturer_name,
+                   e.id as enrollment_id, e.created_at as enrollment_date
+            FROM enrollments e 
+            JOIN users u ON e.student_id = u.id 
+            JOIN courses c ON e.course_id = c.id
+            LEFT JOIN users l ON c.lecturer_id = l.id
+            ORDER BY e.created_at DESC
+        ');
+        $enrollments = $stmt->fetchAll();
+        
+        $response->getBody()->write(json_encode($enrollments));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Create new enrollment (admin only)
+$app->post('/api/admin/enrollments', function (Request $request, Response $response) use ($pdo) {
+    try {
+        $data = $request->getParsedBody();
+        
+        // Check if student is already enrolled in this course
+        $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM enrollments WHERE student_id = ? AND course_id = ?');
+        $stmt->execute([$data['student_id'], $data['course_id']]);
+        $result = $stmt->fetch();
+        
+        if ($result['count'] > 0) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'message' => 'Student is already enrolled in this course'
+            ]));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Create the enrollment
+        $stmt = $pdo->prepare('INSERT INTO enrollments (student_id, course_id, created_at) VALUES (?, ?, NOW())');
+        $stmt->execute([$data['student_id'], $data['course_id']]);
+        
+        $enrollmentId = $pdo->lastInsertId();
+        
+        // Get student and course names for logging
+        $stmt = $pdo->prepare('
+            SELECT u.full_name as student_name, c.code as course_code, c.name as course_name
+            FROM enrollments e
+            JOIN users u ON e.student_id = u.id
+            JOIN courses c ON e.course_id = c.id
+            WHERE e.id = ?
+        ');
+        $stmt->execute([$enrollmentId]);
+        $enrollmentInfo = $stmt->fetch();
+        
+        // Log the activity
+        logSystemActivity($pdo, 1, "Enrolled {$enrollmentInfo['student_name']} in {$enrollmentInfo['course_code']} - {$enrollmentInfo['course_name']}");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Student enrolled successfully',
+            'enrollment_id' => $enrollmentId
+        ]));
+        return $response->withStatus(201)->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Delete enrollment (admin only)
+$app->delete('/api/admin/enrollments/{id}', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $enrollmentId = $args['id'];
+        
+        // Get enrollment details for logging before deletion
+        $stmt = $pdo->prepare('
+            SELECT u.full_name as student_name, c.code as course_code, c.name as course_name
+            FROM enrollments e
+            JOIN users u ON e.student_id = u.id
+            JOIN courses c ON e.course_id = c.id
+            WHERE e.id = ?
+        ');
+        $stmt->execute([$enrollmentId]);
+        $enrollmentInfo = $stmt->fetch();
+        
+        if (!$enrollmentInfo) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'message' => 'Enrollment not found'
+            ]));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Delete related records first
+        // 1. Delete assessment marks
+        $stmt = $pdo->prepare('DELETE FROM assessment_marks WHERE enrollment_id = ?');
+        $stmt->execute([$enrollmentId]);
+        
+        // 2. Delete final exam marks
+        $stmt = $pdo->prepare('DELETE FROM final_exam_marks WHERE enrollment_id = ?');
+        $stmt->execute([$enrollmentId]);
+        
+        // 3. Delete feedback remarks
+        $stmt = $pdo->prepare('DELETE FROM feedback_remarks WHERE enrollment_id = ?');
+        $stmt->execute([$enrollmentId]);
+        
+        // 4. Delete remark requests
+        $stmt = $pdo->prepare('DELETE FROM remark_requests WHERE enrollment_id = ?');
+        $stmt->execute([$enrollmentId]);
+        
+        // 5. Delete mark update notifications
+        $stmt = $pdo->prepare('DELETE FROM mark_update_notifications WHERE enrollment_id = ?');
+        $stmt->execute([$enrollmentId]);
+        
+        // 6. Finally delete the enrollment
+        $stmt = $pdo->prepare('DELETE FROM enrollments WHERE id = ?');
+        $stmt->execute([$enrollmentId]);
+        
+        // Log the activity
+        logSystemActivity($pdo, 1, "Unenrolled {$enrollmentInfo['student_name']} from {$enrollmentInfo['course_code']} - {$enrollmentInfo['course_name']}");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Student unenrolled successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// ===== SYSTEM LOGS API ROUTES =====
+
+// Get system logs for admin dashboard
+$app->get('/api/admin/system-logs', function (Request $request, Response $response) use ($pdo) {
+    try {
+        // Get query parameters for filtering
+        $queryParams = $request->getQueryParams();
+        $activityType = $queryParams['type'] ?? '';
+        $dateFilter = $queryParams['date'] ?? '';
+        $limit = (int)($queryParams['limit'] ?? 50);
+        $offset = (int)($queryParams['offset'] ?? 0);
+
+        // Base query to get system logs with user information
+        $sql = "SELECT 
+                    sl.id,
+                    sl.created_at as timestamp,
+                    COALESCE(u.full_name, 'System') as user,
+                    sl.action as description,
+                    sl.user_id
+                FROM system_logs sl 
+                LEFT JOIN users u ON sl.user_id = u.id 
+                WHERE 1=1";
+        
+        $params = [];
+        
+        // Add date filter if provided
+        if ($dateFilter) {
+            $sql .= " AND DATE(sl.created_at) = ?";
+            $params[] = $dateFilter;
+        }
+        
+        // Add activity type filter based on action content
+        if ($activityType) {
+            switch ($activityType) {
+                case 'user':
+                    $sql .= " AND (sl.action LIKE '%user%' OR sl.action LIKE '%User%' OR sl.action LIKE '%login%' OR sl.action LIKE '%register%')";
+                    break;
+                case 'course':
+                    $sql .= " AND (sl.action LIKE '%course%' OR sl.action LIKE '%Course%')";
+                    break;
+                case 'enrollment':
+                    $sql .= " AND (sl.action LIKE '%enroll%' OR sl.action LIKE '%Enroll%')";
+                    break;
+                case 'grade':
+                    $sql .= " AND (sl.action LIKE '%grade%' OR sl.action LIKE '%mark%' OR sl.action LIKE '%Grade%' OR sl.action LIKE '%Mark%')";
+                    break;
+                case 'system':
+                    $sql .= " AND (sl.user_id IS NULL OR sl.action LIKE '%system%' OR sl.action LIKE '%System%' OR sl.action LIKE '%backup%')";
+                    break;
+            }
+        }
+        
+        // Order by most recent first
+        $sql .= " ORDER BY sl.created_at DESC";
+        
+        // Add pagination
+        $sql .= " LIMIT ? OFFSET ?";
+        $params[] = $limit;
+        $params[] = $offset;
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $logs = $stmt->fetchAll();
+        
+        // Transform the data to match frontend expectations
+        $transformedLogs = array_map(function($log) {
+            // Determine activity type based on action description
+            $type = 'system'; // default
+            $action = strtolower($log['description']);
+            
+            if (strpos($action, 'user') !== false || strpos($action, 'login') !== false || strpos($action, 'register') !== false) {
+                $type = 'user';
+            } elseif (strpos($action, 'course') !== false) {
+                $type = 'course';
+            } elseif (strpos($action, 'enroll') !== false) {
+                $type = 'enrollment';
+            } elseif (strpos($action, 'grade') !== false || strpos($action, 'mark') !== false) {
+                $type = 'grade';
+            }
+            
+            // Determine status - for now, assume success unless indicated otherwise
+            $status = 'success';
+            if (strpos($action, 'failed') !== false || strpos($action, 'error') !== false) {
+                $status = 'error';
+            } elseif (strpos($action, 'warning') !== false || strpos($action, 'retry') !== false) {
+                $status = 'warning';
+            }
+            
+            return [
+                'id' => (int)$log['id'],
+                'timestamp' => $log['timestamp'],
+                'user' => $log['user'],
+                'type' => $type,
+                'description' => $log['description'],
+                'status' => $status,
+                'reviewed' => false // For now, all logs are unreviewed
+            ];
+        }, $logs);
+        
+        // Get total count for pagination
+        $countSql = "SELECT COUNT(*) as total FROM system_logs sl LEFT JOIN users u ON sl.user_id = u.id WHERE 1=1";
+        $countParams = [];
+        
+        if ($dateFilter) {
+            $countSql .= " AND DATE(sl.created_at) = ?";
+            $countParams[] = $dateFilter;
+        }
+        
+        if ($activityType) {
+            switch ($activityType) {
+                case 'user':
+                    $countSql .= " AND (sl.action LIKE '%user%' OR sl.action LIKE '%User%' OR sl.action LIKE '%login%' OR sl.action LIKE '%register%')";
+                    break;
+                case 'course':
+                    $countSql .= " AND (sl.action LIKE '%course%' OR sl.action LIKE '%Course%')";
+                    break;
+                case 'enrollment':
+                    $countSql .= " AND (sl.action LIKE '%enroll%' OR sl.action LIKE '%Enroll%')";
+                    break;
+                case 'grade':
+                    $countSql .= " AND (sl.action LIKE '%grade%' OR sl.action LIKE '%mark%' OR sl.action LIKE '%Grade%' OR sl.action LIKE '%Mark%')";
+                    break;
+                case 'system':
+                    $countSql .= " AND (sl.user_id IS NULL OR sl.action LIKE '%system%' OR sl.action LIKE '%System%' OR sl.action LIKE '%backup%')";
+                    break;
+            }
+        }
+        
+        $countStmt = $pdo->prepare($countSql);
+        $countStmt->execute($countParams);
+        $totalCount = $countStmt->fetch()['total'];
+        
+        $responseData = [
+            'success' => true,
+            'logs' => $transformedLogs,
+            'total' => (int)$totalCount,
+            'limit' => $limit,
+            'offset' => $offset
+        ];
+        
+        $response->getBody()->write(json_encode($responseData));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        error_log("System logs API error: " . $e->getMessage());
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => 'Failed to fetch system logs: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Simple test route
+$app->get('/api/test', function (Request $request, Response $response) {
+    $response->getBody()->write(json_encode(['message' => 'API is working']));
+    return $response->withHeader('Content-Type', 'application/json');
+});
 
 // ===================== REMARK REQUESTS =====================
 // Get all remark requests for a student

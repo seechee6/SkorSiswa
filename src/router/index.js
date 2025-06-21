@@ -22,7 +22,14 @@ import PerformanceTrends from '../components/student/PerformanceTrends.vue'
 import RemarkRequests from '../components/student/RemarkRequests.vue'
 import StudentNotifications from '../components/student/StudentNotifications.vue'
 import AdvisorDashboard from '../components/advisor/AdvisorDashboard.vue'
+import AdminLayout from '../components/admin/AdminLayout.vue'
 import AdminDashboard from '../components/admin/AdminDashboard.vue'
+import AdminManageUsers from '../components/admin/ManageUsers.vue'
+import AdminManageCourses from '../components/admin/ManageCourses.vue'
+import AdminStudentEnrollments from '../components/admin/StudentEnrollments.vue'
+import AdminLecturerAssignments from '../components/admin/LecturerAssignments.vue'
+import AdminPasswordManagement from '../components/admin/PasswordManagement.vue'
+import AdminLogs from '../components/admin/SystemLogs.vue'
 import Login from '../components/Login.vue'
 import RemarkReviews from '../components/lecturer/RemarkReviews.vue'
 
@@ -60,10 +67,22 @@ const routes = [
       { path: 'performance', component: PerformanceTrends },
       { path: 'remarks', component: RemarkRequests },
       { path: 'notifications', component: StudentNotifications }
-    ]
+    ]  
   },
   { path: '/advisor', component: AdvisorDashboard },
-  { path: '/admin', component: AdminDashboard },
+  {
+    path: '/admin',
+    component: AdminLayout,
+    children: [      { path: '', redirect: '/admin/dashboard' },
+      { path: 'dashboard', component: AdminDashboard },
+      { path: 'users', component: AdminManageUsers },
+      { path: 'courses', component: AdminManageCourses },
+      { path: 'enrollments', component: AdminStudentEnrollments },
+      { path: 'assignments', component: AdminLecturerAssignments },
+      { path: 'password-reset', component: AdminPasswordManagement },
+      { path: 'logs', component: AdminLogs }
+    ]
+  },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 
