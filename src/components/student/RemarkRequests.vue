@@ -1,148 +1,237 @@
 <template>
   <div class="remarks-container">
-    <h2 class="page-title">Remark Requests</h2>
-    
-    <div class="action-buttons">
-      <button @click="showNewRequestForm = true" class="action-btn">
-        <i class="fas fa-plus"></i> New Request
-      </button>
-    </div>
-
-    <div v-if="loading" class="loading">
-      <div class="spinner"></div>
-      <p>Loading requests...</p>
-    </div>
-
-    <div v-else class="remarks-content">
-      <div v-if="remarks.length === 0" class="no-remarks">
-        <i class="fas fa-inbox empty-icon"></i>
-        <p>You haven't submitted any remark requests yet.</p>
+    <!-- Page Header -->
+    <div class="page-header">
+      <div class="header-content">
+        <h2>Remark Requests</h2>
+        <p class="subtitle">Submit and manage your assessment remark requests</p>
       </div>
+      <div class="header-actions">
+        <button @click="showNewRequestForm = true" class="new-request-btn">
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+          </svg>
+          New Request
+        </button>
+      </div>
+    </div>    <!-- Loading State -->
+    <div v-if="loading" class="loading-container">
+      <div class="spinner"></div>
+      <p>Loading remark requests...</p>
+    </div>
 
-      <div v-else class="remarks-list">
-        <div v-for="remark in remarks" :key="remark.id" class="remark-card">
-          <div class="remark-header">
-            <h3>{{ remark.component_name }} - {{ remark.course_name }}</h3>
+    <!-- Empty State -->
+    <div v-else-if="remarks.length === 0" class="empty-state">
+      <div class="empty-icon">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+        </svg>
+      </div>
+      <h3>No Remark Requests</h3>
+      <p>You haven't submitted any remark requests yet. Click "New Request" to get started.</p>
+    </div>
+
+    <!-- Remarks List -->
+    <div v-else class="remarks-content">
+      <div class="remarks-grid">
+        <div v-for="remark in remarks" :key="remark.id" class="card remark-card">
+          <div class="card-header">
+            <div class="remark-title">
+              <h3>{{ remark.component_name }}</h3>
+              <p class="course-name">{{ remark.course_name }}</p>
+            </div>
             <span :class="['status-badge', getStatusClass(remark.status)]">
               {{ remark.status }}
             </span>
           </div>
-          <div class="remark-details">
-            <div class="detail-item">
-              <span class="detail-label">Submitted:</span>
-              <span>{{ formatDate(remark.created_at) }}</span>
+          
+          <div class="card-body">
+            <div class="remark-details">
+              <div class="detail-row">
+                <div class="detail-item">
+                  <span class="detail-label">Submitted</span>
+                  <span class="detail-value">{{ formatDate(remark.created_at) }}</span>
+                </div>
+                                <div class="detail-item">
+                  <span class="detail-label">Potential Gain</span>
+                  <span class="detail-value gain-value">+{{ (remark.requested_mark - remark.current_mark).toFixed(1) }}</span>
+                </div>
+              </div>
+              <div class="detail-row">
+                <div class="detail-item">
+                  <span class="detail-label">Current Mark</span>
+                  <span class="detail-value">{{ remark.current_mark }} / {{ remark.max_mark }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Requested Mark</span>
+                  <span class="detail-value requested-mark">{{ remark.requested_mark }} / {{ remark.max_mark }}</span>
+                </div>
+              </div>
             </div>
-            <div class="detail-item">
-              <span class="detail-label">Current Mark:</span>
-              <span>{{ remark.current_mark }} / {{ remark.max_mark }}</span>
+            
+            <div class="remark-justification">
+              <h4>Justification</h4>
+              <p>{{ remark.justification }}</p>
             </div>
-            <div class="detail-item">
-              <span class="detail-label">Requested Mark:</span>
-              <span>{{ remark.requested_mark }} / {{ remark.max_mark }}</span>
+            
+            <div v-if="remark.lecturer_response" class="remark-response">
+              <h4>Lecturer Response</h4>
+              <p>{{ remark.lecturer_response }}</p>
             </div>
-          </div>
-          <div class="remark-justification">
-            <h4>Justification:</h4>
-            <p>{{ remark.justification }}</p>
-          </div>
-          <div v-if="remark.lecturer_response" class="remark-response">
-            <h4>Lecturer Response:</h4>
-            <p>{{ remark.lecturer_response }}</p>
-          </div>          <div class="remark-actions" v-if="remark.status === 'Pending'">
-            <button @click="editRequest(remark)" class="edit-btn">Edit</button>
-            <button @click="confirmCancel(remark.id)" class="cancel-btn">Cancel</button>
-          </div>
-          <div class="remark-actions" v-else-if="remark.status === 'Under Review'">
-            <button @click="confirmCancel(remark.id)" class="cancel-btn">Cancel</button>
+            
+            <div class="remark-actions" v-if="remark.status === 'Pending'">
+              <button @click="editRequest(remark)" class="edit-btn">
+                <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708L10.5 8.5 7.5 5.5 12.146.146zM11.207 1.5 13.5 3.793 4.793 12.5H2.5v-2.293L11.207 1.5z"/>
+                </svg>
+                Edit
+              </button>
+              <button @click="confirmCancel(remark.id)" class="cancel-btn">
+                <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+                </svg>
+                Cancel
+              </button>
+            </div>
+            <div class="remark-actions" v-else-if="remark.status === 'Under Review'">
+              <button @click="confirmCancel(remark.id)" class="cancel-btn">
+                <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+                </svg>
+                Cancel Request
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- New Request Modal -->
-    <div v-if="showNewRequestForm" class="modal">
-      <div class="modal-content">
+    </div>    <!-- New Request Modal -->
+    <div v-if="showNewRequestForm" class="modal-overlay">
+      <div class="modal">
         <div class="modal-header">
           <h3>{{ editMode ? 'Edit Remark Request' : 'New Remark Request' }}</h3>
-          <button @click="closeModal" class="close-btn">&times;</button>
+          <button @click="closeModal" class="close-btn">
+            <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+              <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+            </svg>
+          </button>
         </div>
-        <form @submit.prevent="submitRequest" class="remark-form">
-          <div class="form-group">
-            <label>Course</label>
-            <select v-model="requestForm.course_id" @change="fetchComponents" required>
-              <option value="">Select a Course</option>
-              <option v-for="course in courses" :key="course.id" :value="course.id">
-                {{ course.code }} - {{ course.name }}
-              </option>
-            </select>
-          </div>
-          
-          <div class="form-group">
-            <label>Assessment Component</label>
-            <select v-model="requestForm.component_id" @change="updateCurrentMark" required>
-              <option value="">Select a Component</option>
-              <option v-for="component in components" :key="component.id" :value="component.id">
-                {{ component.name }}
-              </option>
-            </select>
-          </div>
-          
-          <div v-if="currentMark !== null" class="form-group">
-            <label>Current Mark</label>
-            <input type="text" :value="currentMark + ' / ' + currentMaxMark" disabled />
-          </div>
-          
-          <div class="form-group">
-            <label>Requested Mark</label>
-            <input 
-              type="number" 
-              v-model.number="requestForm.requested_mark" 
-              required 
-              :min="currentMark" 
-              :max="currentMaxMark"
-              :disabled="currentMark === null"
-            />
-          </div>
-          
-          <div class="form-group">
-            <label>Justification</label>
-            <textarea 
-              v-model="requestForm.justification" 
-              rows="5" 
-              required 
-              placeholder="Provide a detailed explanation for why you believe your mark should be reconsidered..."
-            ></textarea>
-          </div>
-          
-          <div class="form-actions">
-            <button type="submit" class="submit-btn" :disabled="isSubmitting">
-              {{ isSubmitting ? 'Submitting...' : (editMode ? 'Update Request' : 'Submit Request') }}
-            </button>
-            <button type="button" @click="closeModal" class="cancel-btn">Cancel</button>
-          </div>
-        </form>
+        
+        <div class="modal-body">
+          <form @submit.prevent="submitRequest" class="remark-form">
+            <div class="form-group">
+              <label>Course</label>
+              <select v-model="requestForm.course_id" @change="fetchComponents" required>
+                <option value="">Select a Course</option>
+                <option v-for="course in courses" :key="course.id" :value="course.id">
+                  {{ course.code }} - {{ course.name }}
+                </option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label>Assessment Component</label>
+              <select v-model="requestForm.component_id" @change="updateCurrentMark" required>
+                <option value="">Select a Component</option>
+                <option v-for="component in components" :key="component.id" :value="component.id">
+                  {{ component.name }}
+                </option>
+              </select>
+            </div>
+            
+            <div v-if="currentMark !== null" class="form-group">
+              <label>Current Mark</label>
+              <div class="current-mark-display">
+                <span class="mark-value">{{ currentMark }} / {{ currentMaxMark }}</span>
+                <span class="mark-percentage">({{ ((currentMark / currentMaxMark) * 100).toFixed(1) }}%)</span>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label>Requested Mark</label>
+              <input 
+                type="number" 
+                v-model.number="requestForm.requested_mark" 
+                required 
+                :min="currentMark" 
+                :max="currentMaxMark"
+                :disabled="currentMark === null"
+                step="0.1"
+              />
+              <div v-if="requestForm.requested_mark && currentMark" class="mark-gain">
+                Potential gain: +{{ (requestForm.requested_mark - currentMark).toFixed(1) }} marks
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label>Justification</label>
+              <textarea 
+                v-model="requestForm.justification" 
+                rows="5" 
+                required 
+                placeholder="Provide a detailed explanation for why you believe your mark should be reconsidered. Include specific points about your work that may have been overlooked or misunderstood..."
+              ></textarea>
+            </div>
+            
+            <div class="form-actions">
+              <button type="submit" class="submit-btn" :disabled="isSubmitting">
+                <svg v-if="isSubmitting" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" class="spinner-icon">
+                  <path d="M11.251.068a.5.5 0 0 1 .227.58L9.677 6.5H13a.5.5 0 0 1 .364.843l-8 8.5a.5.5 0 0 1-.842-.49L6.323 9.5H3a.5.5 0 0 1-.364-.843l8-8.5a.5.5 0 0 1 .615-.09z"/>
+                </svg>
+                {{ isSubmitting ? 'Processing...' : (editMode ? 'Update Request' : 'Submit Request') }}
+              </button>
+              <button type="button" @click="closeModal" class="cancel-modal-btn">Cancel</button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
 
     <!-- Confirmation Modal -->
-    <div v-if="showCancelConfirm" class="modal">
-      <div class="modal-content confirmation">
+    <div v-if="showCancelConfirm" class="modal-overlay">
+      <div class="modal confirmation-modal">
         <div class="modal-header">
           <h3>Cancel Remark Request</h3>
-          <button @click="showCancelConfirm = false" class="close-btn">&times;</button>
-        </div>
-        <p>Are you sure you want to cancel this remark request? This action cannot be undone.</p>
-        <div class="form-actions">
-          <button @click="cancelRequest" class="submit-btn" :disabled="isSubmitting">
-            {{ isSubmitting ? 'Processing...' : 'Yes, Cancel Request' }}
+          <button @click="showCancelConfirm = false" class="close-btn">
+            <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+              <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+            </svg>
           </button>
-          <button @click="showCancelConfirm = false" class="cancel-btn">No, Keep Request</button>
+        </div>
+        <div class="modal-body">
+          <div class="confirmation-content">
+            <div class="warning-icon">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+              </svg>
+            </div>
+            <p>Are you sure you want to cancel this remark request? This action cannot be undone.</p>
+          </div>
+          <div class="form-actions">
+            <button @click="cancelRequest" class="confirm-cancel-btn" :disabled="isSubmitting">
+              <svg v-if="isSubmitting" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" class="spinner-icon">
+                <path d="M11.251.068a.5.5 0 0 1 .227.58L9.677 6.5H13a.5.5 0 0 1 .364.843l-8 8.5a.5.5 0 0 1-.842-.49L6.323 9.5H3a.5.5 0 0 1-.364-.843l8-8.5a.5.5 0 0 1 .615-.09z"/>
+              </svg>
+              {{ isSubmitting ? 'Processing...' : 'Yes, Cancel Request' }}
+            </button>
+            <button @click="showCancelConfirm = false" class="cancel-modal-btn">No, Keep Request</button>
+          </div>
         </div>
       </div>
     </div>
 
+    <!-- Error Message -->
     <div v-if="error" class="error-message">
-      {{ error }}
+      <div class="error-icon">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+      </div>
+      <div class="error-content">
+        <h4>Error</h4>
+        <p>{{ error }}</p>
+      </div>
     </div>
   </div>
 </template>
@@ -357,102 +446,207 @@ export default {
 
 <style scoped>
 .remarks-container {
+  padding: 20px;
   max-width: 1200px;
   margin: 0 auto;
 }
 
-.page-title {
-  font-size: 32px;
-  font-weight: 300;
-  margin-bottom: 32px;
-  color: #2c3e50;
-}
-
-.action-buttons {
-  margin-bottom: 32px;
-}
-
-.action-btn {
-  background: #3498db;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 12px 20px;
-  font-size: 16px;
-  cursor: pointer;
-  transition: background 0.3s;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.action-btn:hover {
-  background: #2980b9;
-}
-
-.remarks-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-  gap: 24px;
-}
-
-.remark-card {
-  background: white;
-  border-radius: 8px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-}
-
-.remark-header {
+/* Page Header Styles */
+.page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.header-content h2 {
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0;
+  text-align: left;
+}
+
+.subtitle {
+  font-size: 0.95rem;
+  color: #718096;
+  margin-top: 4px;
+}
+
+.new-request-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #4c51bf;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.new-request-btn:hover {
+  background-color: #4c51bf;
+  transform: translateY(-1px);
+}
+
+/* Loading & Empty State Styles */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+  color: #718096;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(66, 153, 225, 0.3);
+  border-radius: 50%;
+  border-top-color: #4c51bf;
+  animation: spin 1s linear infinite;
   margin-bottom: 16px;
 }
 
-.remark-header h3 {
-  font-size: 18px;
-  color: #2c3e50;
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+  color: #718096;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  border: 1px dashed #cbd5e0;
+}
+
+.empty-icon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  color: #a0aec0;
+}
+
+.empty-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.empty-state h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  color: #4a5568;
+}
+
+.empty-state p {
+  font-size: 0.95rem;
+  text-align: center;
+  max-width: 400px;
   margin: 0;
 }
 
+/* Card Styles */
+.remarks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  gap: 20px;
+}
+
+.card {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+  padding: 16px;
+  border-bottom: 1px solid #edf2f7;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.remark-title h3 {
+  margin: 0 0 4px 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.course-name {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #718096;
+}
+
+.card-body {
+  padding: 16px;
+}
+
+/* Status Badge */
 .status-badge {
   padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 500;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .status-badge.pending {
-  background: #fef9e7;
-  color: #f39c12;
+  background-color: #fef5e7;
+  color: #c05621;
 }
 
 .status-badge.approved {
-  background: #e3fcef;
-  color: #27ae60;
+  background-color: #c6f6d5;
+  color: #2f855a;
 }
 
 .status-badge.rejected {
-  background: #fdeded;
-  color: #e74c3c;
+  background-color: #fed7d7;
+  color: #c53030;
 }
 
 .status-badge.cancelled {
-  background: #f5f6fa;
-  color: #7f8c8d;
+  background-color: #edf2f7;
+  color: #718096;
 }
 
 .status-badge.under-review {
-  background: #e3f2fd;
-  color: #1976d2;
+  background-color: #e9d8fd;
+  color: #6b46c1;
 }
 
+/* Detail Rows */
 .remark-details {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 16px;
   margin-bottom: 16px;
+}
+
+.detail-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 12px;
 }
 
 .detail-item {
@@ -461,108 +655,99 @@ export default {
 }
 
 .detail-label {
-  font-size: 14px;
-  color: #7f8c8d;
+  font-size: 0.75rem;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   margin-bottom: 4px;
 }
 
+.detail-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.requested-mark {
+  color: #4c51bf;
+}
+
+.gain-value {
+  color: #48bb78;
+}
+
+/* Justification & Response */
 .remark-justification, .remark-response {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #edf2f7;
 }
 
 .remark-justification h4, .remark-response h4 {
-  font-size: 16px;
-  color: #2c3e50;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #4a5568;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   margin: 0 0 8px 0;
 }
 
 .remark-justification p, .remark-response p {
   margin: 0;
   line-height: 1.5;
-  color: #34495e;
+  color: #2d3748;
+  font-size: 0.9rem;
 }
 
 .remark-response {
-  background: #f8f9fa;
-  padding: 16px;
+  background-color: #f7fafc;
+  padding: 12px;
   border-radius: 6px;
+  border-left: 4px solid #4c51bf;
+}
+
+/* Action Buttons */
+.remark-actions {
+  display: flex;
+  gap: 8px;
   margin-top: 16px;
 }
 
-.remark-actions {
+.edit-btn, .cancel-btn {
   display: flex;
-  gap: 12px;
-  margin-top: 24px;
-}
-
-.edit-btn, .cancel-btn, .submit-btn {
-  padding: 8px 16px;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
   border: none;
-  border-radius: 4px;
-  font-size: 14px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.3s;
+  transition: all 0.2s;
 }
 
 .edit-btn {
-  background: #3498db;
+  background-color: #4c51bf;
   color: white;
 }
 
 .edit-btn:hover {
-  background: #2980b9;
+  background-color: #4c51bf;
+  transform: translateY(-1px);
 }
 
 .cancel-btn {
-  background: #e74c3c;
-  color: white;
+  background-color: #fed7d7;
+  color: #c53030;
 }
 
 .cancel-btn:hover {
-  background: #c0392b;
+  background-color: #feb2b2;
+  transform: translateY(-1px);
 }
 
-.submit-btn {
-  background: #27ae60;
-  color: white;
-}
-
-.submit-btn:hover {
-  background: #219653;
-}
-
-.submit-btn:disabled, .cancel-btn:disabled, .edit-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.no-remarks {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: white;
-  border-radius: 8px;
-  padding: 48px 24px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-  text-align: center;
-}
-
-.empty-icon {
-  font-size: 48px;
-  color: #bdc3c7;
-  margin-bottom: 16px;
-}
-
-.no-remarks p {
-  font-size: 16px;
-  color: #7f8c8d;
-  margin: 0;
-}
-
-.modal {
+/* Modal Styles */
+.modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -573,19 +758,20 @@ export default {
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  padding: 20px;
 }
 
-.modal-content {
+.modal {
   background: white;
   border-radius: 8px;
   width: 100%;
   max-width: 600px;
   max-height: 90vh;
   overflow-y: auto;
-  padding: 24px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
 }
 
-.modal-content.confirmation {
+.confirmation-modal {
   max-width: 400px;
 }
 
@@ -593,23 +779,37 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  padding: 20px;
+  border-bottom: 1px solid #edf2f7;
 }
 
 .modal-header h3 {
-  font-size: 24px;
-  color: #2c3e50;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #2d3748;
   margin: 0;
 }
 
 .close-btn {
   background: none;
   border: none;
-  font-size: 24px;
-  color: #7f8c8d;
+  color: #718096;
   cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
 }
 
+.close-btn:hover {
+  background-color: #edf2f7;
+  color: #4a5568;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+/* Form Styles */
 .remark-form {
   display: flex;
   flex-direction: column;
@@ -622,17 +822,30 @@ export default {
 }
 
 .form-group label {
-  font-size: 14px;
-  color: #7f8c8d;
-  margin-bottom: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #4a5568;
+  margin-bottom: 6px;
 }
 
 .form-group input, .form-group select, .form-group textarea {
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 16px;
-  color: #2c3e50;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: #2d3748;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+  outline: none;
+  border-color: #4c51bf;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+}
+
+.form-group input:disabled {
+  background-color: #f7fafc;
+  color: #718096;
 }
 
 .form-group textarea {
@@ -640,54 +853,198 @@ export default {
   min-height: 100px;
 }
 
+.current-mark-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background-color: #f7fafc;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+}
+
+.mark-value {
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.mark-percentage {
+  font-size: 0.85rem;
+  color: #718096;
+}
+
+.mark-gain {
+  font-size: 0.8rem;
+  color: #48bb78;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+/* Form Actions */
 .form-actions {
   display: flex;
   gap: 12px;
   margin-top: 16px;
 }
 
-.loading {
+.submit-btn, .cancel-modal-btn, .confirm-cancel-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.submit-btn {
+  background-color: #48bb78;
+  color: white;
+  flex: 1;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background-color: #38a169;
+  transform: translateY(-1px);
+}
+
+.submit-btn:disabled {
+  background-color: #a0aec0;
+  cursor: not-allowed;
+}
+
+.confirm-cancel-btn {
+  background-color: #e53e3e;
+  color: white;
+  flex: 1;
+}
+
+.confirm-cancel-btn:hover:not(:disabled) {
+  background-color: #c53030;
+  transform: translateY(-1px);
+}
+
+.confirm-cancel-btn:disabled {
+  background-color: #a0aec0;
+  cursor: not-allowed;
+}
+
+.cancel-modal-btn {
+  background-color: #edf2f7;
+  color: #4a5568;
+}
+
+.cancel-modal-btn:hover {
+  background-color: #e2e8f0;
+  transform: translateY(-1px);
+}
+
+/* Confirmation Modal */
+.confirmation-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 40px;
+  text-align: center;
+  margin-bottom: 20px;
 }
 
-.spinner {
-  border: 4px solid rgba(0, 0, 0, 0.1);
-  border-radius: 50%;
-  border-top: 4px solid #3498db;
-  width: 40px;
-  height: 40px;
-  animation: spin 1s linear infinite;
+.warning-icon {
+  width: 48px;
+  height: 48px;
+  color: #ed8936;
   margin-bottom: 16px;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+.warning-icon svg {
+  width: 100%;
+  height: 100%;
 }
 
+.confirmation-content p {
+  margin: 0;
+  color: #4a5568;
+  line-height: 1.5;
+}
+
+/* Error Message */
 .error-message {
-  background: #fdeded;
-  color: #e74c3c;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background-color: #fed7d7;
+  border: 1px solid #feb2b2;
+  border-radius: 6px;
   padding: 16px;
-  border-radius: 8px;
-  margin-top: 24px;
+  margin-top: 20px;
 }
 
+.error-icon {
+  width: 20px;
+  height: 20px;
+  color: #c53030;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.error-content h4 {
+  margin: 0 0 4px 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #c53030;
+}
+
+.error-content p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #9b2c2c;
+  line-height: 1.4;
+}
+
+/* Spinner Animation */
+.spinner-icon {
+  animation: spin 1s linear infinite;
+}
+
+/* Responsive Design */
 @media (max-width: 768px) {
-  .remarks-list {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .header-actions {
+    margin-top: 16px;
+    width: 100%;
+  }
+  
+  .new-request-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .remarks-grid {
     grid-template-columns: 1fr;
   }
   
-  .remark-details {
-    grid-template-columns: 1fr 1fr;
+  .detail-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
   
-  .modal-content {
-    max-width: 90%;
+  .modal {
+    max-width: 95%;
+    margin: 20px;
+  }
+  
+  .form-actions {
+    flex-direction: column;
+  }
+  
+  .remark-actions {
+    flex-direction: column;
   }
 }
 </style>

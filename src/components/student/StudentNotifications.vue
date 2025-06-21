@@ -150,8 +150,7 @@ export default {
         this.loading = false
       }
     },
-    
-    async markAsRead(notificationId) {
+      async markAsRead(notificationId) {
       const notification = this.notifications.find(n => n.id === notificationId)
       if (!notification || notification.is_read) return
       
@@ -164,12 +163,14 @@ export default {
         // Update local state
         notification.is_read = true
         this.unreadCount = Math.max(0, this.unreadCount - 1)
+        
+        // Emit event to parent to update badge
+        this.$emit('notification-read', this.unreadCount)
       } catch (error) {
         console.error('Error marking notification as read:', error)
       }
     },
-    
-    async markAllAsRead() {
+      async markAllAsRead() {
       if (this.unreadCount === 0) return
       
       try {
@@ -181,6 +182,9 @@ export default {
           notification.is_read = true
         })
         this.unreadCount = 0
+        
+        // Emit event to parent to update badge
+        this.$emit('notification-read', this.unreadCount)
       } catch (error) {
         console.error('Error marking all notifications as read:', error)
       }

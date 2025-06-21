@@ -83,39 +83,61 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5-5v5M6 17h5l-5-5v5m0 0V7a2 2 0 012-2h4a2 2 0 012 2v6"></path>
             </svg>
             <span class="nav-label">Notifications</span>
+            <span v-if="unreadNotifications > 0" class="notification-badge">{{ unreadNotifications }}</span>
           </router-link>
         </nav>
-      </div>
-
-      <!-- Page Content -->
+      </div>      <!-- Page Content -->
       <div class="page-content">
-        <router-view />
+        <router-view @notification-read="onNotificationRead" />
       </div>
     </div>
   </div>
 </template>
 
 <script>
+import api from '../../api'
+
 export default {
   name: 'StudentLayout',  data() {
     return {
-      user: null
+      user: null,
+      unreadNotifications: 0
     };
-  },
-  mounted() {
+  },  mounted() {
     this.user = JSON.parse(localStorage.getItem('user') || '{}');
     this.fetchNotificationCount();
-  },
-  methods: {
+    
+    // Refresh notification count every 30 seconds
+    this.notificationInterval = setInterval(() => {
+      this.fetchNotificationCount();
+    }, 30000);
+  },  methods: {
     logout() {
       localStorage.removeItem('user');
       this.$router.push('/');
     },    async fetchNotificationCount() {
       try {
-        // No random generation needed
+        const user = JSON.parse(localStorage.getItem('user'))
+        if (user && user.id) {
+          const response = await api.get(`/student/notifications/${user.id}`)
+          if (response.data.success) {
+            this.unreadNotifications = response.data.unread_count || 0
+          }
+        }
       } catch (error) {
-        console.error('Error fetching notifications:', error);
+        console.error('Error fetching notification count:', error)
+        // Set to 0 on error to avoid showing incorrect count
+        this.unreadNotifications = 0
       }
+    },
+    
+    onNotificationRead(newUnreadCount) {
+      this.unreadNotifications = newUnreadCount
+    }
+  },
+  beforeUnmount() {
+    if (this.notificationInterval) {
+      clearInterval(this.notificationInterval)
     }
   }
 };
