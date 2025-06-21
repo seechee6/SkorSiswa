@@ -666,9 +666,9 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
         ');
         $stmt->execute([$studentId]);
         $currentCourses = $stmt->fetchAll();
-        
-        // For each course, get current grade
+          // For each course, get current grade and progress
         foreach ($currentCourses as &$course) {
+            // Get current percentage
             $stmt = $pdo->prepare('
                 SELECT 
                     SUM((am.mark / a.max_mark) * a.weight) AS current_percentage
@@ -684,7 +684,7 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
             $currentPercentage = $result['current_percentage'] ?? 0;
             
             // Calculate grade
-            $grade = null;
+            $grade = 'N/A';
             if ($currentPercentage >= 90) $grade = 'A+';
             elseif ($currentPercentage >= 80) $grade = 'A';
             elseif ($currentPercentage >= 75) $grade = 'A-';
@@ -695,10 +695,30 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
             elseif ($currentPercentage >= 50) $grade = 'C';
             elseif ($currentPercentage >= 45) $grade = 'D+';
             elseif ($currentPercentage >= 40) $grade = 'D';
-            else $grade = 'F';
+            elseif ($currentPercentage > 0) $grade = 'F';
+            
+            // Calculate progress based on completed assessments
+            $stmt = $pdo->prepare('
+                SELECT 
+                    COUNT(a.id) as total_assessments,
+                    COUNT(CASE WHEN am.mark IS NOT NULL THEN 1 END) as completed_assessments
+                FROM 
+                    assessments a
+                    LEFT JOIN assessment_marks am ON a.id = am.assessment_id AND am.enrollment_id = ?
+                WHERE 
+                    a.course_id = ?
+            ');
+            $stmt->execute([$course['enrollment_id'], $course['id']]);
+            $progressResult = $stmt->fetch();
+            
+            $totalAssessments = $progressResult['total_assessments'] ?? 0;
+            $completedAssessments = $progressResult['completed_assessments'] ?? 0;
+            $progress = $totalAssessments > 0 ? 
+                round(($completedAssessments / $totalAssessments) * 100, 0) : 0;
             
             $course['current_percentage'] = round((float)$currentPercentage, 2);
             $course['grade'] = $grade;
+            $course['progress'] = $progress;
         }
           // Get recent assessments with marks
         $stmt = $pdo->prepare('
@@ -757,22 +777,87 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
         }
         
         $cgpa = $totalCourses > 0 ? number_format($totalGradePoints / $totalCourses, 2) : '0.00';
-        
-        // Get student ranking (simplified)
+          // Get student ranking based on CGPA
         $stmt = $pdo->prepare("
-            SELECT COUNT(*) as student_count
-            FROM users
-            WHERE role_id = (SELECT id FROM roles WHERE name = 'student')
+            SELECT student_cgpa.student_id, student_cgpa.cgpa,
+                   (SELECT COUNT(*) + 1 FROM (
+                       SELECT s2.id, AVG(s2_grade_points) as s2_cgpa
+                       FROM users s2
+                       JOIN enrollments e2 ON s2.id = e2.student_id
+                       JOIN courses c2 ON e2.course_id = c2.id
+                       JOIN (
+                           SELECT e3.id as enrollment_id,
+                               CASE 
+                                   WHEN SUM((am3.mark / a3.max_mark) * a3.weight) >= 90 THEN 4.0
+                                   WHEN SUM((am3.mark / a3.max_mark) * a3.weight) >= 80 THEN 4.0
+                                   WHEN SUM((am3.mark / a3.max_mark) * a3.weight) >= 75 THEN 3.7
+                                   WHEN SUM((am3.mark / a3.max_mark) * a3.weight) >= 70 THEN 3.3
+                                   WHEN SUM((am3.mark / a3.max_mark) * a3.weight) >= 65 THEN 3.0
+                                   WHEN SUM((am3.mark / a3.max_mark) * a3.weight) >= 60 THEN 2.7
+                                   WHEN SUM((am3.mark / a3.max_mark) * a3.weight) >= 55 THEN 2.3
+                                   WHEN SUM((am3.mark / a3.max_mark) * a3.weight) >= 50 THEN 2.0
+                                   WHEN SUM((am3.mark / a3.max_mark) * a3.weight) >= 45 THEN 1.7
+                                   WHEN SUM((am3.mark / a3.max_mark) * a3.weight) >= 40 THEN 1.3
+                                   WHEN SUM((am3.mark / a3.max_mark) * a3.weight) >= 35 THEN 1.0
+                                   ELSE 0.0
+                               END as s2_grade_points
+                           FROM enrollments e3
+                           JOIN assessment_marks am3 ON e3.id = am3.enrollment_id
+                           JOIN assessments a3 ON am3.assessment_id = a3.id
+                           WHERE am3.mark IS NOT NULL
+                           GROUP BY e3.id
+                       ) gp ON e2.id = gp.enrollment_id
+                       WHERE s2.role_id = (SELECT id FROM roles WHERE name = 'student')
+                       GROUP BY s2.id
+                       HAVING s2_cgpa > ?
+                   ) higher_performers) as rank,
+                   (SELECT COUNT(*) FROM users WHERE role_id = (SELECT id FROM roles WHERE name = 'student')) as total_students
+            FROM (
+                SELECT ? as student_id, ? as cgpa
+            ) student_cgpa
         ");
-        $stmt->execute();
-        $studentCount = $stmt->fetch()['student_count'];
+        $cgpaFloat = (float)$cgpa;
+        $stmt->execute([$cgpaFloat, $studentId, $cgpaFloat]);
+        $rankingData = $stmt->fetch();
         
-        // Assume a random ranking for demonstration
-        $studentRank = rand(1, max(1, $studentCount));
-        $ranking = $studentRank . ' / ' . $studentCount;
+        $studentRank = $rankingData['rank'] ?? 1;
+        $totalStudents = $rankingData['total_students'] ?? 1;
+        $ranking = $studentRank . ' / ' . $totalStudents;
         
-        // Calculate semester progress (simplified - normally based on dates)
-        $semesterProgress = rand(60, 95); // Random between 60-95%
+        // Calculate real semester progress based on completed assessments
+        $stmt = $pdo->prepare("
+            SELECT 
+                COUNT(DISTINCT a.id) as total_assessments,
+                COUNT(DISTINCT CASE WHEN am.mark IS NOT NULL THEN a.id END) as completed_assessments
+            FROM enrollments e
+            JOIN courses c ON e.course_id = c.id
+            JOIN assessments a ON c.id = a.course_id
+            LEFT JOIN assessment_marks am ON a.id = am.assessment_id AND e.id = am.enrollment_id
+            WHERE e.student_id = ?
+            AND c.semester = (
+                SELECT c2.semester 
+                FROM enrollments e2 
+                JOIN courses c2 ON e2.course_id = c2.id 
+                WHERE e2.student_id = ? 
+                ORDER BY c2.year DESC, c2.semester DESC 
+                LIMIT 1
+            )
+            AND c.year = (
+                SELECT c2.year 
+                FROM enrollments e2 
+                JOIN courses c2 ON e2.course_id = c2.id 
+                WHERE e2.student_id = ? 
+                ORDER BY c2.year DESC, c2.semester DESC 
+                LIMIT 1
+            )
+        ");
+        $stmt->execute([$studentId, $studentId, $studentId]);
+        $progressData = $stmt->fetch();
+        
+        $totalAssessments = $progressData['total_assessments'] ?? 0;
+        $completedAssessments = $progressData['completed_assessments'] ?? 0;
+        $semesterProgress = $totalAssessments > 0 ? 
+            round(($completedAssessments / $totalAssessments) * 100, 0) : 0;
         
         $response->getBody()->write(json_encode([
             'success' => true,
