@@ -659,19 +659,20 @@ $app->post('/enrollments/{enrollment_id}/assessment-marks', function (Request $r
         $stmt = $pdo->prepare('INSERT INTO assessment_marks (enrollment_id, assessment_id, mark) VALUES (?, ?, ?)');
         $stmt->execute([$args['enrollment_id'], $data['assessment_id'], $data['mark']]);
     }
-    
-    // Get enrollment and course info for notifications
+      // Get enrollment and course info for notifications
     $stmt = $pdo->prepare('
-        SELECT e.student_id, e.course_id, c.lecturer_id
+        SELECT e.student_id, e.course_id, c.lecturer_id, c.code, c.name, a.name as assessment_name
         FROM enrollments e 
         JOIN courses c ON e.course_id = c.id 
+        JOIN assessments a ON a.id = ?
         WHERE e.id = ?
     ');
-    $stmt->execute([$args['enrollment_id']]);
+    $stmt->execute([$data['assessment_id'], $args['enrollment_id']]);
     $enrollment_info = $stmt->fetch();
     
     // Create notification for student
-    createNotification($pdo, $enrollment_info['student_id'], 'Your assessment mark has been updated');
+    $message = "Your mark for " . $enrollment_info['assessment_name'] . " in " . $enrollment_info['code'] . " - " . $enrollment_info['name'] . " has been " . ($existing ? "updated" : "posted") . ".";
+    createNotification($pdo, $enrollment_info['student_id'], $message);
     
     // Create mark update notification for lecturer tracking
     createMarkUpdateNotification(
@@ -709,10 +710,9 @@ $app->post('/enrollments/{enrollment_id}/final-mark', function (Request $request
         $stmt = $pdo->prepare('INSERT INTO final_exam_marks (enrollment_id, mark) VALUES (?, ?)');
         $stmt->execute([$args['enrollment_id'], $data['mark']]);
     }
-    
-    // Get enrollment and course info for notifications
+      // Get enrollment and course info for notifications
     $stmt = $pdo->prepare('
-        SELECT e.student_id, e.course_id, c.lecturer_id
+        SELECT e.student_id, e.course_id, c.lecturer_id, c.code, c.name
         FROM enrollments e 
         JOIN courses c ON e.course_id = c.id 
         WHERE e.id = ?
@@ -721,7 +721,8 @@ $app->post('/enrollments/{enrollment_id}/final-mark', function (Request $request
     $enrollment_info = $stmt->fetch();
     
     // Create notification for student
-    createNotification($pdo, $enrollment_info['student_id'], 'Your final exam mark has been updated');
+    $message = "Your final exam mark for " . $enrollment_info['code'] . " - " . $enrollment_info['name'] . " has been " . ($existing ? "updated" : "posted") . ".";
+    createNotification($pdo, $enrollment_info['student_id'], $message);
     
     // Create mark update notification for lecturer tracking
     createMarkUpdateNotification(
@@ -1031,6 +1032,21 @@ $app->get('/debug/users', function (Request $request, Response $response) use ($
     } catch (Exception $e) {
         $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
         return $response->withStatus(500)->withHeader('Content-Type', 'application/json');    }
+});
+
+// Test endpoint to manually create a notification (for demonstration)
+$app->post('/test/create-notification', function (Request $request, Response $response) use ($pdo) {
+    $data = $request->getParsedBody();
+    
+    try {
+        createNotification($pdo, $data['user_id'], $data['message']);
+        
+        $response->getBody()->write(json_encode(['success' => true, 'message' => 'Notification created']));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => 'Failed to create notification: ' . $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
 });
 
 // Include student routes

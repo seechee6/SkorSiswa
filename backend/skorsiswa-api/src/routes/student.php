@@ -306,7 +306,7 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
         ');
         $stmt->execute([$enrollmentId]);
         $studentResult = $stmt->fetch();
-        $studentOverallScore = $studentResult ? (float)$studentResult['total_score'] : 0;
+        $studentOverallScore = $stmt->fetch() ? (float)$studentResult['total_score'] : 0;
         
         // Calculate class average overall score - ensure this matches the calculation in the marks endpoint
         $stmt = $pdo->prepare('
@@ -910,6 +910,89 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
                 'success' => true,
                 'data' => $performanceData
             ]));
+            return $response->withHeader('Content-Type', 'application/json');
+            
+        } catch (Exception $e) {
+            $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
+            return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+        }
+    });
+
+    // Get all notifications for a student
+    $group->get('/notifications/{student_id}', function (Request $request, Response $response, $args) use ($pdo) {
+        $studentId = $args['student_id'];
+        
+        try {
+            // Verify student exists
+            $stmt = $pdo->prepare('SELECT * FROM users WHERE id = ? AND role_id = (SELECT id FROM roles WHERE name = "student")');
+            $stmt->execute([$studentId]);
+            $student = $stmt->fetch();
+            
+            if (!$student) {
+                $response->getBody()->write(json_encode(['error' => 'Student not found']));
+                return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+            }
+            
+            // Get all notifications for the student
+            $stmt = $pdo->prepare('
+                SELECT 
+                    id, 
+                    message, 
+                    is_read, 
+                    created_at
+                FROM notifications 
+                WHERE user_id = ? 
+                ORDER BY created_at DESC
+            ');
+            $stmt->execute([$studentId]);
+            $notifications = $stmt->fetchAll();
+            
+            // Count unread notifications
+            $stmt = $pdo->prepare('SELECT COUNT(*) as unread_count FROM notifications WHERE user_id = ? AND is_read = FALSE');
+            $stmt->execute([$studentId]);
+            $unreadCount = $stmt->fetch()['unread_count'];
+            
+            $response->getBody()->write(json_encode([
+                'success' => true,
+                'notifications' => $notifications,
+                'unread_count' => (int)$unreadCount
+            ]));
+            return $response->withHeader('Content-Type', 'application/json');
+            
+        } catch (Exception $e) {
+            $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
+            return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+        }
+    });
+    
+    // Mark notifications as read
+    $group->post('/notifications/{student_id}/mark-read', function (Request $request, Response $response, $args) use ($pdo) {
+        $studentId = $args['student_id'];
+        $data = $request->getParsedBody();
+        
+        try {
+            // Verify student exists
+            $stmt = $pdo->prepare('SELECT * FROM users WHERE id = ? AND role_id = (SELECT id FROM roles WHERE name = "student")');
+            $stmt->execute([$studentId]);
+            $student = $stmt->fetch();
+            
+            if (!$student) {
+                $response->getBody()->write(json_encode(['error' => 'Student not found']));
+                return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+            }
+            
+            if (isset($data['notification_ids']) && is_array($data['notification_ids'])) {
+                // Mark specific notifications as read
+                $placeholders = str_repeat('?,', count($data['notification_ids']) - 1) . '?';
+                $stmt = $pdo->prepare("UPDATE notifications SET is_read = TRUE WHERE id IN ($placeholders) AND user_id = ?");
+                $stmt->execute(array_merge($data['notification_ids'], [$studentId]));
+            } else {
+                // Mark all notifications as read
+                $stmt = $pdo->prepare('UPDATE notifications SET is_read = TRUE WHERE user_id = ?');
+                $stmt->execute([$studentId]);
+            }
+            
+            $response->getBody()->write(json_encode(['success' => true]));
             return $response->withHeader('Content-Type', 'application/json');
             
         } catch (Exception $e) {
