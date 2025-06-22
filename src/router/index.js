@@ -18,7 +18,6 @@ import StudentDashboard from '../components/student/StudentDashboard.vue'
 import MarkBreakdown from '../components/student/MarkBreakdown.vue'
 import CompareWithCoursemates from '../components/student/CompareWithCoursemates.vue'
 import Ranking from '../components/student/Ranking.vue'
-import WhatIfSimulator from '../components/student/WhatIfSimulator.vue'
 import PerformanceTrends from '../components/student/PerformanceTrends.vue'
 import AdvisorLayout from '../components/advisor/AdvisorLayout.vue'
 import AdvisorDashboard from '../components/advisor/AdvisorDashboard.vue'
@@ -30,8 +29,19 @@ import AdviseeReports from '../components/advisor/AdviseeReports.vue'
 import CoursePerformance from '../components/advisor/CoursePerformance.vue'
 import PerformanceAnalytics from '../components/advisor/PerformanceAnalytics.vue'
 import AdvisorPerformanceTrends from '../components/advisor/PerformanceTrends.vue'
+import RemarkRequests from '../components/student/RemarkRequests.vue'
+import StudentNotifications from '../components/student/StudentNotifications.vue'
+import AdvisorDashboard from '../components/advisor/AdvisorDashboard.vue'
+import AdminLayout from '../components/admin/AdminLayout.vue'
 import AdminDashboard from '../components/admin/AdminDashboard.vue'
+import AdminManageUsers from '../components/admin/ManageUsers.vue'
+import AdminManageCourses from '../components/admin/ManageCourses.vue'
+import AdminStudentEnrollments from '../components/admin/StudentEnrollments.vue'
+import AdminLecturerAssignments from '../components/admin/LecturerAssignments.vue'
+import AdminPasswordManagement from '../components/admin/PasswordManagement.vue'
+import AdminLogs from '../components/admin/SystemLogs.vue'
 import Login from '../components/Login.vue'
+import RemarkReviews from '../components/lecturer/RemarkReviews.vue'
 
 const routes = [
   { path: '/', component: Login },
@@ -52,21 +62,22 @@ const routes = [
       { path: 'mark-breakdown', component: FullMarkBreakdown },
       { path: 'analytics', component: LecturerAnalytics },
       { path: 'trend-graphs', component: TrendGraphs },
-      { path: 'notifications', component: LecturerNotifications }
+      { path: 'notifications', component: LecturerNotifications },
+      { path: 'remark-reviews', component: RemarkReviews }
     ]
   },  {
     path: '/student',
     component: StudentLayout,
     children: [
-      { path: '', redirect: '/student/dashboard' },
-      { path: 'dashboard', component: StudentDashboard },
+      { path: '', redirect: '/student/dashboard' },      
+      { path: 'dashboard', component: StudentDashboard },      
       { path: 'marks', component: MarkBreakdown },
       { path: 'compare', component: CompareWithCoursemates },
       { path: 'ranking', component: Ranking },
-      { path: 'simulator', component: WhatIfSimulator },
       { path: 'performance', component: PerformanceTrends },
-      { path: 'remarks', component: MarkBreakdown }
-    ]
+      { path: 'remarks', component: RemarkRequests },
+      { path: 'notifications', component: StudentNotifications }
+    ]  
   },
   {
     path: '/advisor',
@@ -83,6 +94,20 @@ const routes = [
     ]
   },
   { path: '/admin', component: AdminDashboard },
+  { path: '/advisor', component: AdvisorDashboard },
+  {
+    path: '/admin',
+    component: AdminLayout,
+    children: [      { path: '', redirect: '/admin/dashboard' },
+      { path: 'dashboard', component: AdminDashboard },
+      { path: 'users', component: AdminManageUsers },
+      { path: 'courses', component: AdminManageCourses },
+      { path: 'enrollments', component: AdminStudentEnrollments },
+      { path: 'assignments', component: AdminLecturerAssignments },
+      { path: 'password-reset', component: AdminPasswordManagement },
+      { path: 'logs', component: AdminLogs }
+    ]
+  },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 

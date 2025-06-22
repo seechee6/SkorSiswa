@@ -1,12 +1,16 @@
 <?php
-require __DIR__ . '/../vendor/autoload.php';
+require __DIR__ . '/vendor/autoload.php';
 
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\Factory\AppFactory;
+use App\Models\User;
 
 // Create Slim app
 $app = AppFactory::create();
+
+// Add error middleware
+$app->addErrorMiddleware(true, true, true);
 
 // Add JSON body parsing middleware
 $app->addBodyParsingMiddleware();
@@ -14,9 +18,22 @@ $app->addBodyParsingMiddleware();
 // CORS middleware
 $app->add(function ($request, $handler) {
     $response = $handler->handle($request);
+    
+    // Get the origin from the request
+    $origin = $request->getHeaderLine('Origin');
+    
+    // Allow any localhost origin
+    $allowedOrigin = '*';
+    if (preg_match('/^https?:\/\/localhost(:\d+)?$/', $origin)) {
+        $allowedOrigin = $origin;
+    }
+    
     return $response
-        ->withHeader('Access-Control-Allow-Origin', '*')
+        ->withHeader('Access-Control-Allow-Origin', $allowedOrigin)
         ->withHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Origin, Authorization')
+<<<<<<<<< Temporary merge branch 1
+        ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+=========
         ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
         ->withHeader('Access-Control-Allow-Credentials', 'false');
 });
@@ -24,6 +41,7 @@ $app->add(function ($request, $handler) {
 // Handle preflight OPTIONS requests for CORS
 $app->options('/{routes:.+}', function ($request, $response, $args) {
     return $response;
+>>>>>>>>> Temporary merge branch 2
 });
 
 // Database connection settings
@@ -73,11 +91,35 @@ $app->get('/login', function (Request $request, Response $response) {
     return $response->withHeader('Content-Type', 'application/json');
 });
 
+// Debug endpoint to check if users exist
+$app->get('/debug-users', function (Request $request, Response $response) use ($pdo) {
+    try {
+        $stmt = $pdo->prepare('SELECT id, matric_no, staff_id, full_name, email, role_id FROM users LIMIT 10');
+        $stmt->execute();
+        $users = $stmt->fetchAll();
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'user_count' => count($users),
+            'users' => $users
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (PDOException $e) {
+        $response->getBody()->write(json_encode([
+            'error' => 'Database error: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
 // Login endpoint - supports both matric_no and staff_id
 $app->post('/login', function (Request $request, Response $response) use ($pdo) {
     $data = $request->getParsedBody();
     $identifier = $data['matric_no'] ?? null;
     $password = $data['password'] ?? null;
+
+    // Debug log
+    error_log("Login attempt with identifier: " . $identifier);
 
     if (!$identifier || !$password) {
         $response->getBody()->write(json_encode(['error' => 'Matric number/Staff ID and password required.']));
@@ -89,12 +131,22 @@ $app->post('/login', function (Request $request, Response $response) use ($pdo) 
     $stmt->execute([$identifier, $identifier]);
     $user = $stmt->fetch();
 
+    // Debug log
+    if ($user) {
+        error_log("User found: " . $user['full_name']);
+    } else {
+        error_log("No user found with identifier: " . $identifier);
+    }
+
     if ($user && password_verify($password, $user['password_hash'])) {
         unset($user['password_hash']);
         logSystemActivity($pdo, $user['id'], "User logged in");
         $response->getBody()->write(json_encode(['success' => true, 'user' => $user]));
         return $response->withHeader('Content-Type', 'application/json');
     } else {
+        if ($user) {
+            error_log("Password verification failed for: " . $user['full_name']);
+        }
         $response->getBody()->write(json_encode(['error' => 'Invalid credentials.']));
         return $response->withStatus(401)->withHeader('Content-Type', 'application/json');
     }
@@ -121,17 +173,60 @@ $app->post('/courses', function (Request $request, Response $response) use ($pdo
 // Update course
 $app->put('/courses/{id}', function (Request $request, Response $response, $args) use ($pdo) {
     $data = $request->getParsedBody();
-    $fields = [];
-    $params = [];
-    foreach (['code','name','lecturer_id','semester','year'] as $f) {
-        if (isset($data[$f])) { $fields[] = "$f = ?"; $params[] = $data[$f]; }
+    
+    try {
+        // Get the current course data before updating
+        $stmt = $pdo->prepare('SELECT c.*, u.full_name as current_lecturer_name FROM courses c LEFT JOIN users u ON c.lecturer_id = u.id WHERE c.id = ?');
+        $stmt->execute([$args['id']]);
+        $currentCourse = $stmt->fetch();
+        
+        if (!$currentCourse) {
+            $response->getBody()->write(json_encode(['success' => false, 'error' => 'Course not found']));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        $fields = [];
+        $params = [];
+        foreach (['code','name','lecturer_id','semester','year'] as $f) {
+            if (isset($data[$f])) { $fields[] = "$f = ?"; $params[] = $data[$f]; }
+        }
+        $params[] = $args['id'];
+        $sql = 'UPDATE courses SET ' . implode(', ', $fields) . ' WHERE id = ?';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        
+        // Log lecturer assignment changes
+        if (isset($data['lecturer_id'])) {
+            $newLecturerId = $data['lecturer_id'];
+            $currentLecturerId = $currentCourse['lecturer_id'];
+            
+            if ($newLecturerId != $currentLecturerId) {
+                if ($newLecturerId) {
+                    // Get new lecturer info
+                    $stmt = $pdo->prepare('SELECT full_name, staff_id FROM users WHERE id = ?');
+                    $stmt->execute([$newLecturerId]);
+                    $newLecturer = $stmt->fetch();
+                    
+                    if ($newLecturer) {
+                        $action = "Assigned lecturer {$newLecturer['full_name']} ({$newLecturer['staff_id']}) to course {$currentCourse['code']} - {$currentCourse['name']}";
+                        logSystemActivity($pdo, $newLecturerId, $action);
+                    }
+                } else {
+                    // Lecturer was unassigned
+                    $action = "Unassigned lecturer from course {$currentCourse['code']} - {$currentCourse['name']}";
+                    logSystemActivity($pdo, $currentLecturerId, $action);
+                }
+            }
+        }
+        
+        $response->getBody()->write(json_encode(['success' => true]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        error_log("Course update error: " . $e->getMessage());
+        $response->getBody()->write(json_encode(['success' => false, 'error' => 'Database error']));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
     }
-    $params[] = $args['id'];
-    $sql = 'UPDATE courses SET ' . implode(', ', $fields) . ' WHERE id = ?';
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    $response->getBody()->write(json_encode(['success' => true]));
-    return $response->withHeader('Content-Type', 'application/json');
 });
 
 // Delete course
@@ -616,19 +711,20 @@ $app->post('/enrollments/{enrollment_id}/assessment-marks', function (Request $r
         $stmt = $pdo->prepare('INSERT INTO assessment_marks (enrollment_id, assessment_id, mark) VALUES (?, ?, ?)');
         $stmt->execute([$args['enrollment_id'], $data['assessment_id'], $data['mark']]);
     }
-    
-    // Get enrollment and course info for notifications
+      // Get enrollment and course info for notifications
     $stmt = $pdo->prepare('
-        SELECT e.student_id, e.course_id, c.lecturer_id
+        SELECT e.student_id, e.course_id, c.lecturer_id, c.code, c.name, a.name as assessment_name
         FROM enrollments e 
         JOIN courses c ON e.course_id = c.id 
+        JOIN assessments a ON a.id = ?
         WHERE e.id = ?
     ');
-    $stmt->execute([$args['enrollment_id']]);
+    $stmt->execute([$data['assessment_id'], $args['enrollment_id']]);
     $enrollment_info = $stmt->fetch();
     
     // Create notification for student
-    createNotification($pdo, $enrollment_info['student_id'], 'Your assessment mark has been updated');
+    $message = "Your mark for " . $enrollment_info['assessment_name'] . " in " . $enrollment_info['code'] . " - " . $enrollment_info['name'] . " has been " . ($existing ? "updated" : "posted") . ".";
+    createNotification($pdo, $enrollment_info['student_id'], $message);
     
     // Create mark update notification for lecturer tracking
     createMarkUpdateNotification(
@@ -666,10 +762,9 @@ $app->post('/enrollments/{enrollment_id}/final-mark', function (Request $request
         $stmt = $pdo->prepare('INSERT INTO final_exam_marks (enrollment_id, mark) VALUES (?, ?)');
         $stmt->execute([$args['enrollment_id'], $data['mark']]);
     }
-    
-    // Get enrollment and course info for notifications
+      // Get enrollment and course info for notifications
     $stmt = $pdo->prepare('
-        SELECT e.student_id, e.course_id, c.lecturer_id
+        SELECT e.student_id, e.course_id, c.lecturer_id, c.code, c.name
         FROM enrollments e 
         JOIN courses c ON e.course_id = c.id 
         WHERE e.id = ?
@@ -678,7 +773,8 @@ $app->post('/enrollments/{enrollment_id}/final-mark', function (Request $request
     $enrollment_info = $stmt->fetch();
     
     // Create notification for student
-    createNotification($pdo, $enrollment_info['student_id'], 'Your final exam mark has been updated');
+    $message = "Your final exam mark for " . $enrollment_info['code'] . " - " . $enrollment_info['name'] . " has been " . ($existing ? "updated" : "posted") . ".";
+    createNotification($pdo, $enrollment_info['student_id'], $message);
     
     // Create mark update notification for lecturer tracking
     createMarkUpdateNotification(
@@ -990,1035 +1086,6 @@ $app->get('/debug/users', function (Request $request, Response $response) use ($
         return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
     }
 });
-
-// Debug endpoint to list all advisors
-$app->get('/debug/advisors', function (Request $request, Response $response) use ($pdo) {
-    try {
-        $stmt = $pdo->query('
-            SELECT u.id, u.staff_id, u.full_name, u.email, COUNT(a.student_id) as advisee_count
-            FROM users u 
-            LEFT JOIN advisors a ON u.id = a.advisor_id
-            WHERE u.role_id = 4 
-            GROUP BY u.id
-            ORDER BY u.full_name
-        ');
-        $advisors = $stmt->fetchAll();
-        
-        $response->getBody()->write(json_encode([
-            'total_advisors' => count($advisors),
-            'advisors' => $advisors
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Debug endpoint to show advisor-student relationships
-$app->get('/debug/advisor-relationships', function (Request $request, Response $response) use ($pdo) {
-    try {
-        $stmt = $pdo->query('
-            SELECT 
-                advisor.full_name as advisor_name,
-                advisor.staff_id as advisor_staff_id,
-                student.full_name as student_name,
-                student.matric_no as student_matric_no
-            FROM advisors a
-            JOIN users advisor ON a.advisor_id = advisor.id
-            JOIN users student ON a.student_id = student.id
-            ORDER BY advisor.full_name, student.full_name
-        ');
-        $relationships = $stmt->fetchAll();
-        
-        $response->getBody()->write(json_encode([
-            'total_relationships' => count($relationships),
-            'relationships' => $relationships
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// =============================================
-// ADVISOR ENDPOINTS
-// =============================================
-
-// Get advisor's advisees with their performance data
-$app->get('/advisors/{advisor_id}/advisees', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $advisor_id = $args['advisor_id'];
-        
-        // Simplified query to avoid complex subqueries that cause SQL errors
-        $sql = "
-            SELECT 
-                u.id,
-                u.full_name as name,
-                u.matric_no as studentId,
-                u.email,
-                -- Determine academic year based on matric number pattern
-                CASE 
-                    WHEN u.matric_no LIKE '%2021%' THEN 4
-                    WHEN u.matric_no LIKE '%2022%' THEN 3  
-                    WHEN u.matric_no LIKE '%2023%' THEN 2
-                    WHEN u.matric_no LIKE '%2024%' THEN 1
-                    ELSE 1
-                END as year,
-                -- Determine program from matric number
-                CASE 
-                    WHEN u.matric_no LIKE 'CS%' THEN 'CS'
-                    WHEN u.matric_no LIKE 'IS%' THEN 'IS'
-                    WHEN u.matric_no LIKE 'SE%' THEN 'SE'
-                    WHEN u.matric_no LIKE 'IT%' THEN 'IT'
-                    ELSE 'CS'
-                END as program
-            FROM advisors a
-            JOIN users u ON a.student_id = u.id
-            WHERE a.advisor_id = ? AND u.role_id = (SELECT id FROM roles WHERE name = 'student')
-            ORDER BY u.full_name
-        ";
-        
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$advisor_id]);
-        $advisees = $stmt->fetchAll();
-        
-        // Calculate GPA and other fields for each advisee separately to avoid complex SQL
-        foreach ($advisees as &$advisee) {
-            // Get GPA calculation
-            $gpa_sql = "
-                SELECT AVG(
-                    CASE 
-                        WHEN total_marks >= 80 THEN 4.0
-                        WHEN total_marks >= 75 THEN 3.7
-                        WHEN total_marks >= 70 THEN 3.3
-                        WHEN total_marks >= 65 THEN 3.0
-                        WHEN total_marks >= 60 THEN 2.7
-                        WHEN total_marks >= 55 THEN 2.3
-                        WHEN total_marks >= 50 THEN 2.0
-                        WHEN total_marks >= 45 THEN 1.7
-                        WHEN total_marks >= 40 THEN 1.3
-                        ELSE 0.0
-                    END
-                ) as gpa
-                FROM (
-                    SELECT 
-                        COALESCE(
-                            (SELECT SUM(am.mark * ass.weight / 100) 
-                             FROM assessment_marks am 
-                             JOIN assessments ass ON am.assessment_id = ass.id 
-                             WHERE am.enrollment_id = e.id), 0
-                        ) + 
-                        COALESCE(
-                            (SELECT fem.mark * 0.6 FROM final_exam_marks fem WHERE fem.enrollment_id = e.id), 0
-                        ) as total_marks
-                    FROM enrollments e 
-                    WHERE e.student_id = ?
-                ) as course_marks
-            ";
-            
-            $gpa_stmt = $pdo->prepare($gpa_sql);
-            $gpa_stmt->execute([$advisee['id']]);
-            $gpa_result = $gpa_stmt->fetch();
-            $advisee['gpa'] = (float) ($gpa_result['gpa'] ?? 0.0);
-            
-            // Get last meeting date
-            $meeting_sql = "SELECT MAX(created_at) as lastMeeting FROM advisor_notes WHERE advisor_id = ? AND student_id = ?";
-            $meeting_stmt = $pdo->prepare($meeting_sql);
-            $meeting_stmt->execute([$advisor_id, $advisee['id']]);
-            $meeting_result = $meeting_stmt->fetch();
-            $advisee['lastMeeting'] = $meeting_result['lastMeeting'] ?? '2024-01-01';
-            $advisee['lastMeetingType'] = 'Academic Review';
-        }
-          // Calculate status based on GPA and bottom 20% logic
-        $advisee_count = count($advisees);
-        $bottom_20_percent_count = max(1, ceil($advisee_count * 0.2)); // At least 1 student
-        
-        // Sort advisees by GPA to find bottom 20%
-        $sorted_by_gpa = $advisees;
-        usort($sorted_by_gpa, function($a, $b) {
-            return $a['gpa'] <=> $b['gpa']; // Sort ascending (lowest first)
-        });
-        
-        // Get the GPA threshold for bottom 20%
-        $bottom_20_threshold = $advisee_count > 0 ? $sorted_by_gpa[$bottom_20_percent_count - 1]['gpa'] : 0.0;
-        
-        foreach ($advisees as &$advisee) {
-            // At-risk if GPA < 2.0 OR in bottom 20%
-            $is_low_gpa = $advisee['gpa'] < 2.0;
-            $is_bottom_20 = $advisee['gpa'] <= $bottom_20_threshold;
-            
-            if ($is_low_gpa || $is_bottom_20) {
-                $advisee['status'] = $advisee['gpa'] < 1.5 ? 'probation' : 'at-risk';
-                $advisee['isAtRisk'] = true;
-                $advisee['atRiskReason'] = [];
-                if ($is_low_gpa) {
-                    $advisee['atRiskReason'][] = 'GPA below 2.0';
-                }
-                if ($is_bottom_20) {
-                    $advisee['atRiskReason'][] = 'Bottom 20% performance';
-                }
-            } elseif ($advisee['gpa'] >= 3.5) {
-                $advisee['status'] = 'excellent';
-                $advisee['isAtRisk'] = false;
-                $advisee['atRiskReason'] = [];
-            } else {
-                $advisee['status'] = 'active';
-                $advisee['isAtRisk'] = false;
-                $advisee['atRiskReason'] = [];
-            }
-            
-            // Convert GPA to float and year to int
-            $advisee['gpa'] = (float) $advisee['gpa'];
-            $advisee['year'] = (int) $advisee['year'];
-        }
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'data' => $advisees
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode([
-            'success' => false,
-            'message' => 'Failed to fetch advisees: ' . $e->getMessage()
-        ]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Get detailed performance data for a specific advisee
-$app->get('/advisors/{advisor_id}/advisees/{student_id}/performance', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $advisor_id = $args['advisor_id'];
-        $student_id = $args['student_id'];
-        
-        // Verify advisor-student relationship
-        $stmt = $pdo->prepare("SELECT 1 FROM advisors WHERE advisor_id = ? AND student_id = ?");
-        $stmt->execute([$advisor_id, $student_id]);
-        
-        if (!$stmt->fetch()) {
-            $response->getBody()->write(json_encode([
-                'success' => false,
-                'message' => 'Unauthorized access to student data'
-            ]));
-            return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
-        }
-          // Get student's course performance with detailed breakdown
-        $sql = "
-            SELECT 
-                c.id as course_id,
-                c.code,
-                c.name as course_name,
-                c.semester,
-                c.year,
-                3 as credits,
-                e.id as enrollment_id,
-                COALESCE(fem.mark, 0) as final_exam_mark,
-                50 as final_exam_max_mark,
-                30 as final_exam_weight
-            FROM enrollments e
-            JOIN courses c ON e.course_id = c.id
-            LEFT JOIN final_exam_marks fem ON fem.enrollment_id = e.id
-            WHERE e.student_id = ?
-            ORDER BY c.year DESC, c.semester DESC
-        ";
-        
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$student_id]);
-        $courses = $stmt->fetchAll();
-        
-        // For each course, get assessment details
-        foreach ($courses as &$course) {
-            // Get assessment marks with details
-            $assessment_sql = "
-                SELECT 
-                    a.id as assessment_id,
-                    a.name as assessment_name,
-                    a.weight,
-                    a.max_mark,
-                    COALESCE(am.mark, 0) as student_mark
-                FROM assessments a
-                LEFT JOIN assessment_marks am ON (a.id = am.assessment_id AND am.enrollment_id = ?)
-                WHERE a.course_id = ?
-                ORDER BY a.name
-            ";
-            
-            $assessment_stmt = $pdo->prepare($assessment_sql);
-            $assessment_stmt->execute([$course['enrollment_id'], $course['course_id']]);
-            $course['assessments'] = $assessment_stmt->fetchAll();
-            
-            // Calculate assessment totals (70% weight)
-            $assessment_total_marks = 0;
-            $assessment_max_marks = 0;
-            $assessment_weighted_score = 0;
-            
-            foreach ($course['assessments'] as $assessment) {
-                $assessment_total_marks += (float) $assessment['student_mark'];
-                $assessment_max_marks += (float) $assessment['max_mark'];
-                // Each assessment contributes to the 70% assessment portion
-                $assessment_weighted_score += ((float) $assessment['student_mark'] / (float) $assessment['max_mark']) * (float) $assessment['weight'];
-            }
-            
-            $course['assessment_total_marks'] = $assessment_total_marks;
-            $course['assessment_max_marks'] = $assessment_max_marks;
-            $course['assessment_percentage'] = $assessment_max_marks > 0 ? ($assessment_total_marks / $assessment_max_marks) * 100 : 0;
-            $course['assessment_weighted_score'] = $assessment_weighted_score; // This should be out of 70
-            
-            // Calculate final exam contribution (30% weight)
-            $final_exam_percentage = $course['final_exam_max_mark'] > 0 ? 
-                ((float) $course['final_exam_mark'] / (float) $course['final_exam_max_mark']) * 100 : 0;
-            $course['final_exam_percentage'] = $final_exam_percentage;
-            $course['final_exam_weighted_score'] = ($final_exam_percentage / 100) * (float) $course['final_exam_weight'];
-            
-            // Calculate total course mark (Assessment 70% + Final Exam 30%)
-            $total_weighted_score = $course['assessment_weighted_score'] + $course['final_exam_weighted_score'];
-            $course['total_mark'] = $total_weighted_score;
-            
-            // Determine grade based on total mark
-            if ($total_weighted_score >= 80) {
-                $course['grade'] = 'A';
-            } elseif ($total_weighted_score >= 75) {
-                $course['grade'] = 'A-';
-            } elseif ($total_weighted_score >= 70) {
-                $course['grade'] = 'B+';
-            } elseif ($total_weighted_score >= 65) {
-                $course['grade'] = 'B';
-            } elseif ($total_weighted_score >= 60) {
-                $course['grade'] = 'B-';
-            } elseif ($total_weighted_score >= 55) {
-                $course['grade'] = 'C+';
-            } elseif ($total_weighted_score >= 50) {
-                $course['grade'] = 'C';
-            } elseif ($total_weighted_score >= 45) {
-                $course['grade'] = 'C-';
-            } elseif ($total_weighted_score >= 40) {
-                $course['grade'] = 'D';
-            } else {
-                $course['grade'] = 'F';
-            }
-            
-            // Convert numeric values to proper types
-            $course['final_exam_mark'] = (float) $course['final_exam_mark'];
-            $course['final_exam_max_mark'] = (int) $course['final_exam_max_mark'];
-            $course['final_exam_weight'] = (int) $course['final_exam_weight'];
-            $course['total_mark'] = round($total_weighted_score, 2);
-        }
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'data' => $courses
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode([
-            'success' => false,
-            'message' => 'Failed to fetch student performance: ' . $e->getMessage()
-        ]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Add or update advisor notes for a student
-$app->post('/advisors/{advisor_id}/advisees/{student_id}/notes', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $advisor_id = $args['advisor_id'];
-        $student_id = $args['student_id'];
-        $data = $request->getParsedBody();
-        
-        // Verify advisor-student relationship
-        $stmt = $pdo->prepare("SELECT 1 FROM advisors WHERE advisor_id = ? AND student_id = ?");
-        $stmt->execute([$advisor_id, $student_id]);
-        
-        if (!$stmt->fetch()) {
-            $response->getBody()->write(json_encode([
-                'success' => false,
-                'message' => 'Unauthorized access to student data'
-            ]));
-            return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
-        }
-        
-        $sql = "INSERT INTO advisor_notes (advisor_id, student_id, course_id, note) VALUES (?, ?, ?, ?)";        $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            $advisor_id,
-            $student_id,
-            $data['course_id'] ?? 1, // Default course if not specified
-            $data['note']
-        ]);
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Note added successfully'
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode([
-            'success' => false,
-            'message' => 'Failed to add note: ' . $e->getMessage()
-        ]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// =============================================
-// MEETINGS ENDPOINTS
-// =============================================
-
-// Create a new meeting
-$app->post('/advisors/{advisor_id}/meetings', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $advisor_id = $args['advisor_id'];
-        $data = $request->getParsedBody();
-        
-        // Verify advisor-student relationship
-        $stmt = $pdo->prepare("SELECT 1 FROM advisors WHERE advisor_id = ? AND student_id = ?");
-        $stmt->execute([$advisor_id, $data['student_id']]);
-        
-        if (!$stmt->fetch()) {
-            $response->getBody()->write(json_encode([
-                'success' => false,
-                'message' => 'Unauthorized access to student data'
-            ]));
-            return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
-        }
-          $sql = "INSERT INTO meetings (advisor_id, student_id, title, meeting_date, meeting_time, duration, location, meeting_link, meeting_type, status, agenda, notes, action_items) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            $advisor_id,
-            $data['student_id'],
-            $data['title'] ?? 'Advisor Meeting',
-            $data['meeting_date'],
-            $data['meeting_time'],
-            $data['duration'] ?? 60,
-            $data['location'] ?? '',
-            $data['meeting_link'] ?? '',
-            $data['meeting_type'] ?? 'academic',
-            $data['status'] ?? 'scheduled',
-            $data['agenda'] ?? '',
-            $data['notes'] ?? '',
-            $data['action_items'] ?? ''
-        ]);
-        
-        $meeting_id = $pdo->lastInsertId();
-        
-        // Create notification for student
-        createNotification($pdo, $data['student_id'], "New meeting scheduled with your advisor on {$data['meeting_date']} at {$data['meeting_time']}");
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Meeting scheduled successfully',
-            'meeting_id' => $meeting_id
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode([
-            'success' => false,
-            'message' => 'Failed to schedule meeting: ' . $e->getMessage()
-        ]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Get all meetings for an advisor
-$app->get('/advisors/{advisor_id}/meetings', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $advisor_id = $args['advisor_id'];
-        $student_id = $request->getQueryParams()['student_id'] ?? null;
-        
-        $sql = "
-            SELECT 
-                m.*,
-                u.full_name as student_name,
-                u.matric_no as student_matric
-            FROM meetings m
-            JOIN users u ON m.student_id = u.id
-            WHERE m.advisor_id = ?
-        ";
-        
-        $params = [$advisor_id];
-        
-        if ($student_id) {
-            $sql .= " AND m.student_id = ?";
-            $params[] = $student_id;
-        }
-        
-        $sql .= " ORDER BY m.meeting_date DESC, m.meeting_time DESC";
-        
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-        $meetings = $stmt->fetchAll();
-        
-        // Convert to frontend format
-        foreach ($meetings as &$meeting) {
-            $meeting['student'] = [
-                'id' => $meeting['student_id'],
-                'name' => $meeting['student_name'],
-                'studentId' => $meeting['student_matric']
-            ];
-            $meeting['date'] = $meeting['meeting_date'];
-            $meeting['time'] = $meeting['meeting_time'];
-            $meeting['type'] = $meeting['meeting_type'];
-            $meeting['actionItems'] = $meeting['action_items'];
-        }
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'data' => $meetings
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode([
-            'success' => false,
-            'message' => 'Failed to fetch meetings: ' . $e->getMessage()
-        ]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Update a meeting
-$app->put('/advisors/{advisor_id}/meetings/{meeting_id}', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $advisor_id = $args['advisor_id'];
-        $meeting_id = $args['meeting_id'];
-        $data = $request->getParsedBody();
-        
-        // Verify the meeting belongs to this advisor
-        $stmt = $pdo->prepare("SELECT student_id FROM meetings WHERE id = ? AND advisor_id = ?");
-        $stmt->execute([$meeting_id, $advisor_id]);
-        $meeting = $stmt->fetch();
-        
-        if (!$meeting) {
-            $response->getBody()->write(json_encode([
-                'success' => false,
-                'message' => 'Meeting not found or unauthorized'
-            ]));
-            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Build update query dynamically
-        $fields = [];
-        $params = [];
-        
-        $allowed_fields = ['title', 'meeting_date', 'meeting_time', 'duration', 'location', 'meeting_link', 'meeting_type', 'status', 'agenda', 'notes', 'action_items', 'next_meeting_date'];
-        
-        foreach ($allowed_fields as $field) {
-            if (isset($data[$field])) {
-                if ($field === 'action_items') {
-                    $fields[] = "action_items = ?";
-                    $params[] = $data[$field];
-                } else {
-                    $fields[] = "$field = ?";
-                    $params[] = $data[$field];
-                }
-            }
-        }
-        
-        if (empty($fields)) {
-            $response->getBody()->write(json_encode([
-                'success' => false,
-                'message' => 'No valid fields to update'
-            ]));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        $params[] = $meeting_id;
-        $sql = "UPDATE meetings SET " . implode(', ', $fields) . " WHERE id = ?";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-        
-        // Create notification for student if status changed to completed
-        if (isset($data['status']) && $data['status'] === 'completed') {
-            createNotification($pdo, $meeting['student_id'], "Meeting with your advisor has been completed. Notes and action items have been added.");
-        }
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Meeting updated successfully'
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode([
-            'success' => false,
-            'message' => 'Failed to update meeting: ' . $e->getMessage()
-        ]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Delete a meeting
-$app->delete('/advisors/{advisor_id}/meetings/{meeting_id}', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $advisor_id = $args['advisor_id'];
-        $meeting_id = $args['meeting_id'];
-        
-        // Verify the meeting belongs to this advisor
-        $stmt = $pdo->prepare("SELECT student_id FROM meetings WHERE id = ? AND advisor_id = ?");
-        $stmt->execute([$meeting_id, $advisor_id]);
-        $meeting = $stmt->fetch();
-        
-        if (!$meeting) {
-            $response->getBody()->write(json_encode([
-                'success' => false,
-                'message' => 'Meeting not found or unauthorized'
-            ]));
-            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Delete the meeting
-        $stmt = $pdo->prepare("DELETE FROM meetings WHERE id = ?");
-        $stmt->execute([$meeting_id]);
-        
-        // Create notification for student
-        createNotification($pdo, $meeting['student_id'], "A scheduled meeting with your advisor has been cancelled.");
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Meeting deleted successfully'
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode([
-            'success' => false,
-            'message' => 'Failed to delete meeting: ' . $e->getMessage()
-        ]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// ===================== REPORTS =====================
-// Generate advisor report for selected students
-$app->post('/advisors/{advisor_id}/reports/generate', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $advisor_id = $args['advisor_id'];
-        $body = $request->getParsedBody();
-        
-        $student_ids = $body['students'] ?? [];
-        $report_type = $body['type'] ?? 'comprehensive';
-        $sections = $body['sections'] ?? [];
-        $period = $body['period'] ?? 'current';
-        $format = $body['format'] ?? 'pdf';
-        
-        if (empty($student_ids)) {
-            $response->getBody()->write(json_encode([
-                'success' => false,
-                'message' => 'No students selected'
-            ]));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Get student data for the report
-        $placeholders = str_repeat('?,', count($student_ids) - 1) . '?';
-        $sql = "
-            SELECT 
-                u.id,
-                u.full_name as name,
-                u.matric_no as student_id,
-                u.email,
-                CASE 
-                    WHEN u.matric_no LIKE '%2021%' THEN 4
-                    WHEN u.matric_no LIKE '%2022%' THEN 3  
-                    WHEN u.matric_no LIKE '%2023%' THEN 2
-                    WHEN u.matric_no LIKE '%2024%' THEN 1
-                    ELSE 1
-                END as year,
-                CASE 
-                    WHEN u.matric_no LIKE 'CS%' THEN 'Computer Science'
-                    WHEN u.matric_no LIKE 'IS%' THEN 'Information Systems'
-                    WHEN u.matric_no LIKE 'SE%' THEN 'Software Engineering'
-                    WHEN u.matric_no LIKE 'IT%' THEN 'Information Technology'
-                    ELSE 'Computer Science'
-                END as program
-            FROM users u
-            WHERE u.id IN ($placeholders)
-            ORDER BY u.full_name
-        ";
-        
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($student_ids);
-        $students = $stmt->fetchAll();
-        
-        // Calculate performance data for each student
-        foreach ($students as &$student) {
-            // Get GPA
-            $gpa_sql = "
-                SELECT AVG(
-                    CASE 
-                        WHEN total_marks >= 80 THEN 4.0
-                        WHEN total_marks >= 75 THEN 3.7
-                        WHEN total_marks >= 70 THEN 3.3
-                        WHEN total_marks >= 65 THEN 3.0
-                        WHEN total_marks >= 60 THEN 2.7
-                        WHEN total_marks >= 55 THEN 2.3
-                        WHEN total_marks >= 50 THEN 2.0
-                        WHEN total_marks >= 45 THEN 1.7
-                        WHEN total_marks >= 40 THEN 1.3
-                        ELSE 0.0
-                    END
-                ) as gpa
-                FROM (
-                    SELECT 
-                        COALESCE(
-                            (SELECT SUM(am.mark * ass.weight / 100) 
-                             FROM assessment_marks am 
-                             JOIN assessments ass ON am.assessment_id = ass.id 
-                             WHERE am.enrollment_id = e.id), 0
-                        ) + 
-                        COALESCE(
-                            (SELECT fem.mark * 0.6 FROM final_exam_marks fem WHERE fem.enrollment_id = e.id), 0
-                        ) as total_marks
-                    FROM enrollments e 
-                    WHERE e.student_id = ?
-                ) as course_marks
-            ";
-            
-            $gpa_stmt = $pdo->prepare($gpa_sql);
-            $gpa_stmt->execute([$student['id']]);
-            $gpa_result = $gpa_stmt->fetch();
-            $student['gpa'] = round((float) ($gpa_result['gpa'] ?? 0.0), 2);
-            
-            // Get course performance if requested
-            if (isset($sections['courseBreakdown']) && $sections['courseBreakdown']) {
-                $course_sql = "
-                    SELECT 
-                        c.name as course_name,
-                        c.code as course_code,
-                        COALESCE(
-                            (SELECT SUM(am.mark * ass.weight / 100) 
-                             FROM assessment_marks am 
-                             JOIN assessments ass ON am.assessment_id = ass.id 
-                             WHERE am.enrollment_id = e.id), 0
-                        ) + 
-                        COALESCE(
-                            (SELECT fem.mark * 0.6 FROM final_exam_marks fem WHERE fem.enrollment_id = e.id), 0
-                        ) as total_marks
-                    FROM enrollments e
-                    JOIN courses c ON e.course_id = c.id
-                    WHERE e.student_id = ?
-                    ORDER BY c.name
-                ";
-                
-                $course_stmt = $pdo->prepare($course_sql);
-                $course_stmt->execute([$student['id']]);
-                $student['courses'] = $course_stmt->fetchAll();
-            }
-            
-            // Get advisor notes if requested
-            if (isset($sections['meetingHistory']) && $sections['meetingHistory']) {
-                $notes_sql = "
-                    SELECT notes, created_at
-                    FROM advisor_notes 
-                    WHERE advisor_id = ? AND student_id = ?
-                    ORDER BY created_at DESC
-                    LIMIT 10
-                ";
-                
-                $notes_stmt = $pdo->prepare($notes_sql);
-                $notes_stmt->execute([$advisor_id, $student['id']]);
-                $student['meeting_history'] = $notes_stmt->fetchAll();
-            }
-        }
-          // Calculate summary statistics
-        $total_gpa = 0;
-        $at_risk_count = 0;
-        $high_performers_count = 0;
-        $recommendations = [];
-        
-        foreach ($students as $student) {
-            $total_gpa += $student['gpa'];
-            if ($student['gpa'] < 2.0) {
-                $at_risk_count++;
-            } elseif ($student['gpa'] >= 3.5) {
-                $high_performers_count++;
-            }
-        }
-        
-        $average_gpa = count($students) > 0 ? $total_gpa / count($students) : 0;
-        
-        // Generate recommendations based on data
-        if ($at_risk_count > 0) {
-            $recommendations[] = "Schedule immediate intervention meetings with {$at_risk_count} at-risk students to develop academic improvement plans.";
-        }
-        
-        if ($high_performers_count > 0) {
-            $recommendations[] = "Consider recommending {$high_performers_count} high-performing students for advanced courses or research opportunities.";
-        }
-        
-        if ($average_gpa < 2.5) {
-            $recommendations[] = "Overall advisee performance is below expectations. Consider implementing group study sessions or tutoring programs.";
-        } elseif ($average_gpa > 3.0) {
-            $recommendations[] = "Strong overall performance. Continue current advising strategies and consider challenging advisees with advanced opportunities.";
-        }
-        
-        if (count($students) > 10) {
-            $recommendations[] = "With a large advisee load, consider prioritizing attention to at-risk and high-performing students for personalized guidance.";
-        }
-        
-        // Save report record
-        $report_title = ucfirst($report_type) . " Report - " . date('M d, Y');
-        $insert_sql = "
-            INSERT INTO advisor_reports (advisor_id, title, type, student_count, format, report_data, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, NOW())
-        ";
-        
-        $report_data = json_encode([
-            'students' => $students,
-            'summary' => [
-                'average_gpa' => round($average_gpa, 2),
-                'at_risk_count' => $at_risk_count,
-                'high_performers_count' => $high_performers_count,
-                'total_students' => count($students)
-            ],
-            'recommendations' => $recommendations,
-            'sections' => $sections,
-            'period' => $period,
-            'generated_at' => date('Y-m-d H:i:s')
-        ]);
-        
-        $stmt = $pdo->prepare($insert_sql);
-        $stmt->execute([
-            $advisor_id,
-            $report_title,
-            $report_type,
-            count($students),
-            $format,
-            $report_data
-        ]);
-        
-        $report_id = $pdo->lastInsertId();
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'report_id' => $report_id,
-            'download_url' => "/advisors/{$advisor_id}/reports/{$report_id}/download",
-            'data' => $students
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode([
-            'success' => false,
-            'message' => 'Failed to generate report: ' . $e->getMessage()
-        ]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Get recent reports for advisor
-$app->get('/advisors/{advisor_id}/reports/recent', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $advisor_id = $args['advisor_id'];
-        
-        $sql = "
-            SELECT id, title, type, student_count, format, created_at
-            FROM advisor_reports
-            WHERE advisor_id = ?
-            ORDER BY created_at DESC
-            LIMIT 10
-        ";
-        
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$advisor_id]);
-        $reports = $stmt->fetchAll();
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'data' => $reports
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode([
-            'success' => false,
-            'message' => 'Failed to fetch reports: ' . $e->getMessage()
-        ]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// PDF Report Generator Function
-function generatePDFReport($report) {
-    require_once __DIR__ . '/../vendor/autoload.php';
-    
-    // Create new PDF document
-    $pdf = new \TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
-    
-    // Set document information
-    $pdf->SetCreator('Course Mark Management System');
-    $pdf->SetAuthor('Academic Advisor');
-    $pdf->SetTitle($report['title']);
-    $pdf->SetSubject('Advisee Report');
-    
-    // Set margins
-    $pdf->SetMargins(20, 30, 20);
-    $pdf->SetHeaderMargin(10);
-    $pdf->SetFooterMargin(15);
-    
-    // Set auto page breaks
-    $pdf->SetAutoPageBreak(TRUE, 25);
-    
-    // Add a page
-    $pdf->AddPage();
-    
-    // Parse report data
-    $reportData = json_decode($report['report_data'], true);
-    
-    // Header section
-    $pdf->SetFont('helvetica', 'B', 18);
-    $pdf->SetTextColor(51, 51, 51);
-    $pdf->Cell(0, 15, $report['title'], 0, 1, 'C');
-    $pdf->Ln(5);
-    
-    // Report metadata
-    $pdf->SetFont('helvetica', '', 10);
-    $pdf->SetTextColor(100, 100, 100);
-    $pdf->Cell(0, 8, 'Generated on: ' . date('F j, Y \a\t g:i A', strtotime($report['created_at'])), 0, 1, 'R');
-    $pdf->Cell(0, 8, 'Report Type: ' . ucfirst($report['type']), 0, 1, 'R');
-    $pdf->Cell(0, 8, 'Students Included: ' . $report['student_count'], 0, 1, 'R');
-    $pdf->Ln(10);
-    
-    // Summary section
-    if (isset($reportData['summary'])) {
-        $pdf->SetFont('helvetica', 'B', 14);
-        $pdf->SetTextColor(51, 51, 51);
-        $pdf->Cell(0, 10, 'Summary', 0, 1, 'L');
-        $pdf->Ln(2);
-        
-        $pdf->SetFont('helvetica', '', 10);
-        $summary = $reportData['summary'];
-        
-        // Summary statistics
-        $pdf->Cell(45, 8, 'Average GPA:', 0, 0, 'L');
-        $pdf->SetFont('helvetica', 'B', 10);
-        $pdf->Cell(0, 8, number_format($summary['average_gpa'], 2), 0, 1, 'L');
-        
-        $pdf->SetFont('helvetica', '', 10);
-        $pdf->Cell(45, 8, 'At-Risk Students:', 0, 0, 'L');
-        $pdf->SetFont('helvetica', 'B', 10);
-        $pdf->SetTextColor(220, 53, 69); // Red color for at-risk
-        $pdf->Cell(0, 8, $summary['at_risk_count'], 0, 1, 'L');
-        
-        $pdf->SetTextColor(51, 51, 51);
-        $pdf->SetFont('helvetica', '', 10);
-        $pdf->Cell(45, 8, 'High Performers:', 0, 0, 'L');
-        $pdf->SetFont('helvetica', 'B', 10);
-        $pdf->SetTextColor(40, 167, 69); // Green color for high performers
-        $pdf->Cell(0, 8, $summary['high_performers_count'], 0, 1, 'L');
-        
-        $pdf->SetTextColor(51, 51, 51);
-        $pdf->Ln(10);
-    }
-    
-    // Student details section
-    if (isset($reportData['students']) && !empty($reportData['students'])) {
-        $pdf->SetFont('helvetica', 'B', 14);
-        $pdf->Cell(0, 10, 'Student Details', 0, 1, 'L');
-        $pdf->Ln(5);
-        
-        // Table header
-        $pdf->SetFont('helvetica', 'B', 9);
-        $pdf->SetFillColor(248, 249, 250);
-        $pdf->Cell(50, 10, 'Student Name', 1, 0, 'C', 1);
-        $pdf->Cell(25, 10, 'Student ID', 1, 0, 'C', 1);
-        $pdf->Cell(20, 10, 'GPA', 1, 0, 'C', 1);
-        $pdf->Cell(25, 10, 'Status', 1, 0, 'C', 1);
-        $pdf->Cell(50, 10, 'Latest Course', 1, 1, 'C', 1);
-        
-        // Table rows
-        $pdf->SetFont('helvetica', '', 9);
-        foreach ($reportData['students'] as $student) {
-            // Determine status color
-            $statusColor = [51, 51, 51]; // Default
-            if (isset($student['gpa']) && $student['gpa'] < 2.0) {
-                $statusColor = [220, 53, 69]; // Red for at-risk
-            } elseif (isset($student['gpa']) && $student['gpa'] >= 3.5) {
-                $statusColor = [40, 167, 69]; // Green for high performers
-            }
-            
-            $pdf->Cell(50, 8, $student['full_name'] ?? 'N/A', 1, 0, 'L');
-            $pdf->Cell(25, 8, $student['student_id'] ?? 'N/A', 1, 0, 'C');
-            $pdf->Cell(20, 8, isset($student['gpa']) ? number_format($student['gpa'], 2) : 'N/A', 1, 0, 'C');
-            
-            // Status cell with color
-            $pdf->SetTextColor($statusColor[0], $statusColor[1], $statusColor[2]);
-            $status = 'Regular';
-            if (isset($student['gpa'])) {
-                if ($student['gpa'] < 2.0) $status = 'At-Risk';
-                elseif ($student['gpa'] >= 3.5) $status = 'High Performer';
-            }
-            $pdf->Cell(25, 8, $status, 1, 0, 'C');
-            
-            $pdf->SetTextColor(51, 51, 51);
-            $pdf->Cell(50, 8, $student['latest_course'] ?? 'N/A', 1, 1, 'L');
-        }
-        $pdf->Ln(10);
-    }
-    
-    // Recommendations section
-    if (isset($reportData['recommendations']) && !empty($reportData['recommendations'])) {
-        $pdf->SetFont('helvetica', 'B', 14);
-        $pdf->Cell(0, 10, 'Recommendations', 0, 1, 'L');
-        $pdf->Ln(2);
-        
-        $pdf->SetFont('helvetica', '', 10);
-        foreach ($reportData['recommendations'] as $index => $recommendation) {
-            $pdf->Cell(10, 8, ($index + 1) . '.', 0, 0, 'L');
-            $pdf->MultiCell(0, 8, $recommendation, 0, 'L');
-            $pdf->Ln(2);
-        }
-    }
-    
-    // Footer
-    $pdf->SetY(-30);
-    $pdf->SetFont('helvetica', 'I', 8);
-    $pdf->SetTextColor(100, 100, 100);
-    $pdf->Cell(0, 10, 'Generated by Course Mark Management System', 0, 0, 'C');
-    
-    return $pdf->Output('', 'S'); // Return PDF as string
-}
-
-// Download report
-$app->get('/advisors/{advisor_id}/reports/{report_id}/download', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $advisor_id = $args['advisor_id'];
-        $report_id = $args['report_id'];
-        
-        $sql = "SELECT * FROM advisor_reports WHERE id = ? AND advisor_id = ?";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$report_id, $advisor_id]);
-        $report = $stmt->fetch();
-        
-        if (!$report) {
-            $response->getBody()->write(json_encode([
-                'success' => false,
-                'message' => 'Report not found'
-            ]));
-            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Generate PDF
-        $pdfContent = generatePDFReport($report);
-        $filename = preg_replace('/[^a-zA-Z0-9\-_\.]/', '_', $report['title']) . '.pdf';
-        
-        $response->getBody()->write($pdfContent);
-        return $response->withHeader('Content-Type', 'application/pdf')
-                        ->withHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
-                        ->withHeader('Content-Length', strlen($pdfContent));
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode([
-            'success' => false,
-            'message' => 'Failed to download report: ' . $e->getMessage()
-        ]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
+>>>>>>>>> Temporary merge branch 2
 
 $app->run();

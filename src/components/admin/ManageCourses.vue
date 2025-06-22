@@ -22,7 +22,7 @@
             <th>Course Code</th>
             <th>Course Name</th>
             <th>Semester</th>
-            <th>Credit Hours</th>
+            <th>Year</th>
             <th>Lecturer</th>
             <th>Status</th>
             <th>Actions</th>
@@ -31,19 +31,35 @@
         <tbody>
           <tr v-for="course in filteredCourses" :key="course.id">
             <td>{{ course.code }}</td>
-            <td>{{ course.name }}</td>
-            <td>{{ course.semester }}</td>
-            <td>{{ course.creditHours }}</td>
-            <td>{{ course.lecturer ? course.lecturer.name : 'Not Assigned' }}</td>
             <td>
-              <span :class="['status', course.status]">{{ course.status }}</span>
+              <div class="tooltip-wrapper" :data-tooltip="course.name">
+                {{ course.name }}
+              </div>
+            </td>
+            <td>{{ course.semester }}</td>
+            <td>{{ course.year }}</td>
+            <td>
+              <div class="tooltip-wrapper" :data-tooltip="course.lecturer_name || 'Not Assigned'">
+                {{ course.lecturer_name || 'Not Assigned' }}
+              </div>
+            </td>
+            <td>
+              <span class="status active">Active</span>
             </td>
             <td class="actions">
               <button @click="editCourse(course)" class="btn-edit">Edit</button>
-              <button @click="assignLecturer(course)" class="btn-assign">Assign Lecturer</button>
-              <button @click="toggleCourseStatus(course)" class="btn-toggle">
-                {{ course.status === 'active' ? 'Deactivate' : 'Activate' }}
-              </button>
+              <button @click="deleteCourse(course)" class="btn-delete">Delete</button>
+            </td>
+          </tr>
+          
+          <!-- Empty state -->
+          <tr v-if="filteredCourses.length === 0">
+            <td colspan="7" class="table-empty">
+              <i class="fas fa-book-open"></i>
+              <div>
+                <p v-if="search || semesterFilter">No courses match your search criteria.</p>
+                <p v-else>No courses available. Click "Add Course" to create your first course.</p>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -71,42 +87,27 @@
                 {{ semester }}
               </option>
             </select>
+          </div>          <div class="form-group">
+            <label>Year</label>
+            <input type="text" v-model="courseForm.year" placeholder="e.g., 2024/2025, 2025/2026" required>
           </div>
           <div class="form-group">
-            <label>Credit Hours</label>
-            <input type="number" v-model.number="courseForm.creditHours" min="1" max="6" required>
-          </div>
-          <div class="form-group">
-            <label>Description</label>
-            <textarea v-model="courseForm.description" rows="3"></textarea>
+            <label>Lecturer</label>
+            <SearchableDropdown
+              :items="availableLecturers"
+              :selectedItem="selectedLecturerForForm"
+              @select="onFormLecturerSelect"
+              placeholder="Type to search lecturers..."
+              itemType="lecturer"
+              displayField="name"
+              subDisplayField="email"
+              :searchFields="['name', 'email']"
+              :pageSize="8"
+            />
           </div>
           <div class="form-actions">
             <button type="submit" class="btn-primary">Save</button>
-            <button type="button" @click="showAddCourseModal = false" class="btn-secondary">Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- Assign Lecturer Modal -->
-    <div v-if="showAssignLecturerModal" class="modal">
-      <div class="modal-content">
-        <h3>Assign Lecturer to {{ selectedCourse?.name }}</h3>
-        <form @submit.prevent="saveLecturerAssignment">
-          <div class="form-group">
-            <label>Select Lecturer</label>
-            <select v-model="selectedLecturerId" required>
-              <option value="">Choose a lecturer</option>
-              <option v-for="lecturer in availableLecturers" 
-                      :key="lecturer.id" 
-                      :value="lecturer.id">
-                {{ lecturer.name }}
-              </option>
-            </select>
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn-primary">Assign</button>
-            <button type="button" @click="showAssignLecturerModal = false" class="btn-secondary">Cancel</button>
+            <button type="button" @click="closeModal" class="btn-secondary">Cancel</button>
           </div>
         </form>
       </div>
@@ -115,33 +116,31 @@
 </template>
 
 <script>
-import axios from 'axios';
+import api from '../../api';
+import SearchableDropdown from '../SearchableDropdown.vue';
 
 export default {
   name: 'ManageCourses',
+  components: {
+    SearchableDropdown
+  },
   data() {
     return {
       courses: [],
       search: '',
       semesterFilter: '',
       showAddCourseModal: false,
-      showAssignLecturerModal: false,
       editingCourse: null,
-      selectedCourse: null,
-      selectedLecturerId: '',
-      availableLecturers: [],
-      courseForm: {
+      selectedLecturerForForm: null,
+      availableLecturers: [],      courseForm: {
         code: '',
         name: '',
         semester: '',
-        creditHours: 3,
-        description: ''
-      },
-      semesters: [
-        '2025/2026-1',
-        '2025/2026-2',
-        '2026/2027-1',
-        '2026/2027-2'
+        year: '',
+        lecturer_id: null
+      },semesters: [
+        '1',
+        '2'
       ]
     }
   },
@@ -163,62 +162,101 @@ export default {
   methods: {
     async fetchCourses() {
       try {
-        const response = await axios.get('/api/admin/courses');
+        const response = await api.get('/api/admin/courses');
         this.courses = response.data;
       } catch (error) {
         console.error('Error fetching courses:', error);
+        alert('Error loading courses. Please try again.');
       }
     },
+
     async fetchLecturers() {
       try {
-        const response = await axios.get('/api/admin/lecturers');
-        this.availableLecturers = response.data;
+        // Fetch users with lecturer role
+        const response = await api.get('/api/admin/users');
+        this.availableLecturers = response.data.filter(user => user.role === 'lecturer');
       } catch (error) {
         console.error('Error fetching lecturers:', error);
+        alert('Error loading lecturers. Please try again.');
       }
     },
+
     editCourse(course) {
       this.editingCourse = course;
-      this.courseForm = { ...course };
+      this.courseForm = { 
+        code: course.code,
+        name: course.name,
+        semester: course.semester,
+        year: course.year,
+        lecturer_id: course.lecturer_id
+      };
+      // Set the selected lecturer for the form dropdown
+      this.selectedLecturerForForm = course.lecturer_id 
+        ? this.availableLecturers.find(lecturer => lecturer.id == course.lecturer_id) || null
+        : null;
       this.showAddCourseModal = true;
     },
-    assignLecturer(course) {
-      this.selectedCourse = course;
-      this.selectedLecturerId = course.lecturer?.id || '';
-      this.showAssignLecturerModal = true;
+
+    onFormLecturerSelect(lecturer) {
+      this.selectedLecturerForForm = lecturer;
+      this.courseForm.lecturer_id = lecturer ? lecturer.id : null;
     },
+
     async saveCourse() {
       try {
         if (this.editingCourse) {
-          await axios.put(`/api/admin/courses/${this.editingCourse.id}`, this.courseForm);
+          await api.put(`/api/admin/courses/${this.editingCourse.id}`, this.courseForm);
+          alert('Course updated successfully!');
         } else {
-          await axios.post('/api/admin/courses', this.courseForm);
+          await api.post('/api/admin/courses', this.courseForm);
+          alert('Course created successfully!');
         }
-        this.showAddCourseModal = false;
+        this.closeModal();
         this.fetchCourses();
       } catch (error) {
         console.error('Error saving course:', error);
+        alert('Error saving course. Please try again.');
       }
     },
-    async saveLecturerAssignment() {
-      try {
-        await axios.post(`/api/admin/courses/${this.selectedCourse.id}/assign-lecturer`, {
-          lecturerId: this.selectedLecturerId
-        });
-        this.showAssignLecturerModal = false;
-        this.fetchCourses();
-      } catch (error) {
-        console.error('Error assigning lecturer:', error);
-      }
-    },
+
     async toggleCourseStatus(course) {
       try {
-        const newStatus = course.status === 'active' ? 'inactive' : 'active';
-        await axios.patch(`/api/admin/courses/${course.id}/status`, { status: newStatus });
+        // Since there's no status field in the current backend, this will be a placeholder
+        console.log('Toggle course status not implemented in backend yet', course);
+        // For now, just refresh the courses
         this.fetchCourses();
       } catch (error) {
         console.error('Error toggling course status:', error);
       }
+    },
+
+    async deleteCourse(course) {
+      if (confirm(`Are you sure you want to delete the course "${course.code} - ${course.name}"?`)) {
+        try {
+          await api.delete(`/api/admin/courses/${course.id}`);
+          alert('Course deleted successfully!');
+          this.fetchCourses();
+        } catch (error) {
+          console.error('Error deleting course:', error);
+          if (error.response?.status === 400) {
+            alert('Cannot delete course with existing enrollments.');
+          } else {
+            alert('Error deleting course. Please try again.');
+          }
+        }
+      }
+    },
+
+    closeModal() {
+      this.showAddCourseModal = false;
+      this.editingCourse = null;
+      this.selectedLecturerForForm = null;      this.courseForm = {
+        code: '',
+        name: '',
+        semester: '',
+        year: '2024/2025',
+        lecturer_id: null
+      };
     }
   }
 }
@@ -263,6 +301,40 @@ th, td {
   border-bottom: 1px solid #ddd;
 }
 
+/* Text overflow for long content */
+td:nth-child(2), td:nth-child(5) {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tooltip for truncated text */
+.tooltip-wrapper {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tooltip-wrapper:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+/* Action buttons */
 .actions {
   display: flex;
   gap: 8px;
@@ -286,17 +358,8 @@ th, td {
   cursor: pointer;
 }
 
-.btn-assign {
-  background-color: #9C27B0;
-  color: white;
-  padding: 4px 8px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.btn-toggle {
-  background-color: #9E9E9E;
+.btn-delete {
+  background-color: #f44336;
   color: white;
   padding: 4px 8px;
   border: none;
@@ -373,20 +436,163 @@ th, td {
   cursor: pointer;
 }
 
+/* Basic table enhancements */
+tr:hover {
+  background-color: #f8f9fa;
+}
+
+.table-empty {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+}
+
+.table-empty i {
+  font-size: 48px;
+  margin-bottom: 16px;
+  color: #ddd;
+}
+
+/* Modal styles */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.modal-content {
+  background-color: white;
+  padding: 25px;
+  border-radius: 8px;
+  min-width: 500px;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  z-index: 1001;
+  overflow-x: hidden;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #333;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 10px;
+  border: 2px solid #e1e5e9;
+  border-radius: 6px;
+  box-sizing: border-box;
+  font-size: 14px;
+  transition: border-color 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.btn-secondary {
+  background-color: #9E9E9E;
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background-color: #757575;
+}
+
+/* Basic responsive design */
 @media (max-width: 768px) {
   .filters {
     flex-direction: column;
+    gap: 10px;
+  }
+  
+  .search-input, .semester-filter {
+    width: 100%;
   }
   
   .actions {
     flex-direction: column;
   }
   
-  .btn-edit,
-  .btn-assign,
-  .btn-toggle {
+  .btn-edit, .btn-delete {
     width: 100%;
     margin-bottom: 4px;
   }
+  
+  .manage-courses {
+    padding: 10px;
+  }
+  
+  .modal-content {
+    margin: 10px;
+    min-width: auto;
+    width: calc(100% - 20px);
+  }
+}
+
+/* SearchableDropdown modal integration - ensure exact width match */
+.modal-content .form-group .searchable-dropdown {
+  width: 100%;
+  position: relative;
+}
+
+.modal-content .form-group .searchable-dropdown .search-input-dropdown {
+  width: 100% !important;
+  padding: 10px 40px 10px 10px !important;
+  border: 2px solid #e1e5e9 !important;
+  border-radius: 6px !important;
+  box-sizing: border-box !important;
+  font-size: 14px !important;
+  transition: border-color 0.2s ease !important;
+}
+
+.modal-content .form-group .searchable-dropdown .search-input-dropdown:focus {
+  outline: none !important;
+  border-color: #4CAF50 !important;
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1) !important;
+}
+
+.modal-content .form-group .searchable-dropdown .clear-selection {
+  right: 10px !important;
+}
+
+/* Ensure form groups with SearchableDropdown have proper spacing */
+.modal-content .form-group {
+  position: relative;
+  overflow: visible;
 }
 </style>

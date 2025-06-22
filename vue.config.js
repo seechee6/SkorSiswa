@@ -3,7 +3,7 @@ const { defineConfig } = require('@vue/cli-service')
 module.exports = defineConfig({
   transpileDependencies: true,
   devServer: {
-    port: 8080,
     host: 'localhost'
+    // Port will be automatically assigned to next available port
   }
 })
