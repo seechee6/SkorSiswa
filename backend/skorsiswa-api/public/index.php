@@ -1067,6 +1067,151 @@ $app->delete('/advisor-notes/{id}', function (Request $request, Response $respon
     return $response->withHeader('Content-Type', 'application/json');
 });
 
+// ===================== ADVISOR ENDPOINTS =====================
+// Get advisor's advisees with their performance data
+$app->get('/advisors/{advisor_id}/advisees', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $advisor_id = $args['advisor_id'];
+        
+        // Simplified query to avoid complex subqueries that cause SQL errors
+        $sql = "
+            SELECT 
+                u.id,
+                u.full_name as name,
+                u.matric_no as studentId,
+                u.email,
+                -- Determine academic year based on matric number pattern
+                CASE 
+                    WHEN u.matric_no LIKE '%2021%' THEN 4
+                    WHEN u.matric_no LIKE '%2022%' THEN 3  
+                    WHEN u.matric_no LIKE '%2023%' THEN 2
+                    WHEN u.matric_no LIKE '%2024%' THEN 1
+                    ELSE 1
+                END as year,
+                -- Determine program from matric number
+                CASE 
+                    WHEN u.matric_no LIKE 'CS%' THEN 'CS'
+                    WHEN u.matric_no LIKE 'IS%' THEN 'IS'
+                    WHEN u.matric_no LIKE 'SE%' THEN 'SE'
+                    WHEN u.matric_no LIKE 'IT%' THEN 'IT'
+                    ELSE 'CS'
+                END as program
+            FROM advisors a
+            JOIN users u ON a.student_id = u.id
+            WHERE a.advisor_id = ? AND u.role_id = (SELECT id FROM roles WHERE name = 'student')
+            ORDER BY u.full_name
+        ";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$advisor_id]);
+        $advisees = $stmt->fetchAll();
+        
+        // Calculate GPA and other fields for each advisee separately to avoid complex SQL
+        foreach ($advisees as &$advisee) {
+            // Get GPA calculation
+            $gpa_sql = "
+                SELECT AVG(
+                    CASE 
+                        WHEN total_marks >= 80 THEN 4.0
+                        WHEN total_marks >= 75 THEN 3.7
+                        WHEN total_marks >= 70 THEN 3.3
+                        WHEN total_marks >= 65 THEN 3.0
+                        WHEN total_marks >= 60 THEN 2.7
+                        WHEN total_marks >= 55 THEN 2.3
+                        WHEN total_marks >= 50 THEN 2.0
+                        WHEN total_marks >= 45 THEN 1.7
+                        WHEN total_marks >= 40 THEN 1.3
+                        ELSE 0.0
+                    END
+                ) as gpa
+                FROM (
+                    SELECT 
+                        COALESCE(
+                            (SELECT SUM(am.mark * ass.weight / 100) 
+                             FROM assessment_marks am 
+                             JOIN assessments ass ON am.assessment_id = ass.id 
+                             WHERE am.enrollment_id = e.id), 0
+                        ) + 
+                        COALESCE(
+                            (SELECT fem.mark * 0.6 FROM final_exam_marks fem WHERE fem.enrollment_id = e.id), 0
+                        ) as total_marks
+                    FROM enrollments e 
+                    WHERE e.student_id = ?
+                ) as course_marks
+            ";
+            
+            $gpa_stmt = $pdo->prepare($gpa_sql);
+            $gpa_stmt->execute([$advisee['id']]);
+            $gpa_result = $gpa_stmt->fetch();
+            $advisee['gpa'] = (float) ($gpa_result['gpa'] ?? 0.0);
+            
+            // Get last meeting date
+            $meeting_sql = "SELECT MAX(created_at) as lastMeeting FROM advisor_notes WHERE advisor_id = ? AND student_id = ?";
+            $meeting_stmt = $pdo->prepare($meeting_sql);
+            $meeting_stmt->execute([$advisor_id, $advisee['id']]);
+            $meeting_result = $meeting_stmt->fetch();
+            $advisee['lastMeeting'] = $meeting_result['lastMeeting'] ?? '2024-01-01';
+            $advisee['lastMeetingType'] = 'Academic Review';
+        }
+        
+        // Calculate status based on GPA and bottom 20% logic
+        $advisee_count = count($advisees);
+        $bottom_20_percent_count = max(1, ceil($advisee_count * 0.2)); // At least 1 student
+        
+        // Sort advisees by GPA to find bottom 20%
+        $sorted_by_gpa = $advisees;
+        usort($sorted_by_gpa, function($a, $b) {
+            return $a['gpa'] <=> $b['gpa']; // Sort ascending (lowest first)
+        });
+        
+        // Get the GPA threshold for bottom 20%
+        $bottom_20_threshold = $advisee_count > 0 ? $sorted_by_gpa[$bottom_20_percent_count - 1]['gpa'] : 0.0;
+        
+        foreach ($advisees as &$advisee) {
+            // At-risk if GPA < 2.0 OR in bottom 20%
+            $is_low_gpa = $advisee['gpa'] < 2.0;
+            $is_bottom_20 = $advisee['gpa'] <= $bottom_20_threshold;
+            
+            if ($is_low_gpa || $is_bottom_20) {
+                $advisee['status'] = $advisee['gpa'] < 1.5 ? 'probation' : 'at-risk';
+                $advisee['isAtRisk'] = true;
+                $advisee['atRiskReason'] = [];
+                if ($is_low_gpa) {
+                    $advisee['atRiskReason'][] = 'GPA below 2.0';
+                }
+                if ($is_bottom_20) {
+                    $advisee['atRiskReason'][] = 'Bottom 20% performance';
+                }
+            } elseif ($advisee['gpa'] >= 3.5) {
+                $advisee['status'] = 'excellent';
+                $advisee['isAtRisk'] = false;
+                $advisee['atRiskReason'] = [];
+            } else {
+                $advisee['status'] = 'active';
+                $advisee['isAtRisk'] = false;
+                $advisee['atRiskReason'] = [];
+            }
+            
+            // Convert GPA to float and year to int
+            $advisee['gpa'] = (float) $advisee['gpa'];
+            $advisee['year'] = (int) $advisee['year'];
+        }
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'data' => $advisees
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'message' => 'Failed to fetch advisees: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
 // Add this test endpoint to debug the database
 $app->get('/debug/users', function (Request $request, Response $response) use ($pdo) {
     try {
