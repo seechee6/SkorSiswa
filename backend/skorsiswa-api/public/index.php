@@ -1,5 +1,5 @@
 <?php
-require __DIR__ . '/vendor/autoload.php';
+require __DIR__ . '/../vendor/autoload.php';
 
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -22,8 +22,8 @@ $app->add(function ($request, $handler) {
     // Get the origin from the request
     $origin = $request->getHeaderLine('Origin');
     
-    // Allow any localhost origin
-    $allowedOrigin = '*';
+    // Allow specific localhost origins when credentials are needed
+    $allowedOrigin = 'http://localhost:8081'; // Your Vue app's origin
     if (preg_match('/^https?:\/\/localhost(:\d+)?$/', $origin)) {
         $allowedOrigin = $origin;
     }
@@ -31,17 +31,13 @@ $app->add(function ($request, $handler) {
     return $response
         ->withHeader('Access-Control-Allow-Origin', $allowedOrigin)
         ->withHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Origin, Authorization')
-<<<<<<<<< Temporary merge branch 1
-        ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-=========
         ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        ->withHeader('Access-Control-Allow-Credentials', 'false');
+        ->withHeader('Access-Control-Allow-Credentials', 'true');
 });
 
 // Handle preflight OPTIONS requests for CORS
 $app->options('/{routes:.+}', function ($request, $response, $args) {
     return $response;
->>>>>>>>> Temporary merge branch 2
 });
 
 // Database connection settings
@@ -1086,6 +1082,5 @@ $app->get('/debug/users', function (Request $request, Response $response) use ($
         return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
     }
 });
->>>>>>>>> Temporary merge branch 2
 
 $app->run();

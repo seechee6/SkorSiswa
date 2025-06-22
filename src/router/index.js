@@ -31,7 +31,6 @@ import PerformanceAnalytics from '../components/advisor/PerformanceAnalytics.vue
 import AdvisorPerformanceTrends from '../components/advisor/PerformanceTrends.vue'
 import RemarkRequests from '../components/student/RemarkRequests.vue'
 import StudentNotifications from '../components/student/StudentNotifications.vue'
-import AdvisorDashboard from '../components/advisor/AdvisorDashboard.vue'
 import AdminLayout from '../components/admin/AdminLayout.vue'
 import AdminDashboard from '../components/admin/AdminDashboard.vue'
 import AdminManageUsers from '../components/admin/ManageUsers.vue'
