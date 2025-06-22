@@ -32,7 +32,7 @@ $app->add(function ($request, $handler) {
     return $response
         ->withHeader('Access-Control-Allow-Origin', $allowedOrigin)
         ->withHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Origin, Authorization')
-        ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
         ->withHeader('Access-Control-Allow-Credentials', 'true');
 });
 
@@ -1128,8 +1128,7 @@ $app->get('/api/admin/users', function (Request $request, Response $response) us
     try {
         $stmt = $pdo->query('
             SELECT u.id, u.full_name as name, u.matric_no, u.staff_id, u.email, 
-                   r.name as role, u.created_at,
-                   "active" as status
+                   r.name as role, u.created_at, u.status
             FROM users u 
             JOIN roles r ON u.role_id = r.id 
             ORDER BY u.created_at DESC
@@ -1234,6 +1233,94 @@ $app->patch('/api/admin/users/{id}/status', function (Request $request, Response
         $response->getBody()->write(json_encode([
             'success' => true,
             'message' => 'User status feature not yet implemented in database schema'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Deactivate user (Admin only) - Actually update the user status to inactive
+$app->patch('/api/admin/users/{id}/deactivate', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $userId = $args['id'];
+        
+        // Check if the user exists and get current status
+        $stmt = $pdo->prepare('SELECT id, full_name, matric_no, staff_id, status FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+        
+        if (!$user) {
+            $response->getBody()->write(json_encode(['error' => 'User not found']));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        if ($user['status'] === 'inactive') {
+            $response->getBody()->write(json_encode(['error' => 'User is already inactive']));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Update user status to inactive
+        $stmt = $pdo->prepare('UPDATE users SET status = "inactive" WHERE id = ?');
+        $stmt->execute([$userId]);
+        
+        // Log the action
+        logSystemActivity($pdo, $userId, 'User deactivated by admin');
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'User deactivated successfully',
+            'user' => [
+                'id' => $user['id'],
+                'name' => $user['full_name'],
+                'identifier' => $user['matric_no'] ?: $user['staff_id'],
+                'status' => 'inactive'
+            ]
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Reactivate user (Admin only) - Update the user status back to active
+$app->patch('/api/admin/users/{id}/reactivate', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $userId = $args['id'];
+        
+        // Check if the user exists and get current status
+        $stmt = $pdo->prepare('SELECT id, full_name, matric_no, staff_id, status FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+        
+        if (!$user) {
+            $response->getBody()->write(json_encode(['error' => 'User not found']));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        if ($user['status'] === 'active') {
+            $response->getBody()->write(json_encode(['error' => 'User is already active']));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Update user status to active
+        $stmt = $pdo->prepare('UPDATE users SET status = "active" WHERE id = ?');
+        $stmt->execute([$userId]);
+        
+        // Log the action
+        logSystemActivity($pdo, $userId, 'User reactivated by admin');
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'User reactivated successfully',
+            'user' => [
+                'id' => $user['id'],
+                'name' => $user['full_name'],
+                'identifier' => $user['matric_no'] ?: $user['staff_id'],
+                'status' => 'active'
+            ]
         ]));
         return $response->withHeader('Content-Type', 'application/json');
     } catch (Exception $e) {
@@ -1506,6 +1593,7 @@ $app->put('/api/admin/courses/{id}', function (Request $request, Response $respo
         
         $stmt = $pdo->prepare('UPDATE courses SET code = ?, name = ?, lecturer_id = ?, semester = ?, year = ? WHERE id = ?');
         $stmt->execute([
+           
             $data['code'],
             $data['name'],
             $data['lecturer_id'] ?? null,

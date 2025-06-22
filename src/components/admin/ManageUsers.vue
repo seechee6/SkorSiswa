@@ -3,9 +3,7 @@
     <div class="header">
       <h2>Manage Users</h2>
       <button @click="showAddUserModal = true" class="btn-primary">Add User</button>
-    </div>
-
-    <div class="filters">
+    </div>    <div class="filters">
       <input v-model="search" placeholder="Search users..." class="search-input">
       <select v-model="roleFilter" class="role-filter">
         <option value="">All Roles</option>
@@ -13,6 +11,11 @@
         <option value="lecturer">Lecturer</option>
         <option value="admin">Admin</option>
         <option value="advisor">Advisor</option>
+      </select>
+      <select v-model="statusFilter" class="status-filter">
+        <option value="">All Status</option>
+        <option value="active">Active</option>
+        <option value="inactive">Inactive</option>
       </select>
     </div>
 
@@ -23,17 +26,36 @@
             <th>Email</th>
             <th>ID Number</th>
             <th>Role</th>
+            <th>Status</th>
             <th>Actions</th>
           </tr>
         </thead>        <tbody>
-          <tr v-for="user in filteredUsers" :key="user.id">
+          <tr v-for="user in filteredUsers" :key="user.id" :class="{ 'inactive-user': user.status === 'inactive' }">
             <td>{{ user.name }}</td>
             <td>{{ user.email }}</td>
             <td>{{ user.matric_no || user.staff_id || 'N/A' }}</td>
             <td>{{ user.role }}</td>
+            <td>
+              <span :class="['status-badge', user.status]">
+                {{ user.status === 'active' ? 'Active' : 'Inactive' }}
+              </span>
+            </td>
             <td class="actions">
               <button @click="editUser(user)" class="btn-edit">Edit</button>
-              <button @click="deleteUser(user)" class="btn-delete">Delete</button>
+              <button 
+                v-if="user.status === 'active'"
+                @click="deactivateUser(user)" 
+                class="btn-deactivate"
+              >
+                Deactivate
+              </button>
+              <button 
+                v-else
+                @click="reactivateUser(user)" 
+                class="btn-reactivate"
+              >
+                Reactivate
+              </button>
             </td>
           </tr>
         </tbody>
@@ -122,6 +144,7 @@ export default {
       users: [],
       search: '',
       roleFilter: '',
+      statusFilter: '',
       showAddUserModal: false,
       editingUser: null,
       showPassword: false,
@@ -129,7 +152,8 @@ export default {
         name: '',
         email: '',
         role: 'student'
-      },newUser: {
+      },
+      newUser: {
         name: '',
         matric_no: '',
         staff_id: '',
@@ -146,7 +170,8 @@ export default {
                             (user.matric_no && user.matric_no.toLowerCase().includes(this.search.toLowerCase())) ||
                             (user.staff_id && user.staff_id.toLowerCase().includes(this.search.toLowerCase()));
         const matchesRole = !this.roleFilter || user.role === this.roleFilter;
-        return matchesSearch && matchesRole;
+        const matchesStatus = !this.statusFilter || user.status === this.statusFilter;
+        return matchesSearch && matchesRole && matchesStatus;
       });
     }
   },
@@ -184,15 +209,14 @@ export default {
         this.showAddUserModal = false;
         this.fetchUsers();      } catch (error) {
         console.error('Error adding user:', error);
-      }    },
-    async deleteUser(user) {
-      if (confirm(`Are you sure you want to delete the user "${user.name}"? This action cannot be undone.`)) {
+      }    },    async deactivateUser(user) {
+      if (confirm(`Are you sure you want to deactivate the user "${user.name}"? They will not be able to access the system until reactivated.`)) {
         try {
-          await api.delete(`/api/admin/users/${user.id}`);
-          alert('User deleted successfully!');
+          await api.patch(`/api/admin/users/${user.id}/deactivate`);
+          alert('User deactivated successfully!');
           this.fetchUsers();
         } catch (error) {
-          console.error('Error deleting user:', error);
+          console.error('Error deactivating user:', error);
           
           // More detailed error handling
           if (error.response) {
@@ -200,16 +224,50 @@ export default {
             const message = error.response.data?.message || error.response.data?.error || 'Unknown error';
             
             if (status === 400) {
-              alert(`Cannot delete user: ${message}`);
+              alert(`Cannot deactivate user: ${message}`);
             } else if (status === 404) {
-              alert('User not found. It may have already been deleted.');
+              alert('User not found. It may have already been removed.');
               this.fetchUsers(); // Refresh the list
             } else if (status === 403) {
-              alert('You do not have permission to delete this user.');
+              alert('You do not have permission to deactivate this user.');
             } else if (status === 500) {
-              alert('Server error occurred while deleting user. Please try again later.');
+              alert('Server error occurred while deactivating user. Please try again later.');
             } else {
-              alert(`Error deleting user (${status}): ${message}`);
+              alert(`Error deactivating user (${status}): ${message}`);
+            }
+          } else if (error.request) {
+            alert('Network error: Unable to connect to server. Please check your connection.');
+          } else {
+            alert('An unexpected error occurred. Please try again.');
+          }
+        }
+      }
+    },
+    async reactivateUser(user) {
+      if (confirm(`Are you sure you want to reactivate the user "${user.name}"? They will be able to access the system again.`)) {
+        try {
+          await api.patch(`/api/admin/users/${user.id}/reactivate`);
+          alert('User reactivated successfully!');
+          this.fetchUsers();
+        } catch (error) {
+          console.error('Error reactivating user:', error);
+          
+          // More detailed error handling
+          if (error.response) {
+            const status = error.response.status;
+            const message = error.response.data?.message || error.response.data?.error || 'Unknown error';
+            
+            if (status === 400) {
+              alert(`Cannot reactivate user: ${message}`);
+            } else if (status === 404) {
+              alert('User not found. It may have already been removed.');
+              this.fetchUsers(); // Refresh the list
+            } else if (status === 403) {
+              alert('You do not have permission to reactivate this user.');
+            } else if (status === 500) {
+              alert('Server error occurred while reactivating user. Please try again later.');
+            } else {
+              alert(`Error reactivating user (${status}): ${message}`);
             }
           } else if (error.request) {
             alert('Network error: Unable to connect to server. Please check your connection.');
@@ -260,7 +318,7 @@ export default {
   margin-bottom: 20px;
 }
 
-.search-input, .role-filter {
+.search-input, .role-filter, .status-filter {
   padding: 8px;
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -306,6 +364,24 @@ th, td {
 
 .btn-delete {
   background-color: #f44336;
+  color: white;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-deactivate {
+  background-color: #ff9800;
+  color: white;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-reactivate {
+  background-color: #4CAF50;
   color: white;
   padding: 4px 8px;
   border: none;
@@ -406,6 +482,29 @@ th, td {
   border: none;
   border-radius: 4px;
   cursor: pointer;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.status-badge.active {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.status-badge.inactive {
+  background-color: #f44336;
+  color: white;
+}
+
+.inactive-user {
+  opacity: 0.7;
+  background-color: #f9f9f9;
 }
 
 @media (max-width: 768px) {

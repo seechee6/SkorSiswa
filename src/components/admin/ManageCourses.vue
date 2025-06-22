@@ -3,18 +3,14 @@
     <div class="header">
       <h2>Manage Courses</h2>
       <button @click="showAddCourseModal = true" class="btn-primary">Add Course</button>
-    </div>    <div class="filters">
+    </div>
+
+    <div class="filters">
       <input v-model="search" placeholder="Search courses..." class="search-input">
       <select v-model="semesterFilter" class="semester-filter">
         <option value="">All Semesters</option>
         <option v-for="semester in semesters" :key="semester" :value="semester">
           {{ semester }}
-        </option>
-      </select>
-      <select v-model="yearFilter" class="year-filter">
-        <option value="">All Years</option>
-        <option v-for="year in availableYears" :key="year" :value="year">
-          {{ year }}
         </option>
       </select>
     </div>
@@ -129,10 +125,10 @@ export default {
     SearchableDropdown
   },
   data() {
-    return {      courses: [],
+    return {
+      courses: [],
       search: '',
       semesterFilter: '',
-      yearFilter: '',
       showAddCourseModal: false,
       editingCourse: null,
       selectedLecturerForForm: null,
@@ -142,21 +138,20 @@ export default {
         semester: '',
         year: '',
         lecturer_id: null
-      },      semesters: [
-        'SEM 1',
-        'SEM 2'
-      ],
-      availableYears: []
+      },semesters: [
+        '1',
+        '2'
+      ]
     }
   },
-  computed: {    filteredCourses() {
+  computed: {
+    filteredCourses() {
       return this.courses.filter(course => {
         const matchesSearch = 
           course.code.toLowerCase().includes(this.search.toLowerCase()) ||
           course.name.toLowerCase().includes(this.search.toLowerCase());
         const matchesSemester = !this.semesterFilter || course.semester === this.semesterFilter;
-        const matchesYear = !this.yearFilter || course.year === this.yearFilter;
-        return matchesSearch && matchesSemester && matchesYear;
+        return matchesSearch && matchesSemester;
       });
     }
   },
@@ -164,21 +159,15 @@ export default {
     this.fetchCourses();
     this.fetchLecturers();
   },
-  methods: {    async fetchCourses() {
+  methods: {
+    async fetchCourses() {
       try {
         const response = await api.get('/api/admin/courses');
         this.courses = response.data;
-        this.extractAvailableYears();
       } catch (error) {
         console.error('Error fetching courses:', error);
         alert('Error loading courses. Please try again.');
       }
-    },
-    
-    extractAvailableYears() {
-      // Extract unique years from courses and sort them
-      const years = [...new Set(this.courses.map(course => course.year))];
-      this.availableYears = years.sort();
     },
 
     async fetchLecturers() {
@@ -291,7 +280,7 @@ export default {
   margin-bottom: 20px;
 }
 
-.search-input, .semester-filter, .year-filter {
+.search-input, .semester-filter {
   padding: 8px;
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -550,7 +539,8 @@ tr:hover {
     flex-direction: column;
     gap: 10px;
   }
-    .search-input, .semester-filter, .year-filter {
+  
+  .search-input, .semester-filter {
     width: 100%;
   }
   
