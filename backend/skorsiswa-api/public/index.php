@@ -1593,4 +1593,432 @@ $app->delete('/advisors/{advisor_id}/meetings/{meeting_id}', function (Request $
     }
 });
 
+// ===================== REPORTS =====================
+// Generate advisor report for selected students
+$app->post('/advisors/{advisor_id}/reports/generate', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $advisor_id = $args['advisor_id'];
+        $body = $request->getParsedBody();
+        
+        $student_ids = $body['students'] ?? [];
+        $report_type = $body['type'] ?? 'comprehensive';
+        $sections = $body['sections'] ?? [];
+        $period = $body['period'] ?? 'current';
+        $format = $body['format'] ?? 'pdf';
+        
+        if (empty($student_ids)) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'message' => 'No students selected'
+            ]));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Get student data for the report
+        $placeholders = str_repeat('?,', count($student_ids) - 1) . '?';
+        $sql = "
+            SELECT 
+                u.id,
+                u.full_name as name,
+                u.matric_no as student_id,
+                u.email,
+                CASE 
+                    WHEN u.matric_no LIKE '%2021%' THEN 4
+                    WHEN u.matric_no LIKE '%2022%' THEN 3  
+                    WHEN u.matric_no LIKE '%2023%' THEN 2
+                    WHEN u.matric_no LIKE '%2024%' THEN 1
+                    ELSE 1
+                END as year,
+                CASE 
+                    WHEN u.matric_no LIKE 'CS%' THEN 'Computer Science'
+                    WHEN u.matric_no LIKE 'IS%' THEN 'Information Systems'
+                    WHEN u.matric_no LIKE 'SE%' THEN 'Software Engineering'
+                    WHEN u.matric_no LIKE 'IT%' THEN 'Information Technology'
+                    ELSE 'Computer Science'
+                END as program
+            FROM users u
+            WHERE u.id IN ($placeholders)
+            ORDER BY u.full_name
+        ";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($student_ids);
+        $students = $stmt->fetchAll();
+        
+        // Calculate performance data for each student
+        foreach ($students as &$student) {
+            // Get GPA
+            $gpa_sql = "
+                SELECT AVG(
+                    CASE 
+                        WHEN total_marks >= 80 THEN 4.0
+                        WHEN total_marks >= 75 THEN 3.7
+                        WHEN total_marks >= 70 THEN 3.3
+                        WHEN total_marks >= 65 THEN 3.0
+                        WHEN total_marks >= 60 THEN 2.7
+                        WHEN total_marks >= 55 THEN 2.3
+                        WHEN total_marks >= 50 THEN 2.0
+                        WHEN total_marks >= 45 THEN 1.7
+                        WHEN total_marks >= 40 THEN 1.3
+                        ELSE 0.0
+                    END
+                ) as gpa
+                FROM (
+                    SELECT 
+                        COALESCE(
+                            (SELECT SUM(am.mark * ass.weight / 100) 
+                             FROM assessment_marks am 
+                             JOIN assessments ass ON am.assessment_id = ass.id 
+                             WHERE am.enrollment_id = e.id), 0
+                        ) + 
+                        COALESCE(
+                            (SELECT fem.mark * 0.6 FROM final_exam_marks fem WHERE fem.enrollment_id = e.id), 0
+                        ) as total_marks
+                    FROM enrollments e 
+                    WHERE e.student_id = ?
+                ) as course_marks
+            ";
+            
+            $gpa_stmt = $pdo->prepare($gpa_sql);
+            $gpa_stmt->execute([$student['id']]);
+            $gpa_result = $gpa_stmt->fetch();
+            $student['gpa'] = round((float) ($gpa_result['gpa'] ?? 0.0), 2);
+            
+            // Get course performance if requested
+            if (isset($sections['courseBreakdown']) && $sections['courseBreakdown']) {
+                $course_sql = "
+                    SELECT 
+                        c.name as course_name,
+                        c.code as course_code,
+                        COALESCE(
+                            (SELECT SUM(am.mark * ass.weight / 100) 
+                             FROM assessment_marks am 
+                             JOIN assessments ass ON am.assessment_id = ass.id 
+                             WHERE am.enrollment_id = e.id), 0
+                        ) + 
+                        COALESCE(
+                            (SELECT fem.mark * 0.6 FROM final_exam_marks fem WHERE fem.enrollment_id = e.id), 0
+                        ) as total_marks
+                    FROM enrollments e
+                    JOIN courses c ON e.course_id = c.id
+                    WHERE e.student_id = ?
+                    ORDER BY c.name
+                ";
+                
+                $course_stmt = $pdo->prepare($course_sql);
+                $course_stmt->execute([$student['id']]);
+                $student['courses'] = $course_stmt->fetchAll();
+            }
+            
+            // Get advisor notes if requested
+            if (isset($sections['meetingHistory']) && $sections['meetingHistory']) {
+                $notes_sql = "
+                    SELECT notes, created_at
+                    FROM advisor_notes 
+                    WHERE advisor_id = ? AND student_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT 10
+                ";
+                
+                $notes_stmt = $pdo->prepare($notes_sql);
+                $notes_stmt->execute([$advisor_id, $student['id']]);
+                $student['meeting_history'] = $notes_stmt->fetchAll();
+            }
+        }
+          // Calculate summary statistics
+        $total_gpa = 0;
+        $at_risk_count = 0;
+        $high_performers_count = 0;
+        $recommendations = [];
+        
+        foreach ($students as $student) {
+            $total_gpa += $student['gpa'];
+            if ($student['gpa'] < 2.0) {
+                $at_risk_count++;
+            } elseif ($student['gpa'] >= 3.5) {
+                $high_performers_count++;
+            }
+        }
+        
+        $average_gpa = count($students) > 0 ? $total_gpa / count($students) : 0;
+        
+        // Generate recommendations based on data
+        if ($at_risk_count > 0) {
+            $recommendations[] = "Schedule immediate intervention meetings with {$at_risk_count} at-risk students to develop academic improvement plans.";
+        }
+        
+        if ($high_performers_count > 0) {
+            $recommendations[] = "Consider recommending {$high_performers_count} high-performing students for advanced courses or research opportunities.";
+        }
+        
+        if ($average_gpa < 2.5) {
+            $recommendations[] = "Overall advisee performance is below expectations. Consider implementing group study sessions or tutoring programs.";
+        } elseif ($average_gpa > 3.0) {
+            $recommendations[] = "Strong overall performance. Continue current advising strategies and consider challenging advisees with advanced opportunities.";
+        }
+        
+        if (count($students) > 10) {
+            $recommendations[] = "With a large advisee load, consider prioritizing attention to at-risk and high-performing students for personalized guidance.";
+        }
+        
+        // Save report record
+        $report_title = ucfirst($report_type) . " Report - " . date('M d, Y');
+        $insert_sql = "
+            INSERT INTO advisor_reports (advisor_id, title, type, student_count, format, report_data, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, NOW())
+        ";
+        
+        $report_data = json_encode([
+            'students' => $students,
+            'summary' => [
+                'average_gpa' => round($average_gpa, 2),
+                'at_risk_count' => $at_risk_count,
+                'high_performers_count' => $high_performers_count,
+                'total_students' => count($students)
+            ],
+            'recommendations' => $recommendations,
+            'sections' => $sections,
+            'period' => $period,
+            'generated_at' => date('Y-m-d H:i:s')
+        ]);
+        
+        $stmt = $pdo->prepare($insert_sql);
+        $stmt->execute([
+            $advisor_id,
+            $report_title,
+            $report_type,
+            count($students),
+            $format,
+            $report_data
+        ]);
+        
+        $report_id = $pdo->lastInsertId();
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'report_id' => $report_id,
+            'download_url' => "/advisors/{$advisor_id}/reports/{$report_id}/download",
+            'data' => $students
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'message' => 'Failed to generate report: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Get recent reports for advisor
+$app->get('/advisors/{advisor_id}/reports/recent', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $advisor_id = $args['advisor_id'];
+        
+        $sql = "
+            SELECT id, title, type, student_count, format, created_at
+            FROM advisor_reports
+            WHERE advisor_id = ?
+            ORDER BY created_at DESC
+            LIMIT 10
+        ";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$advisor_id]);
+        $reports = $stmt->fetchAll();
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'data' => $reports
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'message' => 'Failed to fetch reports: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// PDF Report Generator Function
+function generatePDFReport($report) {
+    require_once __DIR__ . '/../vendor/autoload.php';
+    
+    // Create new PDF document
+    $pdf = new \TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
+    
+    // Set document information
+    $pdf->SetCreator('Course Mark Management System');
+    $pdf->SetAuthor('Academic Advisor');
+    $pdf->SetTitle($report['title']);
+    $pdf->SetSubject('Advisee Report');
+    
+    // Set margins
+    $pdf->SetMargins(20, 30, 20);
+    $pdf->SetHeaderMargin(10);
+    $pdf->SetFooterMargin(15);
+    
+    // Set auto page breaks
+    $pdf->SetAutoPageBreak(TRUE, 25);
+    
+    // Add a page
+    $pdf->AddPage();
+    
+    // Parse report data
+    $reportData = json_decode($report['report_data'], true);
+    
+    // Header section
+    $pdf->SetFont('helvetica', 'B', 18);
+    $pdf->SetTextColor(51, 51, 51);
+    $pdf->Cell(0, 15, $report['title'], 0, 1, 'C');
+    $pdf->Ln(5);
+    
+    // Report metadata
+    $pdf->SetFont('helvetica', '', 10);
+    $pdf->SetTextColor(100, 100, 100);
+    $pdf->Cell(0, 8, 'Generated on: ' . date('F j, Y \a\t g:i A', strtotime($report['created_at'])), 0, 1, 'R');
+    $pdf->Cell(0, 8, 'Report Type: ' . ucfirst($report['type']), 0, 1, 'R');
+    $pdf->Cell(0, 8, 'Students Included: ' . $report['student_count'], 0, 1, 'R');
+    $pdf->Ln(10);
+    
+    // Summary section
+    if (isset($reportData['summary'])) {
+        $pdf->SetFont('helvetica', 'B', 14);
+        $pdf->SetTextColor(51, 51, 51);
+        $pdf->Cell(0, 10, 'Summary', 0, 1, 'L');
+        $pdf->Ln(2);
+        
+        $pdf->SetFont('helvetica', '', 10);
+        $summary = $reportData['summary'];
+        
+        // Summary statistics
+        $pdf->Cell(45, 8, 'Average GPA:', 0, 0, 'L');
+        $pdf->SetFont('helvetica', 'B', 10);
+        $pdf->Cell(0, 8, number_format($summary['average_gpa'], 2), 0, 1, 'L');
+        
+        $pdf->SetFont('helvetica', '', 10);
+        $pdf->Cell(45, 8, 'At-Risk Students:', 0, 0, 'L');
+        $pdf->SetFont('helvetica', 'B', 10);
+        $pdf->SetTextColor(220, 53, 69); // Red color for at-risk
+        $pdf->Cell(0, 8, $summary['at_risk_count'], 0, 1, 'L');
+        
+        $pdf->SetTextColor(51, 51, 51);
+        $pdf->SetFont('helvetica', '', 10);
+        $pdf->Cell(45, 8, 'High Performers:', 0, 0, 'L');
+        $pdf->SetFont('helvetica', 'B', 10);
+        $pdf->SetTextColor(40, 167, 69); // Green color for high performers
+        $pdf->Cell(0, 8, $summary['high_performers_count'], 0, 1, 'L');
+        
+        $pdf->SetTextColor(51, 51, 51);
+        $pdf->Ln(10);
+    }
+    
+    // Student details section
+    if (isset($reportData['students']) && !empty($reportData['students'])) {
+        $pdf->SetFont('helvetica', 'B', 14);
+        $pdf->Cell(0, 10, 'Student Details', 0, 1, 'L');
+        $pdf->Ln(5);
+        
+        // Table header
+        $pdf->SetFont('helvetica', 'B', 9);
+        $pdf->SetFillColor(248, 249, 250);
+        $pdf->Cell(50, 10, 'Student Name', 1, 0, 'C', 1);
+        $pdf->Cell(25, 10, 'Student ID', 1, 0, 'C', 1);
+        $pdf->Cell(20, 10, 'GPA', 1, 0, 'C', 1);
+        $pdf->Cell(25, 10, 'Status', 1, 0, 'C', 1);
+        $pdf->Cell(50, 10, 'Latest Course', 1, 1, 'C', 1);
+        
+        // Table rows
+        $pdf->SetFont('helvetica', '', 9);
+        foreach ($reportData['students'] as $student) {
+            // Determine status color
+            $statusColor = [51, 51, 51]; // Default
+            if (isset($student['gpa']) && $student['gpa'] < 2.0) {
+                $statusColor = [220, 53, 69]; // Red for at-risk
+            } elseif (isset($student['gpa']) && $student['gpa'] >= 3.5) {
+                $statusColor = [40, 167, 69]; // Green for high performers
+            }
+            
+            $pdf->Cell(50, 8, $student['full_name'] ?? 'N/A', 1, 0, 'L');
+            $pdf->Cell(25, 8, $student['student_id'] ?? 'N/A', 1, 0, 'C');
+            $pdf->Cell(20, 8, isset($student['gpa']) ? number_format($student['gpa'], 2) : 'N/A', 1, 0, 'C');
+            
+            // Status cell with color
+            $pdf->SetTextColor($statusColor[0], $statusColor[1], $statusColor[2]);
+            $status = 'Regular';
+            if (isset($student['gpa'])) {
+                if ($student['gpa'] < 2.0) $status = 'At-Risk';
+                elseif ($student['gpa'] >= 3.5) $status = 'High Performer';
+            }
+            $pdf->Cell(25, 8, $status, 1, 0, 'C');
+            
+            $pdf->SetTextColor(51, 51, 51);
+            $pdf->Cell(50, 8, $student['latest_course'] ?? 'N/A', 1, 1, 'L');
+        }
+        $pdf->Ln(10);
+    }
+    
+    // Recommendations section
+    if (isset($reportData['recommendations']) && !empty($reportData['recommendations'])) {
+        $pdf->SetFont('helvetica', 'B', 14);
+        $pdf->Cell(0, 10, 'Recommendations', 0, 1, 'L');
+        $pdf->Ln(2);
+        
+        $pdf->SetFont('helvetica', '', 10);
+        foreach ($reportData['recommendations'] as $index => $recommendation) {
+            $pdf->Cell(10, 8, ($index + 1) . '.', 0, 0, 'L');
+            $pdf->MultiCell(0, 8, $recommendation, 0, 'L');
+            $pdf->Ln(2);
+        }
+    }
+    
+    // Footer
+    $pdf->SetY(-30);
+    $pdf->SetFont('helvetica', 'I', 8);
+    $pdf->SetTextColor(100, 100, 100);
+    $pdf->Cell(0, 10, 'Generated by Course Mark Management System', 0, 0, 'C');
+    
+    return $pdf->Output('', 'S'); // Return PDF as string
+}
+
+// Download report
+$app->get('/advisors/{advisor_id}/reports/{report_id}/download', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $advisor_id = $args['advisor_id'];
+        $report_id = $args['report_id'];
+        
+        $sql = "SELECT * FROM advisor_reports WHERE id = ? AND advisor_id = ?";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$report_id, $advisor_id]);
+        $report = $stmt->fetch();
+        
+        if (!$report) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'message' => 'Report not found'
+            ]));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Generate PDF
+        $pdfContent = generatePDFReport($report);
+        $filename = preg_replace('/[^a-zA-Z0-9\-_\.]/', '_', $report['title']) . '.pdf';
+        
+        $response->getBody()->write($pdfContent);
+        return $response->withHeader('Content-Type', 'application/pdf')
+                        ->withHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
+                        ->withHeader('Content-Length', strlen($pdfContent));
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'message' => 'Failed to download report: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
 $app->run();

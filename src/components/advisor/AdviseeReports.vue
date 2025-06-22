@@ -1,5 +1,11 @@
 <template>
   <div>
+    <!-- Notification -->
+    <div v-if="notification.show" :class="['notification', notification.type]">
+      {{ notification.message }}
+      <button @click="notification.show = false" class="close-btn">&times;</button>
+    </div>
+    
     <h3>Advisee Reports & Analytics</h3>
     
     <!-- Student Selection -->
@@ -54,10 +60,21 @@
         <button @click="selectAllVisible" class="action-btn outline">
           {{ allVisibleSelected ? 'Deselect All' : 'Select All' }}
         </button>
-      </div>
-
-      <div class="students-grid">
+      </div>      <div class="students-grid" v-if="!loading">
+        <div v-if="error" class="error-message">
+          {{ error }}
+          <button @click="fetchStudents" class="retry-btn">Retry</button>
+        </div>
+        
+        <div v-else-if="filteredStudents.length === 0" class="empty-state">
+          <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
+          </svg>
+          <p>No advisees found</p>
+        </div>
+        
         <div 
+          v-else
           v-for="student in filteredStudents" 
           :key="student.id"
           class="student-card"
@@ -73,12 +90,11 @@
                 @change="toggleStudentSelection(student.id)"
                 class="student-checkbox"
               >
-              <span class="avatar-text">{{ getInitials(student.full_name) }}</span>
-            </div>
-            <div class="student-info">
-              <h5 class="student-name">{{ student.full_name }}</h5>
+              <span class="avatar-text">{{ getInitials(student.name) }}</span>
+            </div>            <div class="student-info">
+              <h5 class="student-name">{{ student.name }}</h5>
               <div class="student-details">
-                <span class="student-id">{{ student.student_id }}</span>
+                <span class="student-id">{{ student.studentId }}</span>
                 <span class="student-program">{{ student.program }} Year {{ student.year }}</span>
               </div>
             </div>
@@ -93,10 +109,14 @@
               <span class="metric-label">Status</span>
               <span class="status-badge" :class="student.status?.toLowerCase().replace(' ', '-')">
                 {{ student.status }}
-              </span>
-            </div>
+              </span>            </div>
           </div>
         </div>
+      </div>
+      
+      <div v-if="loading" class="loading-spinner">
+        <div class="spinner"></div>
+        <p>Loading advisees...</p>
       </div>
     </div>
 
@@ -374,21 +394,24 @@ export default {
         end: ''
       },
       outputFormat: 'pdf',
-      generating: false,
-      recentReports: [],
+      generating: false,      recentReports: [],
       loading: false,
-      error: ''
+      error: '',
+      notification: {
+        show: false,
+        message: '',
+        type: 'success' // success, error, info
+      }
     }
-  },
-  computed: {
+  },  computed: {
     filteredStudents() {
       let filtered = this.students
-
+      
       if (this.searchQuery) {
         const query = this.searchQuery.toLowerCase()
         filtered = filtered.filter(student => 
-          student.full_name?.toLowerCase().includes(query) ||
-          student.student_id?.toLowerCase().includes(query)
+          student.name?.toLowerCase().includes(query) ||
+          student.studentId?.toLowerCase().includes(query)
         )
       }
 
@@ -422,87 +445,42 @@ export default {
       this.selectedStudents = [parseInt(studentId)]
     }
   },
-  methods: {
-    async fetchStudents() {
+  methods: {    async fetchStudents() {
       this.loading = true
       this.error = ''
       
       try {
         const user = JSON.parse(localStorage.getItem('user'))
-        const response = await api.get(`/advisor/${user.id}/advisees`)
+        const response = await api.get(`/advisors/${user.id}/advisees`)
         
-        // Generate mock data if API returns empty
-        if (!response.data || response.data.length === 0) {
-          this.students = this.generateMockStudents()
+        if (response.data?.success) {
+          this.students = response.data.data || []
         } else {
-          this.students = response.data
+          this.error = response.data?.message || 'Failed to fetch students'
+          this.students = []
         }
       } catch (error) {
         console.error('Error fetching students:', error)
-        this.students = this.generateMockStudents()
-      } finally {
+        this.error = 'Failed to fetch students. Please try again.'
+        this.students = []      } finally {
         this.loading = false
       }
-    },
-      generateMockStudents() {
-      const programs = ['CS', 'IS', 'SE', 'IT']
-      const students = []
-      
-      for (let i = 1; i <= 20; i++) {
-        const program = programs[Math.floor(Math.random() * programs.length)]
-        const year = Math.floor(Math.random() * 4) + 1
-        const gpa = (Math.random() * 2 + 2).toFixed(2)
-        const status = gpa < 2.5 ? 'At-Risk' : 
-                      gpa > 3.5 ? 'Excellent Performance' : 'Active'
-        
-        students.push({
-          id: i,
-          student_id: `2024${String(i).padStart(4, '0')}`,
-          full_name: `Student ${i} Name`,
-          email: `student${i}@university.edu`,
-          program: program,
-          year: year,
-          gpa: gpa,
-          status: status
-        })
-      }
-      
-      return students
     },
     
     async fetchRecentReports() {
       try {
         const user = JSON.parse(localStorage.getItem('user'))
-        const response = await api.get(`/advisor/${user.id}/recent-reports`)
+        const response = await api.get(`/advisors/${user.id}/reports/recent`)
         
-        if (!response.data || response.data.length === 0) {
-          this.recentReports = this.generateMockReports()
+        if (response.data?.success) {
+          this.recentReports = response.data.data || []
         } else {
-          this.recentReports = response.data
+          this.recentReports = []
         }
       } catch (error) {
         console.error('Error fetching recent reports:', error)
-        this.recentReports = this.generateMockReports()
+        this.recentReports = []
       }
-    },
-    
-    generateMockReports() {
-      const reports = []
-      const types = ['comprehensive', 'summary', 'at-risk', 'progress']
-      
-      for (let i = 1; i <= 8; i++) {
-        reports.push({
-          id: i,
-          title: `Advisee Report ${i}`,
-          type: types[Math.floor(Math.random() * types.length)],
-          student_count: Math.floor(Math.random() * 10) + 1,
-          format: 'pdf',
-          created_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-          file_url: `/reports/advisee-report-${i}.pdf`
-        })
-      }
-      
-      return reports.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     },
     
     refreshStudentList() {
@@ -549,20 +527,20 @@ export default {
     
     formatDate(dateString) {
       return new Date(dateString).toLocaleDateString()
+    },    previewReport() {
+      if (this.selectedStudents.length === 0) {
+        this.showNotification('Please select at least one student to preview the report.', 'info')
+        return
+      }
+      
+      const message = `Report Preview: ${this.reportType} report for ${this.selectedStudents.length} student(s) in ${this.outputFormat.toUpperCase()} format`
+      this.showNotification(message, 'info')
     },
-    
-    previewReport() {
-      // Generate preview
-      alert('Report preview will open in a new window')
-    },
-    
-    async generateReport() {
+      async generateReport() {
       this.generating = true
       
       try {
-        // Simulate report generation
-        await new Promise(resolve => setTimeout(resolve, 3000))
-        
+        const user = JSON.parse(localStorage.getItem('user'))
         const reportData = {
           students: this.selectedStudents,
           type: this.reportType,
@@ -571,17 +549,26 @@ export default {
           format: this.outputFormat
         }
         
-        // In real implementation, call API to generate report
-        const filename = `advisee-report-${Date.now()}.${this.outputFormat}`
-        this.downloadFile(filename, reportData)
-        
-        // Refresh recent reports
-        await this.fetchRecentReports()
-        
-        alert('Report generated successfully!')
-      } catch (error) {
+        const response = await api.post(`/advisors/${user.id}/reports/generate`, reportData)
+          if (response.data?.success) {
+          // Success - show success message
+          this.showNotification('Report generated successfully!', 'success')
+          
+          // Download the report
+          if (response.data.download_url) {
+            window.open(`${api.defaults.baseURL}${response.data.download_url}`, '_blank')
+          }
+          
+          // Refresh recent reports
+          await this.fetchRecentReports()
+          
+          // Clear selections
+          this.selectedStudents = []
+        } else {
+          throw new Error(response.data?.message || 'Failed to generate report')
+        }      } catch (error) {
         console.error('Error generating report:', error)
-        alert('Error generating report. Please try again.')
+        this.showNotification(error.message || 'Error generating report. Please try again.', 'error')
       } finally {
         this.generating = false
       }
@@ -591,31 +578,34 @@ export default {
       if (this.selectedStudents.length === 0) return
       this.generateReport()
     },
-    
-    scheduleReport() {
-      alert('Report scheduling feature will be implemented')
+      scheduleReport() {
+      this.showNotification('Report scheduling feature will be implemented soon.', 'info')
+    },
+      downloadReport(report) {
+      const user = JSON.parse(localStorage.getItem('user'))
+      const downloadUrl = `${api.defaults.baseURL}/advisors/${user.id}/reports/${report.id}/download`
+      window.open(downloadUrl, '_blank')
+    },    shareReport(report) {
+      // Simple share functionality - copy link to clipboard
+      const shareUrl = `${window.location.origin}/advisor/reports?id=${report.id}`
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        this.showNotification('Report link copied to clipboard!', 'success')
+      }).catch(() => {
+        this.showNotification('Unable to copy link. Please try again.', 'error')
+      })
     },
     
-    downloadReport(report) {
-      // Simulate download
-      alert(`Downloading ${report.title}`)
-    },
-    
-    shareReport(report) {
-      // Simulate sharing
-      alert(`Sharing ${report.title}`)
-    },
-    
-    downloadFile(filename, data) {
-      // Simulate file download
-      const content = JSON.stringify(data, null, 2)
-      const blob = new Blob([content], { type: 'application/json' })
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      a.click()
-      window.URL.revokeObjectURL(url)
+    showNotification(message, type = 'success') {
+      this.notification = {
+        show: true,
+        message,
+        type
+      }
+      
+      // Auto-hide after 5 seconds
+      setTimeout(() => {
+        this.notification.show = false
+      }, 5000)
     }
   }
 }
@@ -623,6 +613,48 @@ export default {
 
 <style scoped>
 /* Base Styles */
+.notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 16px 20px;
+  border-radius: 8px;
+  color: white;
+  font-weight: 500;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 400px;
+}
+
+.notification.success {
+  background: #28a745;
+}
+
+.notification.error {
+  background: #dc3545;
+}
+
+.notification.info {
+  background: #17a2b8;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0;
+  margin-left: auto;
+}
+
+.close-btn:hover {
+  opacity: 0.8;
+}
+
 h3 {
   color: #1D3557;
   margin-bottom: 24px;
@@ -1116,6 +1148,48 @@ h5 {
   height: 64px;
   margin: 0 auto 16px;
   color: #dee2e6;
+}
+
+/* Loading Spinner */
+.loading-spinner {
+  text-align: center;
+  padding: 48px 24px;
+  color: #6c757d;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 16px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #457B9D;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Error Message */
+.error-message {
+  text-align: center;
+  padding: 24px;
+  background: #f8d7da;
+  color: #721c24;
+  border-radius: 8px;
+  margin: 16px 0;
+}
+
+.retry-btn {
+  margin-left: 8px;
+  padding: 4px 12px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.retry-btn:hover {
+  background: #c82333;
 }
 
 /* Responsive Design */
