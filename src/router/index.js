@@ -20,15 +20,10 @@ import CompareWithCoursemates from '../components/student/CompareWithCoursemates
 import Ranking from '../components/student/Ranking.vue'
 import PerformanceTrends from '../components/student/PerformanceTrends.vue'
 import AdvisorLayout from '../components/advisor/AdvisorLayout.vue'
-import AdvisorDashboard from '../components/advisor/AdvisorDashboard.vue'
 import AdviseeList from '../components/advisor/AdviseeList.vue'
 import AdvisorMarkBreakdown from '../components/advisor/MarkBreakdown.vue'
-import AtRiskStudents from '../components/advisor/AtRiskStudents.vue'
+import AdviseeOverallPerformance from '../components/advisor/AdviseeOverallPerformance.vue'
 import MeetingNotes from '../components/advisor/MeetingNotes.vue'
-import AdviseeReports from '../components/advisor/AdviseeReports.vue'
-import CoursePerformance from '../components/advisor/CoursePerformance.vue'
-import PerformanceAnalytics from '../components/advisor/PerformanceAnalytics.vue'
-import AdvisorPerformanceTrends from '../components/advisor/PerformanceTrends.vue'
 import RemarkRequests from '../components/student/RemarkRequests.vue'
 import StudentNotifications from '../components/student/StudentNotifications.vue'
 import AdminLayout from '../components/admin/AdminLayout.vue'
@@ -82,18 +77,13 @@ const routes = [
     path: '/advisor',
     component: AdvisorLayout,
     children: [
-      { path: '', redirect: '/advisor/dashboard' },      { path: 'dashboard', component: AdvisorDashboard },
+      { path: '', redirect: '/advisor/advisee-list' },
       { path: 'advisee-list', component: AdviseeList },
       { path: 'mark-breakdown/:studentId', name: 'AdvisorMarkBreakdown', component: AdvisorMarkBreakdown, props: true },
-      { path: 'at-risk-students', component: AtRiskStudents },{ path: 'meeting-notes', component: MeetingNotes },
-      { path: 'advisee-reports', component: AdviseeReports },
-      { path: 'course-performance', component: CoursePerformance },
-      { path: 'performance-analytics', component: PerformanceAnalytics },
-      { path: 'performance-trends', component: AdvisorPerformanceTrends }
+      { path: 'overall-performance/:studentId', name: 'AdviseeOverallPerformance', component: AdviseeOverallPerformance, props: true },
+      { path: 'meeting-notes', component: MeetingNotes }
     ]
   },
-  { path: '/admin', component: AdminDashboard },
-  { path: '/advisor', component: AdvisorDashboard },
   {
     path: '/admin',
     component: AdminLayout,

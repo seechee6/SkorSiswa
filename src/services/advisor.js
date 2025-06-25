@@ -12,16 +12,42 @@ export const advisorService = {
     }
   },
 
-  // Add a note for an advisee (keeping original functionality)
+  // Add a note for an advisee (using correct backend endpoint)
   async addAdviseeNote(advisorId, studentId, note, courseId = 1) {
     try {
-      const response = await api.post(`/advisors/${advisorId}/advisees/${studentId}/notes`, {
-        note,
-        course_id: courseId
+      const response = await api.post('/advisor-notes', {
+        advisor_id: advisorId,
+        student_id: studentId,
+        course_id: courseId,
+        note: note
       });
       return response.data;
     } catch (error) {
       console.error('Error adding advisee note:', error);
+      throw error;
+    }
+  },
+
+  // Update an advisor note
+  async updateAdviseeNote(noteId, noteContent) {
+    try {
+      const response = await api.put(`/advisor-notes/${noteId}`, {
+        note: noteContent
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error updating advisee note:', error);
+      throw error;
+    }
+  },
+
+  // Delete an advisor note
+  async deleteAdviseeNote(noteId) {
+    try {
+      const response = await api.delete(`/advisor-notes/${noteId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error deleting advisee note:', error);
       throw error;
     }
   },
@@ -62,13 +88,20 @@ export const advisorService = {
 
   // Update meeting status and add notes
   async updateMeeting(advisorId, meetingId, meetingData) {
-    try {      const response = await api.put(`/advisors/${advisorId}/meetings/${meetingId}`, {
-        status: meetingData.status,
-        notes: meetingData.notes,
-        action_items: meetingData.actionItems,
-        next_meeting_date: meetingData.nextMeetingDate,
+    try {
+      const response = await api.put(`/meetings/${meetingId}`, {
+        student_id: meetingData.student_id,
+        title: meetingData.title,
+        meeting_date: meetingData.meeting_date,
+        meeting_time: meetingData.meeting_time,
         duration: meetingData.duration,
-        meeting_link: meetingData.meetingLink
+        location: meetingData.location,
+        meeting_link: meetingData.meeting_link,
+        meeting_type: meetingData.meeting_type,
+        status: meetingData.status,
+        agenda: meetingData.agenda,
+        notes: meetingData.notes,
+        action_items: meetingData.action_items
       });
       return response.data;
     } catch (error) {
@@ -95,6 +128,17 @@ export const advisorService = {
       return response.data;
     } catch (error) {
       console.error('Error fetching student meetings:', error);
+      throw error;
+    }
+  },
+
+  // Delete a meeting
+  async deleteMeeting(advisorId, meetingId) {
+    try {
+      const response = await api.delete(`/meetings/${meetingId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error deleting meeting:', error);
       throw error;
     }
   },
@@ -128,10 +172,10 @@ export const advisorService = {
     });
   },
 
-  // Get meeting history/notes for an advisee
-  async getAdviseeNotes(advisorId, studentId) {
+  // Get meeting history/notes for an advisee (using correct backend endpoint)
+  async getAdviseeNotes(advisorId, studentId, courseId = 1) {
     try {
-      const response = await api.get(`/advisors/${advisorId}/advisees/${studentId}/notes`);
+      const response = await api.get(`/advisor-notes/${advisorId}/${studentId}/${courseId}`);
       return response.data;
     } catch (error) {
       console.error('Error fetching advisee notes:', error);
@@ -152,7 +196,7 @@ export const advisorService = {
 
   // Export advisee list to CSV
   exportAdviseesToCSV(advisees) {
-    const headers = ['Name', 'Student ID', 'Program', 'Year', 'GPA', 'Status', 'Last Meeting'];
+    const headers = ['Name', 'Student ID', 'Program', 'Year', 'GPA', 'Status'];
     const csvContent = [
       headers.join(','),
       ...advisees.map(advisee => [
@@ -161,8 +205,7 @@ export const advisorService = {
         advisee.program,
         advisee.year,
         advisee.gpa.toFixed(2),
-        advisee.status,
-        advisee.lastMeeting
+        advisee.status
       ].join(','))
     ].join('\n');
     

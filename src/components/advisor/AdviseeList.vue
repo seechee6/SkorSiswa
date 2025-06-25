@@ -7,13 +7,6 @@
         <p class="welcome-text">Manage and monitor your advisees' academic progress</p>
       </div>
       <div class="header-actions">
-        <button @click="refreshAdvisees" class="refresh-btn">
-          <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-            <path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/>
-            <path d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/>
-          </svg>
-          Refresh
-        </button>
       </div>
     </div>
     
@@ -23,6 +16,7 @@
       </div>
       
       <div class="controls-grid">
+       <div class="search-row">
         <div class="search-box">
           <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
@@ -30,9 +24,10 @@
           <input 
             v-model="searchQuery" 
             type="text" 
-            placeholder="Search by name, student ID, or program..."
+            placeholder="Search..."
             class="search-input"
           >
+          </div>
         </div>
         
         <select v-model="statusFilter" class="filter-select">
@@ -122,9 +117,8 @@
           <div class="header-cell">Student</div>
           <div class="header-cell">Program</div>
           <div class="header-cell">Year</div>
-          <div class="header-cell">GPA</div>
+          <div class="header-cell">CGPA</div>
           <div class="header-cell">Status</div>
-          <div class="header-cell">Last Meeting</div>
           <div class="header-cell">Actions</div>
         </div>
           <div v-if="loading" class="loading-state">
@@ -156,7 +150,7 @@
             :key="advisee.id" 
             class="table-row"
             :class="{ 
-              'at-risk': advisee.isAtRisk || advisee.status === 'at-risk' || advisee.status === 'probation',
+              'at-risk': advisee.isAtRisk || advisee.status === 'at-risk' || advisee.status === 'probation' || advisee.gpa <= 2.0,
               'excellent': advisee.status === 'excellent' 
             }"
           >
@@ -193,28 +187,20 @@
             </div>
               <div class="cell">
               <div class="status-container">
-                <span class="status-badge" :class="advisee.status">
-                  {{ getStatusLabel(advisee.status) }}
+                <span class="status-badge" :class="getEffectiveStatus(advisee)">
+                  {{ getStatusLabel(getEffectiveStatus(advisee)) }}
                 </span>
-                <div v-if="advisee.isAtRisk && advisee.atRiskReason && advisee.atRiskReason.length > 0" 
+                <div v-if="(advisee.isAtRisk || advisee.status === 'at-risk' || advisee.status === 'probation' || advisee.gpa <= 2.0) && (advisee.atRiskReason && advisee.atRiskReason.length > 0 || advisee.gpa <= 2.0)" 
                      class="at-risk-reasons"
-                     :title="advisee.atRiskReason.join(', ')">
+                     :title="getAtRiskReasons(advisee)">
                   <svg class="warning-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.098 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
                   </svg>
-                  <span class="reason-text">{{ advisee.atRiskReason.join(', ') }}</span>
+                  <span class="reason-text">{{ getAtRiskReasons(advisee) }}</span>
                 </div>
               </div>
             </div>
-            
-            <div class="cell">
-              <div class="meeting-info">
-                <span class="meeting-date">{{ formatDate(advisee.lastMeeting) }}</span>
-                <span class="meeting-type">{{ advisee.lastMeetingType }}</span>
-              </div>
-            </div>
-            
-            <div class="cell actions-cell">
+              <div class="cell actions-cell">
               <div class="action-buttons">
                 <button 
                   @click="viewAdviseeDetails(advisee)" 
@@ -228,22 +214,12 @@
                 </button>
                 
                 <button 
-                  @click="scheduleMeeting(advisee)" 
-                  class="action-btn meeting-btn"
-                  title="Schedule Meeting"
+                  @click="viewOverallPerformance(advisee)" 
+                  class="action-btn performance-btn"
+                  title="View Overall Performance"
                 >
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                  </svg>
-                </button>
-                
-                <button 
-                  @click="generateReport(advisee)" 
-                  class="action-btn report-btn"
-                  title="Generate Report"
-                >
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                   </svg>
                 </button>
               </div>
@@ -355,7 +331,8 @@ export default {
       return this.advisees.filter(advisee => 
         advisee.isAtRisk || 
         advisee.status === 'at-risk' || 
-        advisee.status === 'probation'
+        advisee.status === 'probation' ||
+        advisee.gpa <= 2.0
       ).length;
     },
     excellentCount() {
@@ -406,9 +383,34 @@ export default {
         'active': 'Active',
         'at-risk': 'At-Risk',
         'probation': 'Academic Probation',
-        'excellent': 'Excellent Performance'
+        'excellent': 'Excellent Performance',
+        'low-gpa': 'Low CGPA (At-Risk)'
       };
       return labels[status] || status;
+    },
+    
+    getEffectiveStatus(advisee) {
+      // If CGPA is 2.0 or below, override status to at-risk
+      if (advisee.gpa <= 2.0) {
+        return 'at-risk';
+      }
+      return advisee.status;
+    },
+    
+    getAtRiskReasons(advisee) {
+      const reasons = [];
+      
+      // Add existing at-risk reasons
+      if (advisee.atRiskReason && advisee.atRiskReason.length > 0) {
+        reasons.push(...advisee.atRiskReason);
+      }
+      
+      // Add low CGPA reason if applicable
+      if (advisee.gpa <= 2.0) {
+        reasons.push(`Low CGPA (${advisee.gpa.toFixed(2)})`);
+      }
+      
+      return reasons.join(', ') || 'At-Risk Student';
     },
     formatDate(dateString) {
       const date = new Date(dateString);
@@ -420,6 +422,12 @@ export default {
     },    viewAdviseeDetails(advisee) {
       this.$router.push({ 
         name: 'AdvisorMarkBreakdown', 
+        params: { studentId: advisee.id }
+      });
+    },
+    viewOverallPerformance(advisee) {
+      this.$router.push({ 
+        name: 'AdviseeOverallPerformance', 
         params: { studentId: advisee.id }
       });
     },scheduleMeeting(advisee) {
@@ -488,26 +496,6 @@ export default {
   align-items: center;
 }
 
-.refresh-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  background: #F1FAEE;
-  color: #1D3557;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.refresh-btn:hover {
-  background: #A8DADC;
-  transform: translateY(-1px);
-}
-
 .card {
   background: white;
   border-radius: 12px;
@@ -536,14 +524,29 @@ export default {
 
 .controls-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
   gap: 16px;
   align-items: end;
 }
 
 .search-box {
   position: relative;
+  width: 50%;
 }
+.search-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.filters-row {
+  display: flex;
+  justify-content: flex-start;
+}
+.search-row,
+  .filters-row {
+    justify-content: stretch;
+  }
+
 
 .search-icon {
   position: absolute;
@@ -699,7 +702,7 @@ export default {
 
 .table-header {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 1.2fr 1.2fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1.2fr 1.2fr 1.5fr;
   gap: 16px;
   padding: 16px 24px;
   background: #f9fafb;
@@ -715,7 +718,7 @@ export default {
 
 .table-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 1.2fr 1.2fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1.2fr 1.2fr 1.5fr;
   gap: 16px;
   padding: 16px 24px;
   border-bottom: 1px solid #f3f4f6;
@@ -927,6 +930,16 @@ export default {
 
 .view-btn:hover {
   background: #b3e5fc;
+  transform: scale(1.1);
+}
+
+.performance-btn {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.performance-btn:hover {
+  background: #fde68a;
   transform: scale(1.1);
 }
 

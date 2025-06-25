@@ -1212,20 +1212,508 @@ $app->get('/advisors/{advisor_id}/advisees', function (Request $request, Respons
     }
 });
 
-// Add this test endpoint to debug the database
-$app->get('/debug/users', function (Request $request, Response $response) use ($pdo) {
+// Get detailed performance data for a specific advisee
+$app->get('/advisors/{advisor_id}/advisees/{student_id}/performance', function (Request $request, Response $response, $args) use ($pdo) {
     try {
-        $stmt = $pdo->query('SELECT u.id, u.full_name, u.matric_no, u.staff_id, u.email, r.name as role_name FROM users u JOIN roles r ON u.role_id = r.id LIMIT 10');
-        $users = $stmt->fetchAll();
+        $advisor_id = $args['advisor_id'];
+        $student_id = $args['student_id'];
+        
+        // Verify this student is actually advised by this advisor
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM advisors WHERE advisor_id = ? AND student_id = ?');
+        $stmt->execute([$advisor_id, $student_id]);
+        if ($stmt->fetchColumn() == 0) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'error' => 'Student is not advised by this advisor'
+            ]));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Get student basic info
+        $stmt = $pdo->prepare('
+            SELECT 
+                u.id,
+                u.full_name as name,
+                u.matric_no as studentId,
+                u.email,
+                CASE 
+                    WHEN u.matric_no LIKE "%2021%" THEN 4
+                    WHEN u.matric_no LIKE "%2022%" THEN 3  
+                    WHEN u.matric_no LIKE "%2023%" THEN 2
+                    WHEN u.matric_no LIKE "%2024%" THEN 1
+                    ELSE 1
+                END as year,
+                CASE 
+                    WHEN u.matric_no LIKE "CS%" THEN "Computer Science"
+                    WHEN u.matric_no LIKE "IS%" THEN "Information Systems"
+                    WHEN u.matric_no LIKE "SE%" THEN "Software Engineering"
+                    WHEN u.matric_no LIKE "IT%" THEN "Information Technology"
+                    ELSE "Computer Science"
+                END as program
+            FROM users u
+            WHERE u.id = ?
+        ');
+        $stmt->execute([$student_id]);
+        $student = $stmt->fetch();
+        
+        if (!$student) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'error' => 'Student not found'
+            ]));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+          // Get course enrollments and marks
+        $stmt = $pdo->prepare('
+            SELECT 
+                c.code as course_code,
+                c.name as course_name,
+                3 as credit_hours,
+                "Current" as semester,
+                "2024/2025" as academic_year,
+                COALESCE(SUM(
+                    CASE 
+                        WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                        ELSE 0 
+                    END
+                ), 0) as assessment_total,
+                COALESCE((fem.mark / 100) * 30, 0) as final_exam_weighted,
+                COALESCE(fem.mark, 0) as final_exam_marks,
+                COALESCE(SUM(
+                    CASE 
+                        WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                        ELSE 0 
+                    END
+                ), 0) + COALESCE((fem.mark / 100) * 30, 0) as total_marks,
+                CASE 
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 80 THEN "A"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 75 THEN "A-"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 70 THEN "B+"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 65 THEN "B"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 60 THEN "B-"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 55 THEN "C+"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 50 THEN "C"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 45 THEN "C-"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 40 THEN "D"
+                    ELSE "F"
+                END as grade,
+                CASE 
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 80 THEN 4.0
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 75 THEN 3.7
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 70 THEN 3.3
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 65 THEN 3.0
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 60 THEN 2.7
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 55 THEN 2.3
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 50 THEN 2.0
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 45 THEN 1.7
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 40 THEN 1.3
+                    ELSE 0.0
+                END as grade_points
+            FROM enrollments e
+            JOIN courses c ON e.course_id = c.id
+            LEFT JOIN assessments a ON c.id = a.course_id
+            LEFT JOIN assessment_marks am ON e.id = am.enrollment_id AND a.id = am.assessment_id
+            LEFT JOIN final_exam_marks fem ON e.id = fem.enrollment_id
+            WHERE e.student_id = ?
+            GROUP BY c.id, c.code, c.name, fem.mark
+            ORDER BY c.code
+        ');
+        $stmt->execute([$student_id]);
+        $courses = $stmt->fetchAll();
+          // Get assessment breakdown for current courses
+        $assessments = [];
+        foreach ($courses as $course) {
+            $stmt = $pdo->prepare('
+                SELECT 
+                    a.name as assessment_name,
+                    "coursework" as assessment_type,
+                    a.max_mark as max_marks,
+                    a.weight as weightage,
+                    am.mark as marks_obtained
+                FROM assessments a
+                LEFT JOIN assessment_marks am ON a.id = am.assessment_id 
+                    AND am.enrollment_id = (
+                        SELECT e.id FROM enrollments e 
+                        WHERE e.student_id = ? AND e.course_id = a.course_id
+                    )
+                WHERE a.course_id = (SELECT id FROM courses WHERE code = ?)
+                ORDER BY a.name
+            ');
+            $stmt->execute([$student_id, $course['course_code']]);
+            $courseAssessments = $stmt->fetchAll();
+            
+            if ($courseAssessments) {
+                $assessments[$course['course_code']] = $courseAssessments;
+            }
+        }
+        
+        // Calculate overall GPA
+        $totalGradePoints = 0;
+        $totalCreditHours = 0;
+        foreach ($courses as $course) {
+            if ($course['total_marks'] !== null) {
+                $totalGradePoints += $course['grade_points'] * $course['credit_hours'];
+                $totalCreditHours += $course['credit_hours'];
+            }
+        }
+        $gpa = $totalCreditHours > 0 ? round($totalGradePoints / $totalCreditHours, 2) : 0;
+        
+        // Get recent meetings
+        $stmt = $pdo->prepare('
+            SELECT 
+                meeting_date,
+                meeting_time,
+                meeting_type,
+                notes,
+                status
+            FROM meetings
+            WHERE advisor_id = ? AND student_id = ?
+            ORDER BY meeting_date DESC, meeting_time DESC
+            LIMIT 5
+        ');
+        $stmt->execute([$advisor_id, $student_id]);
+        $recentMeetings = $stmt->fetchAll();
+        
+        $performanceData = [
+            'student' => $student,
+            'gpa' => $gpa,
+            'courses' => $courses,
+            'assessments' => $assessments,
+            'recent_meetings' => $recentMeetings,
+            'statistics' => [
+                'total_courses' => count($courses),
+                'completed_courses' => count(array_filter($courses, function($c) { return $c['total_marks'] !== null; })),
+                'total_credit_hours' => $totalCreditHours,
+                'average_marks' => $courses ? round(array_sum(array_column(array_filter($courses, function($c) { return $c['total_marks'] !== null; }), 'total_marks')) / count(array_filter($courses, function($c) { return $c['total_marks'] !== null; })), 2) : 0
+            ]
+        ];
+        
         $response->getBody()->write(json_encode([
-            'total_users' => count($users),
-            'users' => $users
+            'success' => true,
+            'data' => $performanceData
         ]));
         return $response->withHeader('Content-Type', 'application/json');
+        
     } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));        
+        error_log("Error fetching advisee performance: " . $e->getMessage());
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => 'Failed to fetch performance data: ' . $e->getMessage()
+        ]));
         return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
     }
 });
+
+// ===================== MEETINGS MANAGEMENT =====================
+// Schedule a meeting between advisor and student
+$app->post('/advisors/{advisor_id}/meetings', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $data = $request->getParsedBody();
+        $advisor_id = $args['advisor_id'];
+        
+        // Validate required fields
+        if (!isset($data['student_id']) || !isset($data['meeting_date']) || !isset($data['meeting_time'])) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'error' => 'Missing required fields: student_id, meeting_date, and meeting_time are required'
+            ]));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Insert meeting record using separate date and time columns as per database schema
+        $stmt = $pdo->prepare('
+            INSERT INTO meetings (advisor_id, student_id, title, meeting_date, meeting_time, duration, location, meeting_type, meeting_link, agenda, notes, status) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ');
+        
+        $stmt->execute([
+            $advisor_id,
+            $data['student_id'],
+            $data['title'] ?? 'Advisor Meeting',
+            $data['meeting_date'],
+            $data['meeting_time'],
+            $data['duration'] ?? 60,
+            $data['location'] ?? '',
+            $data['meeting_type'] ?? 'academic',
+            $data['meeting_link'] ?? '',
+            $data['agenda'] ?? '',
+            $data['notes'] ?? '',
+            $data['status'] ?? 'scheduled'
+        ]);
+        
+        $meeting_id = $pdo->lastInsertId();
+        
+        // Get student info for notifications
+        $stmt = $pdo->prepare('SELECT full_name, email FROM users WHERE id = ?');
+        $stmt->execute([$data['student_id']]);
+        $student = $stmt->fetch();
+        
+        // Get advisor info
+        $stmt = $pdo->prepare('SELECT full_name FROM users WHERE id = ?');
+        $stmt->execute([$advisor_id]);
+        $advisor = $stmt->fetch();
+        
+        // Create notification for student
+        $meeting_datetime = $data['meeting_date'] . ' ' . $data['meeting_time'];
+        $notification_message = "Meeting scheduled with {$advisor['full_name']} on " . date('F j, Y \a\t g:i A', strtotime($meeting_datetime));
+        if (!empty($data['meeting_link'])) {
+            $notification_message .= ". Meeting link: {$data['meeting_link']}";
+        }
+        createNotification($pdo, $data['student_id'], $notification_message);
+        
+        // Log the activity
+        logSystemActivity($pdo, $advisor_id, "Scheduled meeting with student {$student['full_name']} for {$data['meeting_date']} at {$data['meeting_time']}");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'meeting_id' => $meeting_id,
+            'message' => 'Meeting scheduled successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        error_log("Error scheduling meeting: " . $e->getMessage());
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => 'Failed to schedule meeting: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Get all meetings for an advisor
+$app->get('/advisors/{advisor_id}/meetings', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $stmt = $pdo->prepare('
+            SELECT 
+                m.*,
+                u.full_name as student_name,
+                u.matric_no as student_id,
+                u.email as student_email,
+                CONCAT(m.meeting_date, " ", m.meeting_time) as meeting_datetime
+            FROM meetings m
+            JOIN users u ON m.student_id = u.id
+            WHERE m.advisor_id = ?
+            ORDER BY m.meeting_date DESC, m.meeting_time DESC
+        ');
+        $stmt->execute([$args['advisor_id']]);
+        $meetings = $stmt->fetchAll();
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'meetings' => $meetings
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => 'Failed to fetch meetings: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Update a meeting
+$app->put('/meetings/{meeting_id}', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $data = $request->getParsedBody();
+        $meeting_id = $args['meeting_id'];
+        
+        // Get current meeting data to validate ownership
+        $stmt = $pdo->prepare('SELECT advisor_id, student_id FROM meetings WHERE id = ?');
+        $stmt->execute([$meeting_id]);
+        $meeting = $stmt->fetch();
+        
+        if (!$meeting) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'error' => 'Meeting not found'
+            ]));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Update meeting record
+        $stmt = $pdo->prepare('
+            UPDATE meetings 
+            SET student_id = ?, title = ?, meeting_date = ?, meeting_time = ?, duration = ?, 
+                location = ?, meeting_type = ?, meeting_link = ?, agenda = ?, notes = ?, 
+                action_items = ?, status = ?
+            WHERE id = ?
+        ');
+        
+        $stmt->execute([
+            $data['student_id'] ?? $meeting['student_id'],
+            $data['title'] ?? 'Advisor Meeting',
+            $data['meeting_date'],
+            $data['meeting_time'],
+            $data['duration'] ?? 60,
+            $data['location'] ?? '',
+            $data['meeting_type'] ?? 'academic',
+            $data['meeting_link'] ?? '',
+            $data['agenda'] ?? '',
+            $data['notes'] ?? '',
+            $data['action_items'] ?? '',
+            $data['status'] ?? 'scheduled',
+            $meeting_id
+        ]);
+        
+        // Log the activity
+        logSystemActivity($pdo, $meeting['advisor_id'], "Updated meeting (ID: {$meeting_id})");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Meeting updated successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        error_log("Error updating meeting: " . $e->getMessage());
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => 'Failed to update meeting: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Delete a meeting
+$app->delete('/meetings/{meeting_id}', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $meeting_id = $args['meeting_id'];
+        
+        // Get meeting data to validate ownership and for logging
+        $stmt = $pdo->prepare('
+            SELECT m.advisor_id, m.student_id, m.meeting_date, m.meeting_time, u.full_name as student_name
+            FROM meetings m
+            JOIN users u ON m.student_id = u.id
+            WHERE m.id = ?
+        ');
+        $stmt->execute([$meeting_id]);
+        $meeting = $stmt->fetch();
+        
+        if (!$meeting) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'error' => 'Meeting not found'
+            ]));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Delete the meeting
+        $stmt = $pdo->prepare('DELETE FROM meetings WHERE id = ?');
+        $stmt->execute([$meeting_id]);
+        
+        // Log the activity
+        logSystemActivity($pdo, $meeting['advisor_id'], "Deleted meeting with {$meeting['student_name']} scheduled for {$meeting['meeting_date']} at {$meeting['meeting_time']}");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Meeting deleted successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        error_log("Error deleting meeting: " . $e->getMessage());
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => 'Failed to delete meeting: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Include student routes
+require __DIR__ . '/../src/routes/student.php';
 
 $app->run();

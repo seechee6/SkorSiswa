@@ -88,10 +88,10 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
             $stmt->execute([$course['enrollment_id']]);
             $gradedAssessments = $stmt->fetch()['graded'];
             
-            // Get current overall percentage
+            // Get current overall percentage (assessments are 70% of total)
             $stmt = $pdo->prepare('
                 SELECT 
-                    SUM((am.mark / a.max_mark) * a.weight) AS current_percentage
+                    SUM((am.mark / a.max_mark) * a.weight) AS assessment_score
                 FROM 
                     assessment_marks am
                     JOIN assessments a ON am.assessment_id = a.id
@@ -100,7 +100,20 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
                     AND am.mark IS NOT NULL
             ');
             $stmt->execute([$course['enrollment_id']]);
-            $currentPercentage = $stmt->fetch()['current_percentage'] ?? 0;
+            $assessmentScore = $stmt->fetch()['assessment_score'] ?? 0;
+            
+            // Get final exam score (30% of total)
+            $stmt = $pdo->prepare('
+                SELECT mark 
+                FROM final_exam_marks 
+                WHERE enrollment_id = ?
+            ');
+            $stmt->execute([$course['enrollment_id']]);
+            $finalExam = $stmt->fetch();
+            $finalExamScore = $finalExam ? ((float)$finalExam['mark'] / 100) * 30 : 0;
+            
+            // Total = Assessment score + Final exam score
+            $currentPercentage = $assessmentScore + $finalExamScore;
             
             // Add summary to course object
             $course['total_assessments'] = (int)$totalAssessments;
@@ -172,7 +185,7 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
         $assessments = $stmt->fetchAll();
         
         // Calculate totals and weighted scores
-        $totalWeightedScore = 0;
+        $totalAssessmentScore = 0;  // This will be the 70% portion
         $totalCompletedWeight = 0;
         
         foreach ($assessments as &$assessment) {
@@ -183,7 +196,7 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
                 $assessment['percentage'] = round($percentageScore * 100, 2);
                 $assessment['weighted_score'] = round($weightedScore, 2);
                 
-                $totalWeightedScore += $weightedScore;
+                $totalAssessmentScore += $weightedScore;
                 $totalCompletedWeight += $assessment['weight'];
             } else {
                 $assessment['percentage'] = null;
@@ -196,7 +209,7 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
             $assessment['mark'] = $assessment['mark'] !== null ? (float)$assessment['mark'] : null;
         }
         
-        // Get final exam mark if available
+        // Get final exam mark if available (30% of total grade)
         $stmt = $pdo->prepare('
             SELECT mark 
             FROM final_exam_marks 
@@ -205,12 +218,13 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
         $stmt->execute([$enrollmentId]);
         $finalExam = $stmt->fetch();
         $finalExamMark = $finalExam ? (float)$finalExam['mark'] : null;
+        $finalExamScore = $finalExamMark ? ($finalExamMark / 100) * 30 : 0;
         
-        // Calculate overall grade
-        $overallPercentage = round($totalWeightedScore, 2);
+        // Calculate overall percentage: Assessment score (70%) + Final exam score (30%)
+        $overallPercentage = round($totalAssessmentScore + $finalExamScore, 2);
         $grade = null;
         
-        if ($totalWeightedScore > 0) {
+        if ($overallPercentage > 0) {
             // Simple grade calculation logic
             if ($overallPercentage >= 90) $grade = 'A+';
             elseif ($overallPercentage >= 80) $grade = 'A';
@@ -225,22 +239,24 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
             else $grade = 'F';
         }
         
-        // Get class average for comparison
+        // Get class average for comparison (Assessment 70% + Final Exam 30%)
         $stmt = $pdo->prepare('
             WITH student_scores AS (
                 SELECT 
                     e.id as enrollment_id,
-                    SUM((am.mark / a.max_mark) * a.weight) AS weighted_score
+                    SUM((am.mark / a.max_mark) * a.weight) AS assessment_score,
+                    COALESCE((fem.mark / 100) * 30, 0) AS final_exam_score
                 FROM 
                     enrollments e
                     JOIN assessment_marks am ON e.id = am.enrollment_id
                     JOIN assessments a ON am.assessment_id = a.id
+                    LEFT JOIN final_exam_marks fem ON e.id = fem.enrollment_id
                 WHERE 
                     e.course_id = ? AND am.mark IS NOT NULL
                 GROUP BY 
                     e.id
             )
-            SELECT AVG(weighted_score) as class_average
+            SELECT AVG(assessment_score + final_exam_score) as class_average
             FROM student_scores
         ');
         $stmt->execute([$courseId]);
@@ -260,6 +276,9 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
             'course' => $course,
             'components' => $assessments,
             'totalMarks' => $overallPercentage,
+            'assessmentScore' => round($totalAssessmentScore, 2),
+            'finalExamMark' => $finalExamMark,
+            'finalExamScore' => round($finalExamScore, 2),
             'grade' => $grade,
             'classAverage' => round((float)$classAverage, 2),
             'remarks' => $remarks,
@@ -297,33 +316,46 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
         // Get class size (total students enrolled in the course)
         $stmt = $pdo->prepare('SELECT COUNT(*) as class_size FROM enrollments WHERE course_id = ?');
         $stmt->execute([$courseId]);
-        $classSize = (int)$stmt->fetch()['class_size'];        // Calculate overall score for student
+        $classSize = (int)$stmt->fetch()['class_size'];        // Calculate overall score for student (Assessment 70% + Final Exam 30%)
         $stmt = $pdo->prepare('
-            SELECT SUM((am.mark / a.max_mark) * a.weight) as total_score
+            SELECT 
+                SUM((am.mark / a.max_mark) * a.weight) as assessment_score
             FROM assessment_marks am
             JOIN assessments a ON am.assessment_id = a.id
             WHERE am.enrollment_id = ? AND am.mark IS NOT NULL
         ');
         $stmt->execute([$enrollmentId]);
         $studentResult = $stmt->fetch();
-        $studentOverallScore = $stmt->fetch() ? (float)$studentResult['total_score'] : 0;
+        $studentAssessmentScore = $studentResult ? (float)$studentResult['assessment_score'] : 0;
         
-        // Calculate class average overall score - ensure this matches the calculation in the marks endpoint
+        // Get final exam score
+        $stmt = $pdo->prepare('
+            SELECT mark FROM final_exam_marks WHERE enrollment_id = ?
+        ');
+        $stmt->execute([$enrollmentId]);
+        $finalExamResult = $stmt->fetch();
+        $studentFinalExamScore = $finalExamResult ? ((float)$finalExamResult['mark'] / 100) * 30 : 0;
+        
+        $studentOverallScore = $studentAssessmentScore + $studentFinalExamScore;
+        
+        // Calculate class average overall score (Assessment 70% + Final Exam 30%)
         $stmt = $pdo->prepare('
             WITH student_scores AS (
                 SELECT 
                     e.id as enrollment_id,
-                    SUM((am.mark / a.max_mark) * a.weight) AS weighted_score
+                    SUM((am.mark / a.max_mark) * a.weight) AS assessment_score,
+                    COALESCE((fem.mark / 100) * 30, 0) AS final_exam_score
                 FROM 
                     enrollments e
                     JOIN assessment_marks am ON e.id = am.enrollment_id
                     JOIN assessments a ON am.assessment_id = a.id
+                    LEFT JOIN final_exam_marks fem ON e.id = fem.enrollment_id
                 WHERE 
                     e.course_id = ? AND am.mark IS NOT NULL
                 GROUP BY 
                     e.id
             )
-            SELECT AVG(weighted_score) as class_average
+            SELECT AVG(assessment_score + final_exam_score) as class_average
             FROM student_scores
         ');
         $stmt->execute([$courseId]);
@@ -335,11 +367,12 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
             WITH student_scores AS (
                 SELECT 
                     e.student_id,
-                    SUM((am.mark / a.max_mark) * a.weight) AS total_score
+                    SUM((am.mark / a.max_mark) * a.weight) + COALESCE((fem.mark / 100) * 30, 0) AS total_score
                 FROM 
                     enrollments e
                     JOIN assessment_marks am ON e.id = am.enrollment_id
                     JOIN assessments a ON am.assessment_id = a.id
+                    LEFT JOIN final_exam_marks fem ON e.id = fem.enrollment_id
                 WHERE 
                     e.course_id = ? AND am.mark IS NOT NULL
                 GROUP BY 
@@ -364,11 +397,12 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
             WITH student_scores AS (
                 SELECT 
                     e.student_id,
-                    SUM((am.mark / a.max_mark) * a.weight) AS total_score
+                    SUM((am.mark / a.max_mark) * a.weight) + COALESCE((fem.mark / 100) * 30, 0) AS total_score
                 FROM 
                     enrollments e
                     JOIN assessment_marks am ON e.id = am.enrollment_id
                     JOIN assessments a ON am.assessment_id = a.id
+                    LEFT JOIN final_exam_marks fem ON e.id = fem.enrollment_id
                 WHERE 
                     e.course_id = ? AND am.mark IS NOT NULL
                 GROUP BY 
@@ -503,18 +537,19 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
                 return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
             }
             
-            // Get all students in the course with their scores
+            // Get all students in the course with their scores (Assessment 70% + Final Exam 30%)
             $stmt = $pdo->prepare('
                 WITH student_scores AS (
                     SELECT 
                         e.student_id,
                         u.full_name,
-                        SUM((am.mark / a.max_mark) * a.weight) AS total_score
+                        SUM((am.mark / a.max_mark) * a.weight) + COALESCE((fem.mark / 100) * 30, 0) AS total_score
                     FROM 
                         enrollments e
                         JOIN users u ON e.student_id = u.id
                         JOIN assessment_marks am ON e.id = am.enrollment_id
                         JOIN assessments a ON am.assessment_id = a.id
+                        LEFT JOIN final_exam_marks fem ON e.id = fem.enrollment_id
                     WHERE 
                         e.course_id = ? AND am.mark IS NOT NULL
                     GROUP BY 
@@ -668,10 +703,10 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
         $currentCourses = $stmt->fetchAll();
           // For each course, get current grade and progress
         foreach ($currentCourses as &$course) {
-            // Get current percentage
+            // Get current percentage (Assessment 70% + Final Exam 30%)
             $stmt = $pdo->prepare('
                 SELECT 
-                    SUM((am.mark / a.max_mark) * a.weight) AS current_percentage
+                    SUM((am.mark / a.max_mark) * a.weight) AS assessment_score
                 FROM 
                     assessment_marks am
                     JOIN assessments a ON am.assessment_id = a.id
@@ -681,7 +716,20 @@ $app->group('/student', function (RouteCollectorProxy $group) use ($pdo) {
             ');
             $stmt->execute([$course['enrollment_id']]);
             $result = $stmt->fetch();
-            $currentPercentage = $result['current_percentage'] ?? 0;
+            $assessmentScore = $result['assessment_score'] ?? 0;
+            
+            // Get final exam score (30% of total)
+            $stmt = $pdo->prepare('
+                SELECT mark 
+                FROM final_exam_marks 
+                WHERE enrollment_id = ?
+            ');
+            $stmt->execute([$course['enrollment_id']]);
+            $finalExam = $stmt->fetch();
+            $finalExamScore = $finalExam ? ((float)$finalExam['mark'] / 100) * 30 : 0;
+            
+            // Total = Assessment score + Final exam score
+            $currentPercentage = $assessmentScore + $finalExamScore;
             
             // Calculate grade
             $grade = 'N/A';

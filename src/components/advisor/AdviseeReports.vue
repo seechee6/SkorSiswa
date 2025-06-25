@@ -708,6 +708,7 @@ h5 {
 
 .search-box {
   position: relative;
+  width: 50%
 }
 
 .search-icon {

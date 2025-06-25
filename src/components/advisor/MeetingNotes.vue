@@ -35,59 +35,55 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
           Schedule Meeting
-        </button>        <button @click="exportMeetings" class="action-btn secondary">
-          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          Export
-        </button>
-        <button @click="showQuickNotesModal" class="action-btn tertiary">
-          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-          Quick Notes
-        </button>
+        </button>  
       </div>
     </div>
 
     <!-- Filter and Search Section -->
     <div class="filters-section">
       <div class="card">
-        <div class="filter-row">
-          <div class="search-box">
-            <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input 
-              v-model="searchQuery" 
-              type="text" 
-              placeholder="Search meetings by student name, notes, or meeting type..."
-              class="search-input"
-            >
+        <div class="filter-container">
+          <!-- Search Row -->
+          <div class="search-row">
+            <div class="search-box">
+              <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input 
+                v-model="searchQuery" 
+                type="text" 
+                placeholder="Search meetings by student name, notes, or meeting type..."
+                class="search-input"
+              >
+            </div>
           </div>
-          <div class="filter-group">
-            <select v-model="statusFilter" class="filter-select">
-              <option value="">All Status</option>
-              <option value="scheduled">Scheduled</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="rescheduled">Rescheduled</option>
-            </select>
-            <select v-model="typeFilter" class="filter-select">
-              <option value="">All Types</option>
-              <option value="academic">Academic Progress</option>
-              <option value="career">Career Guidance</option>
-              <option value="personal">Personal Support</option>
-              <option value="crisis">Crisis Intervention</option>
-              <option value="routine">Routine Check-in</option>
-            </select>
-            <input 
-              v-model="dateFilter" 
-              type="date" 
-              class="filter-select"
-              placeholder="Filter by date"
-            >
-            <button @click="clearFilters" class="clear-filter-btn">Clear</button>
+          
+          <!-- Filters Row -->
+          <div class="filters-row">
+            <div class="filter-group">
+              <select v-model="statusFilter" class="filter-select">
+                <option value="">All Status</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="rescheduled">Rescheduled</option>
+              </select>
+              <select v-model="typeFilter" class="filter-select">
+                <option value="">All Types</option>
+                <option value="academic">Academic Progress</option>
+                <option value="career">Career Guidance</option>
+                <option value="personal">Personal Support</option>
+                <option value="crisis">Crisis Intervention</option>
+                <option value="routine">Routine Check-in</option>
+              </select>
+              <input 
+                v-model="dateFilter" 
+                type="date" 
+                class="filter-select"
+                placeholder="Filter by date"
+              >
+              <button @click="clearFilters" class="clear-filter-btn">Clear</button>
+            </div>
           </div>
         </div>
       </div>
@@ -105,11 +101,6 @@
           <div class="stat-number">{{ completedMeetings.length }}</div>
           <div class="stat-label">Completed This Month</div>
           <div class="stat-trend positive">{{ completionRate }}% completion rate</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-number">{{ urgentMeetings.length }}</div>
-          <div class="stat-label">High Priority</div>
-          <div class="stat-trend" :class="urgentMeetings.length > 5 ? 'negative' : 'positive'">Crisis & Academic</div>
         </div>
         <div class="stat-card">
           <div class="stat-number">{{ averageMeetingDuration }}</div>
@@ -148,9 +139,6 @@
         <table class="data-table">
           <thead>
             <tr>
-              <th>
-                <input type="checkbox" v-model="selectAll" @change="toggleAllSelection">
-              </th>
               <th @click="sortBy('student')" class="sortable">
                 Student 
                 <svg class="sort-icon" :class="{ active: sortColumn === 'student' }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -172,9 +160,6 @@
           </thead>
           <tbody>
             <tr v-for="meeting in paginatedMeetings" :key="meeting.id" class="table-row">
-              <td>
-                <input type="checkbox" v-model="selectedMeetings" :value="meeting.id">
-              </td>
               <td>
                 <div class="student-info">
                   <div class="student-avatar">{{ getInitials(meeting.student.name) }}</div>
@@ -217,30 +202,16 @@
                 <div class="notes-preview">{{ truncateNotes(meeting.notes) }}</div>
               </td>
               <td>
-                <div class="action-buttons">                  <button @click="addNotes(meeting)" class="action-btn notes-btn" title="Add/Edit Notes">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                    </svg>
-                  </button>
-                  <button @click="editMeeting(meeting)" class="action-btn edit-btn" title="Edit Meeting">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                    </svg>
-                  </button>
-                  <button @click="viewNotes(meeting)" class="action-btn view-btn" title="View Full Notes">
+                <div class="action-buttons">
+                  <button @click="viewMeeting(meeting)" class="action-btn view-btn" title="View Details">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
                     </svg>
                   </button>
-                  <button @click="markComplete(meeting)" v-if="meeting.status === 'scheduled'" class="action-btn complete-btn" title="Mark Complete">
+                  <button @click="editMeeting(meeting)" class="action-btn edit-btn" title="Edit Meeting">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                  </button>
-                  <button @click="reschedule(meeting)" v-if="meeting.status === 'scheduled'" class="action-btn reschedule-btn" title="Reschedule">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                     </svg>
                   </button>
                   <button @click="deleteMeeting(meeting)" class="action-btn delete-btn" title="Delete">
@@ -332,7 +303,12 @@
           </button>
         </div>
         <div class="modal-body">
-          <form @submit.prevent="saveMeeting">            <div class="form-group">
+          <form @submit.prevent="saveMeeting">
+            <div class="form-group">
+              <label>Meeting Title</label>
+              <input v-model="meetingForm.title" type="text" placeholder="Advisor Meeting" class="form-control">
+            </div>
+            <div class="form-group">
               <label>Student</label>
               <select v-model="meetingForm.studentId" required class="form-control">
                 <option value="">Select Student</option>
@@ -448,6 +424,75 @@
             
             <h5>Action Items</h5>            <p>{{ selectedMeeting?.actionItems || 'No action items specified' }}</p>
           </div>        </div>
+      </div>
+    </div>
+
+    <!-- View Meeting Details Modal -->
+    <div v-if="showViewMeetingModal" class="modal-overlay" @click="closeViewMeetingModal">
+      <div class="modal large" @click.stop>
+        <div class="modal-header">
+          <h4>Meeting Details - {{ selectedMeetingForView?.student?.name }}</h4>
+          <button @click="closeViewMeetingModal" class="close-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="meeting-details">
+            <div class="detail-row">
+              <span class="detail-label">Student ID:</span>
+              <span>{{ selectedMeetingForView?.student?.id }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Title:</span>
+              <span>{{ selectedMeetingForView?.title || 'No title specified' }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Date:</span>
+              <span>{{ formatDate(selectedMeetingForView?.date) }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Time:</span>
+              <span>{{ selectedMeetingForView?.time }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Duration:</span>
+              <span>{{ selectedMeetingForView?.duration || '--' }} minutes</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Type:</span>
+              <span class="meeting-type-badge" :class="selectedMeetingForView?.type">{{ formatMeetingType(selectedMeetingForView?.type) }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Status:</span>
+              <span class="status-badge" :class="selectedMeetingForView?.status">{{ selectedMeetingForView?.status }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Location:</span>
+              <span>{{ selectedMeetingForView?.location || 'Not specified' }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Meeting Link:</span>
+              <span v-if="selectedMeetingForView?.meeting_link || selectedMeetingForView?.meetingLink">
+                <a :href="selectedMeetingForView?.meeting_link || selectedMeetingForView?.meetingLink" target="_blank" rel="noopener noreferrer" class="link-btn">
+                  🔗 Join Meeting
+                </a>
+              </span>
+              <span v-else>Not provided</span>
+            </div>
+          </div>
+          <div class="notes-section">
+            <h5>Agenda</h5>
+            <p>{{ selectedMeetingForView?.agenda || 'No agenda specified' }}</p>
+            
+            <h5>Meeting Notes</h5>
+            <p>{{ selectedMeetingForView?.notes || 'No notes available' }}</p>
+            
+            <h5>Action Items</h5>
+            <p>{{ selectedMeetingForView?.actionItems || 'No action items specified' }}</p>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -596,11 +641,14 @@ export default {
       viewMode: 'table',      showScheduleModal: false,
       showNotesModal: false,
       showAddNotesModal: false,
+      showViewMeetingModal: false,
       editingMeeting: null,
       selectedMeeting: null,      selectedMeetingForNotes: null,
+      selectedMeetingForView: null,
       currentDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1), // First day of current month
         meetingForm: {
         studentId: '',
+        title: '',
         date: '',
         time: '',
         duration: 60,
@@ -628,18 +676,21 @@ export default {
     await this.fetchAdvisees();
     await this.loadMeetingsFromBackend();
   },
-
   computed: {
     filteredMeetings() {
-      let filtered = this.meetings;
+      if (!this.meetings || this.meetings.length === 0) {
+        return [];
+      }
+      
+      let filtered = [...this.meetings]; // Create a copy to avoid mutations
 
       if (this.searchQuery) {
         const query = this.searchQuery.toLowerCase();
         filtered = filtered.filter(meeting => 
-          meeting.student.name.toLowerCase().includes(query) ||
-          meeting.notes.toLowerCase().includes(query) ||
-          meeting.agenda.toLowerCase().includes(query) ||
-          meeting.type.toLowerCase().includes(query)
+          (meeting.student && meeting.student.name && meeting.student.name.toLowerCase().includes(query)) ||
+          (meeting.notes && meeting.notes.toLowerCase().includes(query)) ||
+          (meeting.agenda && meeting.agenda.toLowerCase().includes(query)) ||
+          (meeting.type && meeting.type.toLowerCase().includes(query))
         );
       }
 
@@ -661,8 +712,8 @@ export default {
         let bValue = b[this.sortColumn];
 
         if (this.sortColumn === 'student') {
-          aValue = a.student.name;
-          bValue = b.student.name;
+          aValue = a.student ? a.student.name : '';
+          bValue = b.student ? b.student.name : '';
         }
 
         if (this.sortDirection === 'asc') {
@@ -694,19 +745,25 @@ export default {
         pages.push(i);
       }
       return pages;
-    },
-
-    upcomingMeetings() {
+    },    upcomingMeetings() {
+      if (!this.meetings || this.meetings.length === 0) {
+        return [];
+      }
+      
       const today = new Date().toISOString().split('T')[0];
       return this.meetings.filter(meeting => 
-        meeting.date >= today && meeting.status === 'scheduled'
+        meeting.date && meeting.date >= today && meeting.status === 'scheduled'
       );
     },
 
     completedMeetings() {
+      if (!this.meetings || this.meetings.length === 0) {
+        return [];
+      }
+      
       const thisMonth = new Date().toISOString().slice(0, 7);
       return this.meetings.filter(meeting => 
-        meeting.date.startsWith(thisMonth) && meeting.status === 'completed'
+        meeting.date && meeting.date.startsWith(thisMonth) && meeting.status === 'completed'
       );
     },
 
@@ -714,14 +771,22 @@ export default {
       return this.meetings.filter(meeting => 
         meeting.type === 'crisis' || meeting.type === 'academic'
       );
-    },
-
-    newMeetingsThisWeek() {
+    },    newMeetingsThisWeek() {
+      if (!this.meetings || this.meetings.length === 0) {
+        return 0;
+      }
+      
       const today = new Date();
       const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      
       return this.meetings.filter(meeting => {
-        const meetingDate = new Date(meeting.date);
-        return meetingDate >= weekAgo && meetingDate <= today;
+        if (!meeting.date) return false;
+        try {
+          const meetingDate = new Date(meeting.date);
+          return meetingDate >= weekAgo && meetingDate <= today;
+        } catch (e) {
+          return false;
+        }
       }).length;
     },
 
@@ -754,13 +819,24 @@ export default {
 
       // Cache today's date string to avoid creating new Date objects in the loop
       const todayString = new Date().toISOString().split('T')[0];
+      
+      // Pre-group meetings by date to avoid filtering in the loop
+      const meetingsByDate = {};
+      this.meetings.forEach(meeting => {
+        if (meeting.date) {
+          if (!meetingsByDate[meeting.date]) {
+            meetingsByDate[meeting.date] = [];
+          }
+          meetingsByDate[meeting.date].push(meeting);
+        }
+      });
 
       for (let i = 0; i < 42; i++) {
         const date = new Date(startDate);
         date.setDate(startDate.getDate() + i);
         
         const dateString = date.toISOString().split('T')[0];
-        const meetingsOnDate = this.meetings.filter(m => m.date === dateString);
+        const meetingsOnDate = meetingsByDate[dateString] || [];
         
         dates.push({
           date: dateString,
@@ -806,9 +882,37 @@ export default {
         console.log('Loading meetings from backend for advisor:', this.currentUser.id);
         const response = await advisorService.getMeetings(this.currentUser.id);
         
-        if (response && response.success && response.data) {
-          this.meetings = response.data;
-          console.log('Loaded meetings from backend:', this.meetings);
+        console.log('Raw API response:', response);
+          if (response && response.success) {
+          // The API returns meetings in response.meetings (correct format)
+          const meetings = response.meetings || [];
+          
+          console.log('Raw meetings data:', meetings);
+            // Transform the data to match the frontend format
+          this.meetings = meetings.map(meeting => {
+            return {
+              id: meeting.id,
+              student: {
+                id: meeting.student_id,
+                name: meeting.student_name || 'Unknown Student',
+                studentId: meeting.student_id // This contains the matric number like "STU001"
+              },
+              date: meeting.date || meeting.meeting_date,
+              time: meeting.time || meeting.meeting_time,
+              duration: meeting.duration,
+              type: meeting.type || meeting.meeting_type,
+              status: meeting.status,
+              location: meeting.location || '',
+              meeting_link: meeting.meeting_link || '',
+              meetingLink: meeting.meeting_link || '', // Keep both for compatibility
+              agenda: meeting.agenda || '',
+              notes: meeting.notes || '',
+              actionItems: meeting.actionItems || meeting.action_items || '',
+              title: meeting.title || 'Advisor Meeting'
+            };
+          });
+          
+          console.log('Transformed meetings for frontend:', this.meetings);
         } else {
           console.log('No meetings found or API returned unsuccessful response');
           this.meetings = [];
@@ -892,15 +996,17 @@ export default {
     editMeeting(meeting) {
       this.editingMeeting = meeting;
       this.meetingForm = {
-        studentId: meeting.student.id,
+        studentId: meeting.student.studentId || meeting.student.id,
+        title: meeting.title || 'Advisor Meeting',
         date: meeting.date,
         time: meeting.time,
         duration: meeting.duration,
         type: meeting.type,
-        location: meeting.location,
-        agenda: meeting.agenda,
-        notes: meeting.notes,
-        actionItems: meeting.actionItems,
+        location: meeting.location || '',
+        meetingLink: meeting.meeting_link || meeting.meetingLink || '',
+        agenda: meeting.agenda || '',
+        notes: meeting.notes || '',
+        actionItems: meeting.actionItems || meeting.action_items || '',
         status: meeting.status
       };
       this.showScheduleModal = true;
@@ -936,10 +1042,8 @@ export default {
     },    async deleteMeeting(meeting) {
       if (confirm('Are you sure you want to delete this meeting?')) {
         try {
-          // Delete meeting from backend using the meetings API
-          if (meeting.id) {
-            await advisorService.deleteMeeting(this.currentUser.id, meeting.id);
-          }
+          // Delete meeting from backend
+          await advisorService.deleteMeeting(this.currentUser.id, meeting.id);
 
           // Reload meetings from backend to get updated list
           await this.loadMeetingsFromBackend();
@@ -947,7 +1051,17 @@ export default {
           alert('Meeting deleted successfully!');
         } catch (error) {
           console.error('Error deleting meeting:', error);
-          alert('Failed to delete meeting. Please try again.');
+          
+          let errorMessage = 'Failed to delete meeting. ';
+          if (error.response && error.response.status === 403) {
+            errorMessage += 'You may not have permission to delete this meeting.';
+          } else if (error.response && error.response.data && error.response.data.message) {
+            errorMessage += error.response.data.message;
+          } else {
+            errorMessage += 'Please try again.';
+          }
+          
+          alert(errorMessage);
         }
       }
     },
@@ -966,6 +1080,16 @@ export default {
       this.showAddNotesModal = false;
       this.selectedMeetingForNotes = null;
       this.resetNotesForm();
+    },
+
+    viewMeeting(meeting) {
+      this.selectedMeetingForView = meeting;
+      this.showViewMeetingModal = true;
+    },
+
+    closeViewMeetingModal() {
+      this.showViewMeetingModal = false;
+      this.selectedMeetingForView = null;
     },    resetNotesForm() {
       this.notesForm = {
         notes: '',
@@ -979,6 +1103,7 @@ export default {
     },    resetMeetingForm() {
       this.meetingForm = {
         studentId: '',
+        title: '',
         date: '',
         time: '',
         duration: 60,
@@ -1079,42 +1204,38 @@ export default {
         console.error('Error saving notes:', error);
         alert('Failed to save notes. Please try again.');
       }
-    },async saveMeeting() {
+    },    async saveMeeting() {
       try {
         const student = this.advisees.find(s => s.studentId === this.meetingForm.studentId);
-        
-        console.log('Current user:', this.currentUser);
-        console.log('Selected student:', student);
-        console.log('All advisees:', this.advisees);
         
         if (!student) {
           alert('Please select a valid student');
           return;
-        }        if (this.editingMeeting) {
-          // Update existing meeting
-          const index = this.meetings.findIndex(m => m.id === this.editingMeeting.id);
-          if (index > -1) {
-            this.meetings[index] = {
-              ...this.editingMeeting,
-              student: { 
-                id: student.id, // Use numeric ID for consistency 
-                name: student.name,
-                avatar: this.getInitials(student.name)
-              },
-              ...this.meetingForm
-            };
+        }
 
-            // Update meeting in backend using the new meetings API
-            await advisorService.updateMeeting(
-              this.currentUser.id,
-              this.editingMeeting.id, // Use meeting ID, not student ID
-              {
-                ...this.meetingForm,
-                student_id: student.id
-              }
-            );
-          }        } else {
-          // Create new meeting using the new meetings API
+        if (this.editingMeeting) {
+          // Update existing meeting
+          const updateData = {
+            title: this.meetingForm.title || 'Advisor Meeting',
+            meeting_date: this.meetingForm.date,
+            meeting_time: this.meetingForm.time,
+            duration: this.meetingForm.duration || 60,
+            location: this.meetingForm.location || '',
+            meeting_link: this.meetingForm.meetingLink || '',
+            meeting_type: this.meetingForm.type,
+            status: this.meetingForm.status || 'scheduled',
+            agenda: this.meetingForm.agenda || '',
+            notes: this.meetingForm.notes || '',
+            action_items: this.meetingForm.actionItems || ''
+          };
+
+          await advisorService.updateMeeting(
+            this.currentUser.id,
+            this.editingMeeting.id,
+            updateData
+          );
+        } else {
+          // Create new meeting
           const newMeetingData = {
             title: this.meetingForm.title || 'Advisor Meeting',
             date: this.meetingForm.date,
@@ -1129,36 +1250,26 @@ export default {
             actionItems: this.meetingForm.actionItems || ''
           };
 
-          console.log('Calling scheduleMeeting with:', {
-            advisorId: this.currentUser.id,
-            studentId: student.id,
-            meetingData: newMeetingData
-          });
-          
-          const response = await advisorService.scheduleMeeting(
+          await advisorService.scheduleMeeting(
             this.currentUser.id,
             student.id,
             newMeetingData
           );
-
-          // If successful, reload meetings from backend to get the latest data
-          if (response && response.success) {
-            await this.loadMeetingsFromBackend();
-          }
         }
 
-        // No longer need localStorage storage, everything is in the backend
+        // Reload meetings from backend to get updated data
+        await this.loadMeetingsFromBackend();
         this.closeScheduleModal();
-        
-        // Show success message
         alert('Meeting saved successfully!');
+
       } catch (error) {
         console.error('Error saving meeting:', error);
         
-        // Show more detailed error message
         let errorMessage = 'Failed to save meeting. ';
         if (error.response && error.response.status === 403) {
-          errorMessage += 'You may not have permission to add notes for this student. Please check if you are assigned as their advisor.';
+          errorMessage += 'You may not have permission to modify meetings for this student.';
+        } else if (error.response && error.response.data && error.response.data.message) {
+          errorMessage += error.response.data.message;
         } else {
           errorMessage += 'Please try again.';
         }
@@ -1442,16 +1553,25 @@ export default {
   padding: 20px;
 }
 
-.filter-row {
+.filter-container {
   display: flex;
+  flex-direction: column;
   gap: 16px;
-  align-items: center;
+}
+
+.search-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.filters-row {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .search-box {
   position: relative;
-  flex: 1;
-  max-width: 400px;
+  width: 50%;
 }
 
 .search-icon {
@@ -1461,51 +1581,54 @@ export default {
   transform: translateY(-50%);
   width: 20px;
   height: 20px;
-  color: #9ca3af;
+  color: #6b7280;
   pointer-events: none;
 }
 
 .search-input {
   width: 100%;
-  padding: 10px 12px 10px 40px;
-  border: 1px solid #d1d5db;
+  padding: 12px 12px 12px 44px;
+  border: 2px solid #dee2e6;
   border-radius: 8px;
   font-size: 14px;
-  outline: none;
   transition: border-color 0.2s;
 }
 
 .search-input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  outline: none;
+  border-color: #457B9D;
 }
 
 .filter-group {
   display: flex;
   gap: 12px;
   align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  width: 100%;
 }
 
 .filter-select {
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  padding: 12px;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
   font-size: 14px;
   background: white;
-  outline: none;
   cursor: pointer;
+  transition: border-color 0.2s;
 }
 
 .filter-select:focus {
-  border-color: #3b82f6;
+  outline: none;
+  border-color: #457B9D;
 }
 
 .clear-filter-btn {
-  padding: 8px 16px;
+  padding: 12px 16px;
   background: #ef4444;
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
   cursor: pointer;
   transition: background 0.2s;
@@ -1606,12 +1729,38 @@ export default {
 .table-container {
   padding: 20px;
   overflow-x: auto;
+  background: white;
+  border-radius: 8px;
+}
+
+/* Responsive table scrolling */
+@media (max-width: 1200px) {
+  .data-table {
+    min-width: 1000px;
+  }
+}
+
+@media (max-width: 768px) {
+  .table-container {
+    padding: 16px;
+  }
+  
+  .data-table {
+    min-width: 800px;
+    font-size: 13px;
+  }
+  
+  .data-table th,
+  .data-table td {
+    padding: 10px 8px;
+  }
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
+  table-layout: fixed;
 }
 
 .data-table th {
@@ -1621,7 +1770,18 @@ export default {
   font-weight: 600;
   border-bottom: 1px solid #e5e7eb;
   white-space: nowrap;
+  vertical-align: top;
 }
+
+/* Column width allocation */
+.data-table th:nth-child(1) { width: 18%; } /* Student */
+.data-table th:nth-child(2) { width: 12%; } /* Date & Time */
+.data-table th:nth-child(3) { width: 10%; } /* Type */
+.data-table th:nth-child(4) { width: 8%; }  /* Status */
+.data-table th:nth-child(5) { width: 8%; }  /* Duration */
+.data-table th:nth-child(6) { width: 15%; } /* Location/Link */
+.data-table th:nth-child(7) { width: 20%; } /* Notes Preview */
+.data-table th:nth-child(8) { width: 9%; }  /* Actions */
 
 .data-table th.sortable {
   cursor: pointer;
@@ -1647,6 +1807,9 @@ export default {
 .data-table td {
   padding: 16px 12px;
   border-bottom: 1px solid #f3f4f6;
+  vertical-align: top;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .table-row:hover {
@@ -1760,15 +1923,60 @@ export default {
   color: #b45309;
 }
 
+.location-link-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 20px;
+}
+
+.location {
+  font-size: 12px;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.meeting-link {
+  font-size: 12px;
+}
+
+.link-btn {
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+.no-location {
+  color: #9ca3af;
+  font-style: italic;
+}
+
 .notes-preview {
-  max-width: 200px;
+  max-width: 100%;
   color: #6b7280;
   font-size: 13px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .action-buttons {
   display: flex;
   gap: 4px;
+  justify-content: center;
+  align-items: center;
 }
 
 .action-btn {
@@ -1780,6 +1988,8 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
 }
 
 .action-btn svg {
@@ -2246,6 +2456,16 @@ textarea.form-control {
 }
 
 /* Responsive Design */
+@media (max-width: 1024px) {
+  .search-box {
+    max-width: none;
+  }
+  
+  .filter-group {
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 768px) {
   .meeting-notes {
     padding: 16px;
@@ -2261,17 +2481,23 @@ textarea.form-control {
     justify-content: flex-start;
   }
 
-  .filter-row {
-    flex-direction: column;
-    align-items: stretch;
+  .search-row,
+  .filters-row {
+    justify-content: stretch;
   }
 
   .filter-group {
     justify-content: stretch;
+    width: 100%;
   }
 
   .filter-select {
     flex: 1;
+    min-width: 120px;
+  }
+
+  .clear-filter-btn {
+    flex-shrink: 0;
   }
 
   .stats-grid {

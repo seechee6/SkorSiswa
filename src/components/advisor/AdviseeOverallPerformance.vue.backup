@@ -1,0 +1,1841 @@
+<template>
+  <div class="advisee-overall-performance">
+    <!-- Loading State -->
+    <div v-if="loading" class="loading-container">
+      <div class="loading-spinner"></div>
+      <p>Loading student performance data...</p>
+    </div>
+
+    <!-- Error State -->
+    <div v-if="error" class="error-container">
+      <div class="error-message">
+        <svg class="error-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        {{ error }}
+      </div>
+      <button @click="fetchPerformanceData" class="retry-btn">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        Retry
+      </button>
+    </div>
+
+    <!-- Main Content -->
+    <div v-if="!loading && !error && performanceData" class="main-content">
+      <!-- Header Section -->
+      <div class="performance-header">
+        <div class="back-navigation">
+          <button @click="goBack" class="back-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+            </svg>
+            Back to Advisee List
+          </button>
+        </div>
+        
+        <div class="student-header">
+          <div class="student-info">
+            <div class="student-avatar">
+              <span>{{ getInitials(safeStudent.name) }}</span>
+            </div>
+            <div class="student-details">              <h1>{{ safeStudent.name }}</h1>
+              <p class="student-id">{{ safeStudent.studentId }}</p>
+              <p class="student-program">{{ safeStudent.program }} - Year {{ safeStudent.year }}</p>
+            </div>
+          </div>
+          
+          <div class="quick-actions">
+            <button @click="scheduleMeeting" class="action-btn primary">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+              </svg>
+              Schedule Meeting
+            </button>
+            <button @click="exportReport" class="action-btn secondary">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+              </svg>
+              Export PDF Report
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Performance Overview Cards -->
+      <div class="overview-section">
+        <div class="overview-grid">
+          <div class="overview-card gpa-card">
+            <div class="card-header">
+              <h3>Overall CGPA</h3>
+              <svg class="card-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+              </svg>
+            </div>
+            <div class="card-value">{{ (parseFloat(performanceData.gpa) || 0).toFixed(2) }}</div>
+            <div class="card-status" :class="getGpaStatusClass(performanceData.gpa)">
+              {{ getGpaStatus(performanceData.gpa) }}
+            </div>
+          </div>
+
+          <div class="overview-card">
+            <div class="card-header">
+              <h3>Total Courses</h3>
+              <svg class="card-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+              </svg>
+            </div>
+            <div class="card-value">{{ safeStatistics.total_courses || 0 }}</div>
+            <div class="card-subtitle">Enrolled Courses</div>
+          </div>
+
+          <div class="overview-card">
+            <div class="card-header">
+              <h3>Credit Hours</h3>
+              <svg class="card-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+            <div class="card-value">{{ safeStatistics.total_credit_hours || 0 }}</div>
+            <div class="card-subtitle">Total Credits</div>
+          </div>
+
+          <div class="overview-card">
+            <div class="card-header">
+              <h3>Average Score</h3>
+              <svg class="card-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
+              </svg>
+            </div>
+            <div class="card-value">{{ (parseFloat(safeStatistics.average_marks) || 0).toFixed(1) }}%</div>
+            <div class="card-subtitle">Across All Courses</div>
+          </div>
+        </div>      </div>
+
+      <!-- Course Selection for Comparison -->
+      <div class="comparison-section" v-if="safeCourses.length > 0">
+        <div class="comparison-header">
+          <h3>Course Performance Analysis</h3>
+          <div class="course-selector">
+            <select v-model="selectedCourseForComparison" @change="fetchComparisonData" class="course-select">
+              <option value="">Select Course for Detailed Analysis</option>
+              <option v-for="course in safeCourses" :key="course.course_code" :value="course.course_code">
+                {{ course.course_code }} - {{ course.course_name }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Class Ranking Section -->
+        <div v-if="selectedCourseForComparison && rankingData" class="ranking-section">
+          <div class="analysis-card">
+            <div class="card-header">
+              <h4>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="header-icon">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                </svg>
+                Class Ranking
+              </h4>
+            </div>ton @click="viewFullRanking" class="view-detail-btn">
+            <div class="ranking-content">currentColor" viewBox="0 0 24 24">
+              <div class="ranking-summary">nd" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                <div class="rank-card current-student">
+                  <div class="rank-number">{{ rankingData.current_rank || 'N/A' }}</div>
+                  <div class="rank-label">Student Rank</div>
+                  <div class="rank-total">out of {{ rankingData.total_students || 0 }} students</div>
+                </div>="ranking-content">
+                <div class="rank-stats">y">
+                  <div class="stat-item">rent-student">
+                    <span class="stat-label">Percentile:</span>nt_rank || 'N/A' }}</div>
+                    <span class="stat-value">{{ calculatePercentile(rankingData.current_rank, rankingData.total_students) }}%</span>
+                  </div>lass="rank-total">out of {{ rankingData.total_students || 0 }} students</div>
+                  <div class="stat-item">
+                    <span class="stat-label">Above Average:</span>
+                    <span class="stat-value" :class="getRankStatusClass(rankingData.current_rank, rankingData.total_students)">
+                      {{ getRankStatus(rankingData.current_rank, rankingData.total_students) }}
+                    </span>lass="stat-value">{{ calculatePercentile(rankingData.current_rank, rankingData.total_students) }}%</span>
+                  </div>
+                </div> class="stat-item">
+              </div><span class="stat-label">Above Average:</span>
+            </div>  <span class="stat-value" :class="getRankStatusClass(rankingData.current_rank, rankingData.total_students)">
+          </div>      {{ getRankStatus(rankingData.current_rank, rankingData.total_students) }}
+        </div>      </span>
+                  </div>
+        <!-- Top Performers Section -->
+        <div v-if="selectedCourseForComparison && rankingData && rankingData.top_performers" class="top-performers-section">
+          <div class="analysis-card">
+            <div class="card-header">
+              <h4>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="header-icon">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
+                </svg>ectedCourseForComparison && rankingData && rankingData.top_performers" class="top-performers-section">
+                Top Performers-card">
+              </h4>ass="card-header">
+            </div>
+            <div class="top-performers-content">Color" viewBox="0 0 24 24" class="header-icon">
+              <div class="performers-list">nd" stroke-linejoin="round" stroke-width="2" d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
+                <div v-for="(performer, index) in rankingData.top_performers.slice(0, 5)" :key="performer.student_id || index" class="performer-item" :class="{ 'current-student': performer.student_id === studentId }">
+                  <div class="performer-rank">{{ index + 1 }}</div>
+                  <div class="performer-info">
+                    <div class="performer-name">{{ performer.name || 'Anonymous' }}</div>
+                    <div class="performer-score">{{ (parseFloat(performer.total_score) || 0).toFixed(1) }}%</div>
+                  </div>="performers-list">
+                  <div v-if="performer.student_id === studentId" class="current-indicator">key="performer.student_id || index" class="performer-item" :class="{ 'current-student': performer.student_id === studentId }">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                    </svg>lass="performer-name">{{ performer.name || 'Anonymous' }}</div>
+                  </div> class="performer-score">{{ (parseFloat(performer.total_score) || 0).toFixed(1) }}%</div>
+                </div>v>
+              </div>iv v-if="performer.student_id === studentId" class="current-indicator">
+            </div>  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          </div>      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+        </div>      </svg>
+                  </div>
+        <!-- Class Comparison Section -->
+        <div v-if="selectedCourseForComparison && comparisonData" class="comparison-analysis">
+          <div class="analysis-card">
+            <div class="card-header">
+              <h4>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="header-icon">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                </svg>
+                Class Average Comparison
+              </h4>
+            </div>ton @click="viewFullComparison" class="view-detail-btn">
+            <div class="comparison-content">rentColor" viewBox="0 0 24 24">
+              <div class="comparison-grid">nd" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                <div v-for="component in comparisonData.components" :key="component.component_name" class="comparison-item">
+                  <div class="component-header">
+                    <h5>{{ component.component_name }}</h5>
+                    <div class="weight-badge">{{ component.weight }}%</div>
+                  </div>l="none" stroke="currentColor" viewBox="0 0 24 24" class="header-icon">
+                  <div class="comparison-bars">stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    <div class="bar-container">
+                      <div class="bar-label">Student</div>
+                      <div class="progress-bar">
+                        <div 
+                          class="progress-fill student-bar" 
+                          :style="{ width: getPercentageWidth(component.student_score, component.max_marks) + '%' }"
+                        ></div>ponent in comparisonData.components" :key="component.component_name" class="comparison-item">
+                      </div>="component-header">
+                      <div class="bar-value">{{ (parseFloat(component.student_score) || 0).toFixed(1) }}/{{ component.max_marks }}</div>
+                    </div>lass="weight-badge">{{ component.weight }}%</div>
+                    <div class="bar-container">
+                      <div class="bar-label">Class Avg</div>
+                      <div class="progress-bar">
+                        <div ass="bar-label">Student</div>
+                          class="progress-fill class-avg-bar" 
+                          :style="{ width: getPercentageWidth(component.class_average, component.max_marks) + '%' }"
+                        ></div>="progress-fill student-bar" 
+                      </div>tyle="{ width: getPercentageWidth(component.student_score, component.max_marks) + '%' }"
+                      <div class="bar-value">{{ (parseFloat(component.class_average) || 0).toFixed(1) }}/{{ component.max_marks }}</div>
+                    </div>v>
+                  </div>iv class="bar-value">{{ (parseFloat(component.student_score) || 0).toFixed(1) }}/{{ component.max_marks }}</div>
+                  <div class="performance-indicator" :class="getComparisonClass(component.student_score, component.class_average)">
+                    {{ getComparisonText(component.student_score, component.class_average) }}
+                  </div>iv class="bar-label">Class Avg</div>
+                </div><div class="progress-bar">
+              </div>    <div 
+            </div>        class="progress-fill class-avg-bar" 
+          </div>          :style="{ width: getPercentageWidth(component.class_average, component.max_marks) + '%' }"
+        </div>          ></div>
+                      </div>
+        <!-- Overall Course Comparison -->e">{{ (parseFloat(component.class_average) || 0).toFixed(1) }}/{{ component.max_marks }}</div>
+        <div v-if="selectedCourseForComparison && comparisonData" class="overall-comparison">
+          <div class="analysis-card">
+            <div class="card-header">ance-indicator" :class="getComparisonClass(component.student_score, component.class_average)">
+              <h4>  {{ getComparisonText(component.student_score, component.class_average) }}
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="header-icon">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path>
+                </svg>
+                Overall Course Performance
+              </h4>
+            </div>
+            <div class="overall-stats">-->
+              <div class="overall-stat">arison && comparisonData" class="overall-comparison">
+                <div class="stat-icon student-icon">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                  </svg>l="none" stroke="currentColor" viewBox="0 0 24 24" class="header-icon">
+                </div>h stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path>
+                <div class="stat-content">und" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path>
+                  <div class="stat-label">Student Total</div>
+                  <div class="stat-value">{{ (parseFloat(comparisonData.student_total) || 0).toFixed(1) }}%</div>
+                </div>
+              </div>
+              <div class="overall-stat">
+                <div class="stat-icon class-icon">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                  </svg>h stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                </div>g>
+                <div class="stat-content">
+                  <div class="stat-label">Class Average</div>
+                  <div class="stat-value">{{ (parseFloat(comparisonData.class_average_total) || 0).toFixed(1) }}%</div>
+                </div> class="stat-value">{{ (parseFloat(comparisonData.student_total) || 0).toFixed(1) }}%</div>
+              </div>v>
+              <div class="overall-stat">
+                <div class="stat-icon difference-icon" :class="getOverallComparisonClass(comparisonData.student_total, comparisonData.class_average_total)">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                  </svg>h stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                </div>g>
+                <div class="stat-content">
+                  <div class="stat-label">Difference</div>
+                  <div class="stat-value" :class="getOverallComparisonClass(comparisonData.student_total, comparisonData.class_average_total)">
+                    {{ getOverallDifference(comparisonData.student_total, comparisonData.class_average_total) }}%</div>
+                  </div>
+                </div>
+              </div>lass="overall-stat">
+            </div>iv class="stat-icon difference-icon" :class="getOverallComparisonClass(comparisonData.student_total, comparisonData.class_average_total)">
+          </div>  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        </div>      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                  </svg>
+        <!-- Loading State for Comparison -->
+        <div v-if="selectedCourseForComparison && comparisonLoading" class="comparison-loading">
+          <div class="loading-spinner"></div>ference</div>
+          <p>Loading comparison data...</p>class="getOverallComparisonClass(comparisonData.student_total, comparisonData.class_average_total)">
+        </div>      {{ getOverallDifference(comparisonData.student_total, comparisonData.class_average_total) }}
+                  </div>
+        <!-- No Data State -->
+        <div v-if="selectedCourseForComparison && !comparisonLoading && !comparisonData && !rankingData" class="no-comparison-data">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <h4>No comparison data available</h4>
+          <p>Comparison data is not available for this course yet.</p>
+        </div>-if="selectedCourseForComparison && comparisonLoading" class="comparison-loading">
+      </div>iv class="loading-spinner"></div>
+          <p>Loading comparison data...</p>
+      <!-- Detailed Course Performance -->
+      <div class="courses-section">
+        <div class="section-header">
+          <h3>Course-by-Course Performance</h3>&& !comparisonLoading && !comparisonData && !rankingData" class="no-comparison-data">
+          <div class="view-controls">rrentColor" viewBox="0 0 24 24">
+            <button roke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              @click="viewMode = 'cards'" 
+              :class="{ active: viewMode === 'cards' }"
+              class="view-btn"s not available for this course yet.</p>
+            >>
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+              </svg>Course Performance -->
+              Cardsourses-section">
+            </button>ection-header">
+            <button -by-Course Performance</h3>
+              @click="viewMode = 'table'" 
+              :class="{ active: viewMode === 'table' }"
+              class="view-btn" = 'cards'" 
+            > :class="{ active: viewMode === 'cards' }"
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+              </svg>ill="none" stroke="currentColor" viewBox="0 0 24 24">
+              Tableth stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+            </button>
+          </div>rds
+        </div>button>
+            <button 
+        <!-- Cards View -->ode = 'table'" 
+        <div v-if="viewMode === 'cards'" class="courses-grid">
+          <div lass="view-btn"
+            v-for="course in safeCourses" 
+            :key="course.course_code"="currentColor" viewBox="0 0 24 24">
+            class="course-card"necap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+            @click="viewCourseDetails(course)"
+          >   Table
+            <div class="course-header">
+              <div class="course-info">
+                <h4>{{ course.course_code }}</h4>
+                <p>{{ course.course_name }}</p>
+              </div>iew -->
+              <div class="course-grade" :class="getGradeClass(course.grade)">
+                {{ course.grade }}
+              </div>ourse in safeCourses" 
+            </div>course.course_code"
+            class="course-card"
+            <div class="course-metrics">urse)"
+              <div class="metric">
+                <span class="metric-label">Total Score</span>
+                <span class="metric-value">{{ (parseFloat(course.total_marks) || 0).toFixed(1) }}%</span>
+              </div>{{ course.course_code }}</h4>
+              <div class="metric">e_name }}</p>
+                <span class="metric-label">Final Exam</span>
+                <span class="metric-value">{{ (parseFloat(course.final_exam_marks) || 0).toFixed(1) }}%</span>
+              </div>ourse.grade }}
+              <div class="metric">
+                <span class="metric-label">Credits</span>
+                <span class="metric-value">{{ course.credit_hours }}</span>
+              </div>ss="course-metrics">
+            </div> class="metric">
+                <span class="metric-label">Total Score</span>
+            <div class="course-progress">">{{ (parseFloat(course.total_marks) || 0).toFixed(1) }}%</span>
+              <div class="progress-bar">
+                <div ass="metric">
+                  class="progress-fill" l">Final Exam</span>
+                  :style="{ width: (course.total_marks || 0) + '%' }"l_exam_marks) || 0).toFixed(1) }}%</span>
+                  :class="getPerformanceClass(course.total_marks)"
+                ></div>s="metric">
+              </div>n class="metric-label">Credits</span>
+              <span class="progress-text">{{ getPerformanceLabel(course.total_marks) }}</span>
+            </div>v>
+          </div>v>
+        </div>
+            <div class="course-progress">
+        <!-- Table View -->rogress-bar">
+        <div v-if="viewMode === 'table'" class="courses-table-container">
+          <table class="courses-table"> 
+            <thead>style="{ width: (course.total_marks || 0) + '%' }"
+              <tr>:class="getPerformanceClass(course.total_marks)"
+                <th>Course Code</th>
+                <th>Course Name</th>
+                <th>Credits</th>ess-text">{{ getPerformanceLabel(course.total_marks) }}</span>
+                <th>Coursework</th>
+                <th>Final Exam</th>
+                <th>Total Score</th>
+                <th>Grade</th>
+                <th>Status</th>
+                <th>Actions</th>'table'" class="courses-table-container">
+              </tr>ass="courses-table">
+            </thead>
+            <tbody>
+              <tr v-for="course in safeCourses" :key="course.course_code" class="course-row">
+                <td class="course-code">{{ course.course_code }}</td>
+                <td class="course-name">{{ course.course_name }}</td>
+                <td class="credits">{{ course.credit_hours }}</td>
+                <td class="coursework">
+                  {{ ((parseFloat(course.total_marks) || 0) - (parseFloat(course.final_exam_marks) || 0)).toFixed(1) }}%
+                </td>rade</th>
+                <td class="final-exam">{{ (parseFloat(course.final_exam_marks) || 0).toFixed(1) }}%</td>
+                <td class="total-score">
+                  <span :class="getPerformanceClass(course.total_marks)">
+                    {{ (parseFloat(course.total_marks) || 0).toFixed(1) }}%
+                  </span>
+                </td>or="course in safeCourses" :key="course.course_code" class="course-row">
+                <td class="grade">code">{{ course.course_code }}</td>
+                  <span :class="getGradeClass(course.grade)">{{ course.grade }}</span>
+                </td>lass="credits">{{ course.credit_hours }}</td>
+                <td class="status">rk">
+                  <span class="status-badge" :class="getStatusClass(course.total_marks)">am_marks) || 0)).toFixed(1) }}%
+                    {{ getStatusLabel(course.total_marks) }}
+                  </span>="final-exam">{{ (parseFloat(course.final_exam_marks) || 0).toFixed(1) }}%</td>
+                </td>lass="total-score">
+                <td class="actions">erformanceClass(course.total_marks)">
+                  <button @click="viewCourseDetails(course)" class="action-btn-small">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                    </svg>lass="getGradeClass(course.grade)">{{ course.grade }}</span>
+                  </button>
+                </td>lass="status">
+              </tr>span class="status-badge" :class="getStatusClass(course.total_marks)">
+            </tbody>{{ getStatusLabel(course.total_marks) }}
+          </table></span>
+        </div>  </td>
+      </div>    <td class="actions">
+                  <button @click="viewCourseDetails(course)" class="action-btn-small">
+      <!-- Assessment Breakdown Section -->="currentColor" viewBox="0 0 24 24">
+      <div v-if="selectedCourse" class="assessment-section">nejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+        <div class="section-header">inecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+          <h3>Assessment Breakdown - {{ selectedCourse.course_code }}</h3>
+          <button @click="selectedCourse = null" class="close-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>y>
+          </button>
+        </div>
+      </div>
+        <div class="assessment-grid" v-if="getAssessmentsForCourse(selectedCourse.course_code).length > 0">
+          <div ssment Breakdown Section -->
+            v-for="assessment in getAssessmentsForCourse(selectedCourse.course_code)" 
+            :key="assessment.assessment_name"
+            class="assessment-card"- {{ selectedCourse.course_code }}</h3>
+          >button @click="selectedCourse = null" class="close-btn">
+            <div class="assessment-header">tColor" viewBox="0 0 24 24">
+              <h4>{{ assessment.assessment_name }}</h4>oin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              <span class="assessment-type">{{ assessment.assessment_type }}</span>
+            </div>>
+            <div class="assessment-details">
+              <div class="score">
+                <span class="score-value">{{ assessment.marks_obtained || 0 }}</span>rse_code).length > 0">
+                <span class="score-max">/ {{ assessment.max_marks }}</span>
+              </div>ssessment in getAssessmentsForCourse(selectedCourse.course_code)" 
+              <div class="percentage">{{ getAssessmentPercentage(assessment) }}%</div>
+              <div class="weight">Weight: {{ assessment.weightage }}%</div>
+            </div>
+          </div> class="assessment-header">
+        </div><h4>{{ assessment.assessment_name }}</h4>
+              <span class="assessment-type">{{ assessment.assessment_type }}</span>
+        <div v-else class="no-assessments">
+          <p>No detailed assessment breakdown available for this course.</p>
+        </div><div class="score">
+      </div>    <span class="score-value">{{ assessment.marks_obtained || 0 }}</span>
+                <span class="score-max">/ {{ assessment.max_marks }}</span>
+      <!-- Recent Meetings Section -->
+      <div v-if="performanceData.recent_meetings?.length > 0" class="meetings-section">
+        <div class="section-header">ight: {{ assessment.weightage }}%</div>
+          <h3>Recent Meetings & Notes</h3>
+          <button @click="goToMeetingNotes" class="view-all-btn">
+            View All Meetings
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+            </svg>tailed assessment breakdown available for this course.</p>
+          </button>
+        </div>
+
+        <div class="meetings-list">-->
+          <div ="performanceData.recent_meetings?.length > 0" class="meetings-section">
+            v-for="meeting in performanceData.recent_meetings.slice(0, 3)" 
+            :key="meeting.id || meeting.meeting_date"
+            class="meeting-item"etingNotes" class="view-all-btn">
+          > View All Meetings
+            <div class="meeting-date">urrentColor" viewBox="0 0 24 24">
+              <div class="date">{{ formatDate(meeting.meeting_date) }}</div>dth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+              <div class="time">{{ meeting.meeting_time }}</div>
+            </div>>
+            <div class="meeting-content">
+              <div class="meeting-type">{{ meeting.meeting_type || 'Academic' }}</div>
+              <div class="meeting-notes">{{ meeting.notes || 'No notes available' }}</div>
+            </div>
+            <div class="meeting-status" :class="meeting.status">ice(0, 3)" 
+              {{ meeting.status }}eting.meeting_date"
+            </div>"meeting-item"
+          </div>
+        </div>iv class="meeting-date">
+      </div>  <div class="date">{{ formatDate(meeting.meeting_date) }}</div>
+    </div>    <div class="time">{{ meeting.meeting_time }}</div>
+  </div>    </div>
+</template> <div class="meeting-content">
+              <div class="meeting-type">{{ meeting.meeting_type || 'Academic' }}</div>
+<script>      <div class="meeting-notes">{{ meeting.notes || 'No notes available' }}</div>
+import { advisorService } from '../../services/advisor.js';
+import { auth } from '../../utils/auth.js';ass="meeting.status">
+import { jsPDF } from 'jspdf';s }}
+import autoTable from 'jspdf-autotable';
+import api from '../../api.js';
+        </div>
+export default {
+  name: 'AdviseeOverallPerformance',
+  props: {
+    studentId: {
+      type: String,
+      required: true
+    }t { advisorService } from '../../services/advisor.js';
+  },rt { auth } from '../../utils/auth.js';
+  data() {sPDF } from 'jspdf';
+    return {able from 'jspdf-autotable';
+      currentUser: null,pi.js';
+      performanceData: null,
+      loading: false,      error: null,
+      viewMode: 'cards', // 'cards' or 'table'
+      selectedCourse: null,
+      selectedCourseForComparison: '',
+      comparisonData: null,
+      rankingData: null,
+      comparisonLoading: false
+    };  },
+  computed: {
+    safeCourses() {
+      return (this.performanceData && this.performanceData.courses) 
+        ? this.performanceData.courses 
+        : [];: false,      error: null,
+    },viewMode: 'cards', // 'cards' or 'table'
+    safeStudent() {e: null,
+      return (this.performanceData && this.performanceData.student) 
+        ? this.performanceData.student 
+        : { name: 'Unknown', studentId: 'N/A', program: 'N/A', year: 'N/A' };
+    },comparisonLoading: false
+    safeStatistics() {
+      return (this.performanceData && this.performanceData.statistics) 
+        ? this.performanceData.statistics 
+        : { average_marks: 0, total_credit_hours: 0 };Data.courses) 
+    }   ? this.performanceData.courses 
+  },    : [];
+  async created() {
+    this.currentUser = auth.getCurrentUser();
+      return (this.performanceData && this.performanceData.student) 
+    if (!this.currentUser || !auth.isAdvisor()) {
+      this.error = 'Access denied. Advisor privileges required.';ar: 'N/A' };
+      return;
+    }afeStatistics() {
+      return (this.performanceData && this.performanceData.statistics) 
+    await this.fetchPerformanceData();ics 
+  },    : { average_marks: 0, total_credit_hours: 0 };
+  methods: {
+    async fetchPerformanceData() {
+      if (!this.currentUser || !this.currentUser.id) {
+        this.error = 'User not authenticated';
+        return;
+      }(!this.currentUser || !auth.isAdvisor()) {
+      this.error = 'Access denied. Advisor privileges required.';
+      this.loading = true;
+      this.error = null;
+      
+      try {his.fetchPerformanceData();
+        const response = await advisorService.getAdviseePerformance(
+          this.currentUser.id, 
+          this.studentIdceData() {
+        );!this.currentUser || !this.currentUser.id) {
+        this.error = 'User not authenticated';
+        if (response.success) {
+          this.performanceData = response.data;
+          console.log('Performance data received:', this.performanceData);
+        } else {ng = true;
+          this.error = response.message || 'Failed to fetch performance data';
+        }
+      } catch (error) {
+        console.error('Error fetching performance data:', error);ce(
+        this.error = 'Failed to load performance data. Please try again.';
+      } finally {udentId
+        this.loading = false;
+      } 
+    },  if (response.success) {
+          this.performanceData = response.data;
+    getInitials(name) {Performance data received:', this.performanceData);
+      if (!name) return 'N/A';
+      return name.split(' ').map(n => n[0]).join('').toUpperCase();ance data';
+    },  }
+      } catch (error) {
+    getGpaStatus(gpa) {Error fetching performance data:', error);
+      if (gpa >= 3.5) return 'Excellent';ormance data. Please try again.';
+      if (gpa >= 3.0) return 'Good';
+      if (gpa >= 2.0) return 'Satisfactory';
+      return 'Needs Improvement';
+    },
+
+    getGpaStatusClass(gpa) {
+      if (gpa >= 3.5) return 'excellent';
+      if (gpa >= 3.0) return 'good';> n[0]).join('').toUpperCase();
+      if (gpa >= 2.0) return 'satisfactory';
+      return 'poor';
+    },    getPerformanceClass(score) {
+      const numScore = parseFloat(score) || 0;
+      if (numScore >= 80) return 'excellent';
+      if (numScore >= 70) return 'good';ry';
+      if (numScore >= 60) return 'satisfactory';
+      return 'poor';
+    },    getPerformanceLabel(score) {
+      const numScore = parseFloat(score) || 0;
+      if (numScore >= 80) return 'Excellent';
+      if (numScore >= 70) return 'Good';
+      if (numScore >= 60) return 'Satisfactory';
+      if (numScore > 0) return 'Needs Improvement';
+      return 'No Data';eClass(score) {
+    },const numScore = parseFloat(score) || 0;
+      if (numScore >= 80) return 'excellent';
+    getGradeClass(grade) {return 'good';
+      if (!grade) return 'grade-f';atisfactory';
+      const gradeUpper = grade.toUpperCase();
+      if (['A+', 'A'].includes(gradeUpper)) return 'grade-a';
+      if (['A-', 'B+'].includes(gradeUpper)) return 'grade-b-plus';
+      if (['B', 'B-'].includes(gradeUpper)) return 'grade-b';
+      if (['C+', 'C'].includes(gradeUpper)) return 'grade-c';
+      return 'grade-f';0) return 'Satisfactory';
+    },if (numScore > 0) return 'Needs Improvement';
+      return 'No Data';
+    getStatusClass(score) {
+      if (!score) return 'status-missing';
+      if (score >= 80) return 'status-excellent';
+      if (score >= 70) return 'status-good';
+      if (score >= 60) return 'status-satisfactory';
+      return 'status-poor';des(gradeUpper)) return 'grade-a';
+    },if (['A-', 'B+'].includes(gradeUpper)) return 'grade-b-plus';
+      if (['B', 'B-'].includes(gradeUpper)) return 'grade-b';
+    getStatusLabel(score) {des(gradeUpper)) return 'grade-c';
+      if (!score) return 'Missing';
+      if (score >= 80) return 'Excellent';
+      if (score >= 70) return 'Good';
+      if (score >= 60) return 'Pass';
+      return 'At Risk';n 'status-missing';
+    },if (score >= 80) return 'status-excellent';
+      if (score >= 70) return 'status-good';
+    getAssessmentsForCourse(courseCode) {isfactory';
+      if (!this.performanceData?.assessments) return [];
+      return this.performanceData.assessments[courseCode] || [];
+    },
+    getStatusLabel(score) {
+    getAssessmentPercentage(assessment) {
+      if (!assessment.max_marks || assessment.max_marks === 0) return 0;
+      return ((parseFloat(assessment.marks_obtained) || 0) / parseFloat(assessment.max_marks) * 100).toFixed(1);
+    },if (score >= 60) return 'Pass';
+      return 'At Risk';
+    viewCourseDetails(course) {
+      this.selectedCourse = course;
+      // Scroll to assessment sectione) {
+      this.$nextTick(() => {ata?.assessments) return [];
+        const element = document.querySelector('.assessment-section');
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }sessmentPercentage(assessment) {
+      });(!assessment.max_marks || assessment.max_marks === 0) return 0;
+    },return ((parseFloat(assessment.marks_obtained) || 0) / parseFloat(assessment.max_marks) * 100).toFixed(1);
+    },
+    formatDate(dateString) {
+      if (!dateString) return 'N/A';
+      try {selectedCourse = course;
+        return new Date(dateString).toLocaleDateString();
+      } catch (e) {k(() => {
+        return dateString;cument.querySelector('.assessment-section');
+      } if (element) {
+    },    element.scrollIntoView({ behavior: 'smooth' });
+        }
+    goBack() {
+      this.$router.push('/advisor/advisee-list');
+    },
+    formatDate(dateString) {
+    goToMeetingNotes() {eturn 'N/A';
+      this.$router.push('/advisor/meeting-notes');
+    },  return new Date(dateString).toLocaleDateString();
+      } catch (e) {
+    scheduleMeeting() {ng;
+      // Navigate to meeting notes with scheduling modal
+      this.$router.push({
+        path: '/advisor/meeting-notes',
+        query: { schedule: this.studentId }
+      });s.$router.push('/advisor/advisee-list');
+    },
+
+    exportReport() {() {
+      // Generate and download performance report;
+      this.generatePerformanceReport();
+    },    generatePerformanceReport() {
+      if (!this.performanceData) return;
+      // Navigate to meeting notes with scheduling modal
+      const student = this.safeStudent;
+      const courses = this.safeCourses;
+        query: { schedule: this.studentId }
+      // Create new PDF document
+      const doc = new jsPDF();
+      
+      // Add title {
+      doc.setFontSize(20);load performance report
+      doc.setTextColor(29, 53, 87); // #1D3557
+      doc.text('Student Performance Report', 20, 25);
+      if (!this.performanceData) return;
+      // Add student information
+      doc.setFontSize(12);.safeStudent;
+      doc.setTextColor(0, 0, 0);ourses;
+      doc.text(`Student Name: ${student.name}`, 20, 45);
+      doc.text(`Student ID: ${student.studentId}`, 20, 55);
+      doc.text(`Program: ${student.program}`, 20, 65);
+      doc.text(`Overall CGPA: ${(parseFloat(this.performanceData.gpa) || 0).toFixed(2)}`, 20, 75);
+      // Add title
+      // Add generation date
+      const currentDate = new Date().toLocaleDateString();
+      doc.text(`Report Generated: ${currentDate}`, 20, 85);
+      
+      // Prepare table dataation
+      const tableData = courses.map(course => [
+        course.course_code || 'N/A',
+        course.course_name || 'N/A',ent.name}`, 20, 45);
+        course.credit_hours || 0,dent.studentId}`, 20, 55);
+        `${(parseFloat(course.total_marks) || 0).toFixed(1)}%`,
+        `${(parseFloat(course.final_exam_marks) || 0).toFixed(1)}%`,) || 0).toFixed(2)}`, 20, 75);
+        course.grade || 'N/A'
+      ]);Add generation date
+      const currentDate = new Date().toLocaleDateString();
+      // Add course performance table using autoTable, 85);
+      autoTable(doc, {
+        head: [['Course Code', 'Course Name', 'Credits', 'Total Score', 'Final Exam', 'Grade']],
+        body: tableData,courses.map(course => [
+        startY: 100,e_code || 'N/A',
+        theme: 'grid',name || 'N/A',
+        headStyles: {_hours || 0,
+          fillColor: [69, 123, 157], // #457B9D).toFixed(1)}%`,
+          textColor: 255,urse.final_exam_marks) || 0).toFixed(1)}%`,
+          fontStyle: 'bold'A'
+        },
+        bodyStyles: {
+          textColor: 50formance table using autoTable
+        },Table(doc, {
+        alternateRowStyles: {, 'Course Name', 'Credits', 'Total Score', 'Final Exam', 'Grade']],
+          fillColor: [248, 250, 252] // #f8fafc
+        },artY: 100,
+        margin: { top: 100, left: 20, right: 20 },
+        columnStyles: {
+          0: { cellWidth: 25 },157], // #457B9D
+          1: { cellWidth: 60 },
+          2: { cellWidth: 20 },
+          3: { cellWidth: 25 },
+          4: { cellWidth: 25 },
+          5: { cellWidth: 20 }
+        },
+      });lternateRowStyles: {
+          fillColor: [248, 250, 252] // #f8fafc
+      // Add summary statistics if available
+      if (this.safeStatistics) {: 20, right: 20 },
+        const finalY = doc.lastAutoTable.finalY + 20;
+        doc.setFontSize(14); },
+        doc.setTextColor(29, 53, 87);
+        doc.text('Summary Statistics', 20, finalY);
+          3: { cellWidth: 25 },
+        doc.setFontSize(11); },
+        doc.setTextColor(0, 0, 0);
+        doc.text(`Total Courses: ${this.safeStatistics.total_courses || courses.length}`, 20, finalY + 15);
+        doc.text(`Total Credit Hours: ${this.safeStatistics.total_credit_hours || 0}`, 20, finalY + 25);
+        doc.text(`Average Score: ${(parseFloat(this.safeStatistics.average_marks) || 0).toFixed(1)}%`, 20, finalY + 35);
+      }/ Add summary statistics if available
+      if (this.safeStatistics) {
+      // Add footerY = doc.lastAutoTable.finalY + 20;
+      const pageCount = doc.internal.getNumberOfPages();
+      doc.setFontSize(8);29, 53, 87);
+      doc.setTextColor(128, 128, 128); 20, finalY);
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);(11);
+        doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.width - 40, doc.internal.pageSize.height - 10);
+        doc.text('Generated by Course Mark Management System', 20, doc.internal.pageSize.height - 10); 15);
+      } doc.text(`Total Credit Hours: ${this.safeStatistics.total_credit_hours || 0}`, 20, finalY + 25);
+        // Save the PDFge Score: ${(parseFloat(this.safeStatistics.average_marks) || 0).toFixed(1)}%`, 20, finalY + 35);
+      doc.save(`${student.name}_Performance_Report.pdf`);
+    },
+      // Add footer
+    async fetchComparisonData() {nal.getNumberOfPages();
+      if (!this.selectedCourseForComparison || !this.currentUser) return;
+      doc.setTextColor(128, 128, 128);
+      this.comparisonLoading = true;; i++) {
+      this.comparisonData = null;
+      this.rankingData = null; ${pageCount}`, doc.internal.pageSize.width - 40, doc.internal.pageSize.height - 10);
+        doc.text('Generated by Course Mark Management System', 20, doc.internal.pageSize.height - 10);
+      try {
+        // Get the course ID for the selected course
+        const selectedCourse = this.safeCourses.find(course => course.course_code === this.selectedCourseForComparison);
+        if (!selectedCourse) {
+          console.warn('Selected course not found:', this.selectedCourseForComparison);
+          return;mparisonData() {
+        }(!this.selectedCourseForComparison || !this.currentUser) return;
+
+        console.log('Fetching comparison data for:', {
+          studentId: this.studentId,
+          courseId: selectedCourse.course_id || selectedCourse.id,
+          courseCode: selectedCourse.course_code
+        });
+        // Get the course ID for the selected course
+        // Try different possible course ID field namesurse => course.course_code === this.selectedCourseForComparison);
+        const courseId = selectedCourse.course_id || selectedCourse.id || selectedCourse.course_code;
+          console.warn('Selected course not found:', this.selectedCourseForComparison);
+        // Fetch comparison and ranking data
+        const [comparisonResponse, rankingResponse] = await Promise.allSettled([
+          api.student.getComparison(this.studentId, courseId),
+          api.student.getRanking(this.studentId, courseId)
+        ]);tudentId: this.studentId,
+          courseId: selectedCourse.course_id || selectedCourse.id,
+        // Handle comparison datarse.course_code
+        if (comparisonResponse.status === 'fulfilled' && comparisonResponse.value?.data) {
+          this.comparisonData = comparisonResponse.value.data;
+          console.log('Comparison data received:', this.comparisonData);
+        } else {urseId = selectedCourse.course_id || selectedCourse.id || selectedCourse.course_code;
+          console.warn('Failed to fetch comparison data:', comparisonResponse.reason);
+        }/ Fetch comparison and ranking data
+        const [comparisonResponse, rankingResponse] = await Promise.allSettled([
+        // Handle ranking datarison(this.studentId, courseId),
+        if (rankingResponse.status === 'fulfilled' && rankingResponse.value?.data) {
+          this.rankingData = rankingResponse.value.data;
+          console.log('Ranking data received:', this.rankingData);
+        } else {e comparison data
+          console.warn('Failed to fetch ranking data:', rankingResponse.reason);e?.data) {
+        } this.comparisonData = comparisonResponse.value.data;
+          console.log('Comparison data received:', this.comparisonData);
+        // If no data was received, show a message
+        if (!this.comparisonData && !this.rankingData) {', comparisonResponse.reason);
+          console.log('No comparison or ranking data available for this course');
+        }
+        // Handle ranking data
+      } catch (error) {onse.status === 'fulfilled' && rankingResponse.value?.data) {
+        console.error('Error fetching comparison data:', error);
+      } finally {.log('Ranking data received:', this.rankingData);
+        this.comparisonLoading = false;
+      }   console.warn('Failed to fetch ranking data:', rankingResponse.reason);
+    },  }
+
+    viewFullComparison() {received, show a message
+      // Navigate to the student comparison component with pre-selected course
+      this.$router.push({ comparison or ranking data available for this course');
+        path: `/student/compare`,
+        query: { 
+          studentId: this.studentId, 
+          courseId: this.selectedCourseForComparison,:', error);
+          fromAdvisor: true 
+        }his.comparisonLoading = false;
+      });
+    },
+
+    viewFullRanking() {) {
+      // Navigate to the student ranking component with pre-selected courserse
+      this.$router.push({
+        path: `/student/ranking`,
+        query: { 
+          studentId: this.studentId, 
+          courseId: this.selectedCourseForComparison,
+          fromAdvisor: true 
+        }
+      });
+    },
+
+    calculatePercentile(rank, total) {
+      if (!rank || !total) return 0;king component with pre-selected course
+      return Math.round(((total - rank + 1) / total) * 100);
+    },  path: `/student/ranking`,
+        query: { 
+    getRankStatus(rank, total) {tId, 
+      const percentile = this.calculatePercentile(rank, total);
+      if (percentile >= 75) return 'Excellent';
+      if (percentile >= 50) return 'Above Average';
+      if (percentile >= 25) return 'Average';
+      return 'Below Average';
+    },
+    calculatePercentile(rank, total) {
+    getRankStatusClass(rank, total) {
+      const percentile = this.calculatePercentile(rank, total);
+      if (percentile >= 75) return 'excellent';
+      if (percentile >= 50) return 'good';
+      if (percentile >= 25) return 'average';
+      return 'poor';le = this.calculatePercentile(rank, total);
+    },if (percentile >= 75) return 'Excellent';
+      if (percentile >= 50) return 'Above Average';
+    getPercentageWidth(score, maxMarks) {ge';
+      if (!score || !maxMarks) return 0;
+      return Math.min((parseFloat(score) / parseFloat(maxMarks)) * 100, 100);
+    },
+    getRankStatusClass(rank, total) {
+    getComparisonClass(studentScore, classAverage) {nk, total);
+      const student = parseFloat(studentScore) || 0;
+      const average = parseFloat(classAverage) || 0;
+      const difference = student - average;';
+      return 'poor';
+      if (difference > 5) return 'above-average';
+      if (difference > 0) return 'slightly-above';
+      if (difference > -5) return 'slightly-below';
+      return 'below-average';) return 0;
+    },return Math.min((parseFloat(score) / parseFloat(maxMarks)) * 100, 100);
+    },
+    getComparisonText(studentScore, classAverage) {
+      const student = parseFloat(studentScore) || 0;
+      const average = parseFloat(classAverage) || 0;
+      const difference = student - average;ge) || 0;
+      const difference = student - average;
+      if (difference > 5) return `+${difference.toFixed(1)} above class average`;
+      if (difference > 0) return `+${difference.toFixed(1)} above average`;
+      if (difference > -5) return `${difference.toFixed(1)} below average`;
+      return `${difference.toFixed(1)} below class average`;
+    },return 'below-average';
+    },
+    getOverallComparisonClass(studentTotal, classTotal) {
+      const student = parseFloat(studentTotal) || 0;
+      const classAvg = parseFloat(classTotal) || 0;;
+      const average = parseFloat(classAverage) || 0;
+      if (student > classAvg) return 'positive';
+      if (student === classAvg) return 'neutral';
+      return 'negative';) return `+${difference.toFixed(1)} above class average`;
+    },if (difference > 0) return `+${difference.toFixed(1)} above average`;
+      if (difference > -5) return `${difference.toFixed(1)} below average`;
+    getOverallDifference(studentTotal, classTotal) {verage`;
+      const student = parseFloat(studentTotal) || 0;
+      const classAvg = parseFloat(classTotal) || 0;
+      const difference = student - classAvg;classTotal) {
+      const student = parseFloat(studentTotal) || 0;
+      if (difference > 0) return `+${difference.toFixed(1)}%`;
+      return `${difference.toFixed(1)}%`;
+    } if (student > classAvg) return 'positive';
+  }   if (student === classAvg) return 'neutral';
+};    return 'negative';
+</script>
+
+<style scoped>Difference(studentTotal, classTotal) {
+.advisee-overall-performance {at(studentTotal) || 0;
+  min-height: 100vh; = parseFloat(classTotal) || 0;
+  background: #f8fafc; = student - classAvg;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}     if (difference > 0) return `+${difference.toFixed(1)}%`;
+      return `${difference.toFixed(1)}%`;
+/* Loading and Error States */
+.loading-container, .error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;formance {
+  text-align: center;
+  padding: 2rem;8fafc;
+} font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.loading-spinner {
+  width: 40px; Error States */
+  height: 40px;ner, .error-container {
+  border: 4px solid #e5e7eb;
+  border-top: 4px solid #3b82f6;
+  border-radius: 50%;;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+} text-align: center;
+  padding: 2rem;
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+} width: 40px;
+  height: 40px;
+.error-message {lid #e5e7eb;
+  display: flex;x solid #3b82f6;
+  align-items: center;
+  gap: 0.5rem;pin 1s linear infinite;
+  color: #dc2626;1rem;
+  margin-bottom: 1rem;
+}
+@keyframes spin {
+.error-icon {orm: rotate(0deg); }
+  width: 20px;form: rotate(360deg); }
+  height: 20px;
+}
+.error-message {
+.retry-btn, .back-btn {
+  display: flex;enter;
+  align-items: center;
+  gap: 0.5rem;26;
+  padding: 0.5rem 1rem;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}retry-btn, .back-btn {
+  display: flex;
+.retry-btn:hover, .back-btn:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+} background: #3b82f6;
+  color: white;
+/* Header Section */
+.performance-header {em;
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 1.5rem 2rem;
+}
+
+.back-navigation {.back-btn:hover {
+  margin-bottom: 1rem;
+} transform: translateY(-1px);
+}
+.back-btn svg {
+  width: 16px;ion */
+  height: 16px;ader {
+} background: white;
+  border-bottom: 1px solid #e5e7eb;
+.student-header { 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;rem;
+  gap: 1rem;
+}
+.back-btn svg {
+.student-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}student-header {
+  display: flex;
+.student-avatar {: space-between;
+  width: 60px; center;
+  height: 60px;ap;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;center;
+  font-weight: 600;
+  font-size: 1.25rem;
+}
+.student-avatar {
+.student-details h1 {
+  margin: 0;px;
+  font-size: 1.5rem;-gradient(135deg, #3b82f6, #1d4ed8);
+  font-weight: 700;%;
+  color: #111827;
+} align-items: center;
+  justify-content: center;
+.student-id {e;
+  margin: 0.25rem 0;
+  color: #6b7280;rem;
+  font-weight: 500;
+}
+.student-details h1 {
+.student-program {
+  margin: 0; 1.5rem;
+  color: #9ca3af;0;
+  font-size: 0.875rem;
+}
+
+.quick-actions {
+  display: flex;m 0;
+  gap: 0.75rem;0;
+  flex-wrap: wrap;;
+}
+
+.action-btn {ram {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;.875rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.5rem;
+  border: none;{
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.action-btn {
+.action-btn.primary {
+  background: #3b82f6;
+  color: white;
+} padding: 0.625rem 1.25rem;
+  border-radius: 0.5rem;
+.action-btn.primary:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+} cursor: pointer;
+  transition: all 0.2s;
+.action-btn.secondary {
+  background: #f3f4f6;
+  color: #374151;ry {
+  border: 1px solid #d1d5db;
+} color: white;
+}
+.action-btn.secondary:hover {
+  background: #e5e7eb;ver {
+} background: #2563eb;
+  transform: translateY(-1px);
+.action-btn svg {
+  width: 16px;
+  height: 16px;ondary {
+} background: #f3f4f6;
+  color: #374151;
+/* Overview Cards */#d1d5db;
+.overview-section {
+  padding: 2rem;
+}action-btn.secondary:hover {
+  background: #e5e7eb;
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+} height: 16px;
+}
+.overview-card {
+  background: white;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+  transition: transform 0.2s, box-shadow 0.2s;
+} display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+.overview-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}overview-card {
+  background: white;
+.card-header {s: 0.75rem;
+  display: flex;m;
+  justify-content: space-between;, 0, 0.1);
+  align-items: center;5e7eb;
+  margin-bottom: 1rem;m 0.2s, box-shadow 0.2s;
+}
+
+.card-header h3 {ver {
+  margin: 0; translateY(-2px);
+  font-size: 0.875rem;px rgba(0, 0, 0, 0.15);
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+} justify-content: space-between;
+  align-items: center;
+.card-icon {tom: 1rem;
+  width: 20px;
+  height: 20px;
+  color: #9ca3af;
+} margin: 0;
+  font-size: 0.875rem;
+.card-value {: 600;
+  font-size: 2rem;
+  font-weight: 700;ppercase;
+  color: #111827; 0.05em;
+  margin-bottom: 0.5rem;
+}
+.card-icon {
+.gpa-card .card-value {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}card-value {
+  font-size: 2rem;
+.card-status { 700;
+  font-size: 0.875rem;
+  font-weight: 600;5rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  display: inline-block;
+} background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  -webkit-background-clip: text;
+.card-status.excellent {r: transparent;
+  background: #d1fae5;t;
+  color: #065f46;
+}
+.card-status {
+.card-status.good {em;
+  background: #dbeafe;
+  color: #1e40af;m 0.75rem;
+} border-radius: 9999px;
+  display: inline-block;
+.card-status.satisfactory {
+  background: #fef3c7;
+  color: #92400e;llent {
+} background: #d1fae5;
+  color: #065f46;
+.card-status.poor {
+  background: #fee2e2;
+  color: #dc2626; {
+} background: #dbeafe;
+  color: #1e40af;
+.card-subtitle {
+  font-size: 0.75rem;
+  color: #9ca3af;sfactory {
+  text-transform: uppercase;  letter-spacing: 0.05em;
+} color: #92400e;
+}
+/* Comparison and Analysis Sections */
+.comparison-section {
+  padding: 0 2rem 2rem;
+} color: #dc2626;
+}
+.comparison-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;rcase;  letter-spacing: 0.05em;
+}
+
+.comparison-header h3 {sis Sections */
+  margin: 0;section {
+  font-size: 1.125rem;;
+  font-weight: 600;
+  color: #111827;
+}comparison-header {
+  display: flex;
+.course-selector { space-between;
+  display: flex;enter;
+  align-items: center;
+  gap: 0.5rem;
+}
+.comparison-header h3 {
+.course-select {
+  padding: 0.5rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  background: white;
+  font-size: 0.875rem;
+  color: #374151;{
+  min-width: 300px;
+  cursor: pointer;ter;
+  transition: border-color 0.2s;
+}
+
+.course-select:focus {
+  outline: none;m 1rem;
+  border-color: #3b82f6;5db;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+} background: white;
+  font-size: 0.875rem;
+.analysis-card {;
+  background: white;
+  border-radius: 0.75rem;
+  padding: 1.5rem;er-color 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+  margin-bottom: 1.5rem;
+} outline: none;
+  border-color: #3b82f6;
+.analysis-card .card-header {59, 130, 246, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between; {
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;m;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #f3f4f6; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}  border: 1px solid #e5e7eb;
+
+.analysis-card .card-header h4 {
+  margin: 0;
+  font-size: 1rem;d-header {
+  font-weight: 600;
+  color: #111827;enter;
+  display: flex;
+  align-items: center;m: 1.5rem;
+  gap: 0.5rem; padding-bottom: 1rem;
+}  border-bottom: 1px solid #f3f4f6;
+
+.header-icon {
+  width: 18px;.card-header h4 {
+  height: 18px;
+  color: #6b7280; font-size: 1rem;
+}  font-weight: 600;
+
+.view-detail-btn {
+  display: flex;enter;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #f3f4f6;.header-icon {
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;* Ranking Section */
+  transition: all 0.2s;.ranking-content {
+}lex;
+umn;
+.view-detail-btn:hover {
+  background: #e5e7eb;
+  color: #111827;
+  transform: translateY(-1px);
+} display: grid;
+  grid-template-columns: auto 1fr;
+.view-detail-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.rank-card {
+/* Ranking Section */center;
+.ranking-content {
+  display: flex;r-gradient(135deg, #f3f4f6, #e5e7eb);
+  flex-direction: column;0.75rem;
+  gap: 1.5rem;db;
+}
+
+.ranking-summary {rrent-student {
+  display: grid;radient(135deg, #dbeafe, #bfdbfe);
+  grid-template-columns: auto 1fr;82f6;
+  gap: 2rem;
+  align-items: center;
+}
+
+.rank-card { font-weight: 700;
+  text-align: center;  color: #111827;
+  padding: 1.5rem;om: 0.25rem;
+  background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+  border-radius: 0.75rem;
+  border: 2px solid #d1d5db;rank-label {
+}  font-size: 0.875rem;
+: 600;
+.rank-card.current-student {;
+  background: linear-gradient(135deg, #dbeafe, #bfdbfe);se;
+  border-color: #3b82f6;cing: 0.05em;
+} margin-bottom: 0.25rem;
+}
+.rank-number {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 0.25rem;
+}
+
+.rank-label { display: flex;
+  font-size: 0.875rem;  flex-direction: column;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem; display: flex;
+}  justify-content: space-between;
+: center;
+.rank-total {
+  font-size: 0.75rem;fb;
+  color: #9ca3af;0.5rem;
+}
+
+.rank-stats {
+  display: flex;5rem;
+  flex-direction: column; color: #6b7280;
+  gap: 1rem;  font-weight: 500;
+}
+
+.stat-item {stat-value {
+  display: flex;  font-size: 0.875rem;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: #f9fafb;
+  border-radius: 0.5rem;ent {
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+.stat-value.average {
+.stat-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #111827;r {
+} color: #dc2626;
+}
+.stat-value.excellent {
+  color: #065f46;s Section */
+}t {
+;
+.stat-value.good {
+  color: #1e40af;
+}
+
+.stat-value.average {n;
+  color: #92400e; gap: 0.75rem;
+}}
+
+.stat-value.poor {
+  color: #dc2626; display: flex;
+}  align-items: center;
+
+/* Top Performers Section */
+.top-performers-content {
+  padding: 0;
+} border: 1px solid #e5e7eb;
+  transition: all 0.2s;
+.performers-list {
+  display: flex;
+  flex-direction: column;{
+  gap: 0.75rem;
+}
+
+.performer-item {t-student {
+  display: flex;eafe;
+  align-items: center;f6;
+  gap: 1rem; 3px rgba(59, 130, 246, 0.1);
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 0.5rem;.performer-rank {
+  border: 1px solid #e5e7eb;
+  transition: all 0.2s;
+}nt: center;
+ width: 32px;
+.performer-item:hover {  height: 32px;
+  background: #f3f4f6;e7eb;
+}374151;
+ 50%;
+.performer-item.current-student {
+  background: #dbeafe;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}urrent-student .performer-rank {
+f6;
+.performer-rank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: #e5e7eb;ce-between;
+  color: #374151; align-items: center;
+  border-radius: 50%;}
+  font-weight: 600;
+  font-size: 0.875rem;
+} font-weight: 500;
+  color: #111827;
+.performer-item.current-student .performer-rank {
+  background: #3b82f6;
+  color: white;e {
+} font-weight: 600;
+  color: #374151;
+.performer-info {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;current-indicator {
+  align-items: center;  color: #3b82f6;
+}
+
+.performer-name {
+  font-weight: 500;
+  color: #111827; height: 18px;
+}}
+
+.performer-score { */
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.875rem;
+}
+.comparison-grid {
+.current-indicator {
+  color: #3b82f6;columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.current-indicator svg {
+  width: 18px;comparison-item {
+  height: 18px;  background: #f9fafb;
+}m;
+.25rem;
+/* Comparison Analysis */5e7eb;
+.comparison-content {
+  padding: 0;
+}component-header {
+  display: flex;
+.comparison-grid {nt: space-between;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+{
+.comparison-item {
+  background: #f9fafb; font-size: 0.875rem;
+  border-radius: 0.5rem;  font-weight: 600;
+  padding: 1.25rem;
+  border: 1px solid #e5e7eb;
+}
+
+.component-header {rem;
+  display: flex; background: #e0e7ff;
+  justify-content: space-between;  color: #3730a3;
+  align-items: center; 0.25rem;
+  margin-bottom: 1rem;5rem;
+}
+
+.component-header h5 {
+  margin: 0;.comparison-bars {
+  font-size: 0.875rem;lex;
+  font-weight: 600;umn;
+  color: #111827;
+}1rem;
+
+.weight-badge {
+  padding: 0.25rem 0.5rem;.bar-container {
+  background: #e0e7ff;;
+  color: #3730a3;ems: center;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+ font-size: 0.75rem;
+.comparison-bars {  font-weight: 500;
+  display: flex;;
+  flex-direction: column;px;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}progress-bar {
+  flex: 1;
+.bar-container {
+  display: flex;
+  align-items: center; border-radius: 9999px;
+  gap: 1rem;  overflow: hidden;
+}
+
+.bar-label {progress-fill {
+  font-size: 0.75rem;  height: 100%;
+  font-weight: 500;ius: 9999px;
+  color: #6b7280;.3s;
+  min-width: 70px;
+}
+
+.progress-bar {6;
+  flex: 1;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 9999px;;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%; font-weight: 500;
+  border-radius: 9999px;  color: #374151;
+  transition: width 0.3s;
+}
+
+.student-bar {
+  background: #3b82f6;.performance-indicator {
+}
+
+.class-avg-bar {m 0.5rem;
+  background: #6b7280; border-radius: 0.25rem;
+}  text-align: center;
+
+.bar-value {
+  font-size: 0.75rem;cator.above-average {
+  font-weight: 500; background: #d1fae5;
+  color: #374151;  color: #065f46;
+  min-width: 60px;
+  text-align: right;
+}cator.slightly-above {
+ background: #dbeafe;
+.performance-indicator {  color: #1e40af;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.5rem;r.slightly-below {
+  border-radius: 0.25rem; background: #fef3c7;
+  text-align: center;  color: #92400e;
+}
+
+.performance-indicator.above-average {
+  background: #d1fae5;#fee2e2;
+  color: #065f46; color: #dc2626;
+}}
+
+.performance-indicator.slightly-above {rison */
+  background: #dbeafe;
+  color: #1e40af;: 1.5rem;
+}
+
+.performance-indicator.slightly-below {
+  background: #fef3c7;
+  color: #92400e; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}  gap: 1.5rem;
+
+.performance-indicator.below-average {
+  background: #fee2e2;
+  color: #dc2626;
+}enter;
+
+/* Overall Comparison */
+.overall-comparison {f9fafb;
+  margin-top: 1.5rem; border-radius: 0.5rem;
+}  border: 1px solid #e5e7eb;
+
+.overall-stats {
+  display: grid;stat-icon {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));  width: 40px;
+  gap: 1.5rem;x;
+}
+ display: flex;
+.overall-stat {  align-items: center;
+  display: flex; center;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 0.5rem;
+  border: 1px solid #e5e7eb;
+}
+
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%; {
+  display: flex;#9ca3af;
+  align-items: center;
+  justify-content: center;
+  color: white;.difference-icon.positive {
+}10b981;
+
+.student-icon {
+  background: #3b82f6;.difference-icon.negative {
+} #ef4444;
+
+.class-icon {
+  background: #6b7280;
+}
+
+.difference-icon {
+  background: #9ca3af;
+} {
+
+.difference-icon.positive {
+  background: #10b981;
+}stat-label {
+  font-size: 0.75rem;
+.difference-icon.negative {
+  background: #ef4444;0.25rem;
+} text-transform: uppercase;
+  letter-spacing: 0.05em;
+.stat-icon svg {
+  width: 20px;
+  height: 20px;stat-value {
+}  font-size: 1.25rem;
+
+.stat-content {
+  flex: 1;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-bottom: 0.25rem;stat-value.negative {
+  text-transform: uppercase;  color: #dc2626;
+  letter-spacing: 0.05em;
+}
+* Loading and Empty States */
+.stat-value {.comparison-loading {
+  font-size: 1.25rem;
+  font-weight: 700;: column;
+  color: #111827;
+}ter;
+
+.stat-value.positive {nter;
+  color: #065f46;
+}
+comparison-loading .loading-spinner {
+.stat-value.negative {  margin-bottom: 1rem;
+  color: #dc2626;
+}
+data {
+/* Loading and Empty States */
+.comparison-loading { column;
+  display: flex; align-items: center;
+  flex-direction: column;  justify-content: center;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  text-align: center;
+}
+.no-comparison-data svg {
+.comparison-loading .loading-spinner {
+  margin-bottom: 1rem;px;
+}
+ color: #d1d5db;
+.no-comparison-data {}
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;ont-weight: 600;
+  text-align: center;}
+  color: #6b7280;
+}
+
+.no-comparison-data svg {ont-size: 0.875rem;
+  width: 48px;}
+  height: 48px;
+  margin-bottom: 1rem;
+  color: #d1d5db;dia (max-width: 768px) {
+}  .performance-header {
+em;
+.no-comparison-data h4 {
+  margin: 0 0 0.5rem 0;
+  color: #374151;student-header {
+  font-weight: 600;    flex-direction: column;
+}
+
+.no-comparison-data p {
+  margin: 0;  .quick-actions {
+  font-size: 0.875rem;t: stretch;
+}
+
+/* Responsive Design */  .action-btn {
+@media (max-width: 768px) {
+  .performance-header {
+    padding: 1rem;
+  }
+, .courses-section, .assessment-section, .meetings-section, .comparison-section {
+  .student-header {
+    flex-direction: column;
+    align-items: stretch;
+  }  .overview-grid {
+columns: 1fr;
+  .quick-actions {
+    justify-content: stretch;
+  }  .courses-grid {
+
+  .action-btn {
+    flex: 1;
+    justify-content: center;ics {
+  } grid-template-columns: 1fr;
+    gap: 0.75rem;
+  .overview-section, .courses-section, .assessment-section, .meetings-section, .comparison-section {
+    padding: 1rem;
+  }view-controls {
+    flex-direction: column;
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }rison-header {
+n: column;
+  .courses-grid { align-items: stretch;
+    grid-template-columns: 1fr;    gap: 1rem;
+  }
+
+  .course-metrics {tainer {
+    grid-template-columns: 1fr; overflow-x: auto;
+    gap: 0.75rem;  }
+  }
+
+  .view-controls {column;
+    flex-direction: column; align-items: stretch;
+  }    gap: 0.75rem;
+
+  .section-header, .comparison-header {
+    flex-direction: column;e {
+    align-items: stretch; text-align: left;
+    gap: 1rem;    min-width: auto;
+  }
+
+  .courses-table-container {* Comparison Section Mobile Styles */
+    overflow-x: auto;  .course-select {
+  }%;
+
+  .meeting-item {
+    flex-direction: column;  .ranking-summary {
+    align-items: stretch;columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .meeting-date {grid {
+    text-align: left;lumns: 1fr;
+    min-width: auto;
+  }
+  .overall-stats {
+  /* Comparison Section Mobile Styles */ate-columns: 1fr;
+  .course-select {
+    min-width: 100%;
+  }bar-container {
+    gap: 0.5rem;
+  .ranking-summary {
+    grid-template-columns: 1fr;
+    gap: 1rem;bar-label {
+  }    min-width: 60px;
+em;
+  .comparison-grid {
+    grid-template-columns: 1fr;
+  }
+ min-width: 50px;
+  .overall-stats {   font-size: 0.7rem;
+    grid-template-columns: 1fr;
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</style>}  }    font-size: 0.75rem;    height: 28px;    width: 28px;  .performer-rank {  }    padding: 0.75rem;  .performer-item {  }    font-size: 0.7rem;    min-width: 50px;  .bar-value {  }    font-size: 0.7rem;    min-width: 60px;  .bar-label {  }    gap: 0.5rem;  .bar-container {  .performer-item {
+    padding: 0.75rem;
+  }
+
+  .performer-rank {
+    width: 28px;
+    height: 28px;
+    font-size: 0.75rem;
+  }
+}
+</style>

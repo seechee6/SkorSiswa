@@ -1,4 +1,4 @@
--- Add meeting_link field to the meetings table
+  -- Add meeting_link field to the meetings table
 -- This will allow advisors to paste meeting links (Zoom, Teams, etc.) when scheduling meetings
 
 ALTER TABLE meetings 

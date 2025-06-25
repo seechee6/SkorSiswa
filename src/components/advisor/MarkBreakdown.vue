@@ -12,12 +12,6 @@
         </div>
       </div>
       <div class="header-actions">
-        <button @click="printReport" class="print-btn">
-          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
-          </svg>
-          Print Report
-        </button>
         <router-link :to="`/advisor/advisee-list`" class="back-btn">
           <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
@@ -36,12 +30,7 @@
         </div>
         <div class="divider"></div>
         <div class="summary-item">
-          <div class="summary-label">Current Semester GPA</div>
-          <div class="summary-value" :class="getCgpaClass(currentSemester.gpa)">{{ currentSemester.gpa.toFixed(2) }}</div>
-        </div>
-        <div class="divider"></div>
-        <div class="summary-item">
-          <div class="summary-label">Total Credits Earned</div>
+          <div class="summary-label">Total Credits Enrolled</div>
           <div class="summary-value">{{ student.creditsEarned }}</div>
         </div>
         <div class="divider"></div>
@@ -68,7 +57,9 @@
         <h4>Course Marks - {{ getCurrentSemesterName() }}</h4>
         <span class="semester-info">{{ currentSemester.courses.length }} courses | {{ currentSemester.totalCredits }} credits</span>
       </div>
-      <div class="table-container">
+      
+      <!-- Show table when courses exist -->
+      <div v-if="currentSemester.courses.length > 0" class="table-container">
         <table class="marks-table">
           <thead>
             <tr>
@@ -76,72 +67,68 @@
               <th>Course Name</th>
               <th>Credits</th>
               <th class="center-align">Assignment Marks</th>
-              <th class="center-align">Midterms</th>
               <th class="center-align">Final Exam</th>
               <th class="center-align">Total</th>
               <th class="center-align">Grade</th>
-              <th class="center-align">Progress</th>
             </tr>
           </thead>          <tbody>
-            <tr v-for="(course, index) in performanceData" :key="index" @click="selectCourse(course)" class="course-row">
+            <tr v-for="(course, index) in (performanceData.courses || [])" :key="index" @click="selectCourse(course)" class="course-row">
               <td class="code-cell">{{ course.course_code }}</td>
               <td>{{ course.course_name }}</td>
-              <td class="center-align">{{ course.credits || 3 }}</td>
-              <td class="center-align">
-                {{ course.assessment_total_marks || 0 }}/{{ course.assessment_max_marks || 100 }}
-                <div class="weight">(70%)</div>
-                <div class="percentage">{{ calculateAssessmentPercentage(course) }}%</div>
+              <td class="center-align">{{ course.credit_hours || 3 }}</td>              <td class="center-align">
+                {{ formatNumber(course.assessment_total) || '0.00' }}/70
               </td>
               <td class="center-align">
-                <!-- Midterm placeholder - you can extend this later -->
-                -/-
-                <div class="weight">(Included in Assessments)</div>
-              </td>
-              <td class="center-align">
-                {{ course.final_exam_mark || 0 }}/{{ course.final_exam_max_mark || 100 }}
-                <div class="weight">(30%)</div>
-                <div class="percentage">{{ calculateFinalExamPercentage(course) }}%</div>
+                {{ formatNumber(course.final_exam_weighted) || '0.00' }}/30
               </td>
               <td class="total-cell">
-                {{ calculateTotalPercentage(course) }}%
+                {{ parseFloat(course.total_marks || 0).toFixed(2) }}%
               </td>
               <td class="grade-cell">
                 <span :class="getGradeClass(course.grade)">{{ course.grade }}</span>
               </td>
               <td>
-                <div class="progress-bar">
-                  <div 
-                    class="progress" 
-                    :style="{ width: calculateTotalPercentage(course) + '%' }" 
-                    :class="getProgressClass(calculateTotalPercentage(course))"
-                  ></div>
-                </div>
               </td>
             </tr>
             <tr class="summary-row">
               <td colspan="2">Semester Total</td>
               <td class="center-align">{{ currentSemester.totalCredits }}</td>
               <td colspan="3"></td>
-              <td class="total-cell">
-                {{ currentSemester.averagePercentage.toFixed(1) }}%
-              </td>
-              <td class="grade-cell">
-                <span :class="getGradeClass(currentSemester.averageGrade)">
-                  {{ currentSemester.averageGrade }}
-                </span>
-              </td>
-              <td>
-                <div class="progress-bar">
-                  <div 
-                    class="progress" 
-                    :style="{ width: currentSemester.averagePercentage + '%' }" 
-                    :class="getProgressClass(currentSemester.averagePercentage)"
-                  ></div>
-                </div>
-              </td>
+              
             </tr>
           </tbody>
         </table>
+      </div>
+      
+      <!-- Show empty state when no courses are enrolled -->
+      <div v-else class="empty-semester-state">
+        <div class="empty-state-content">
+          <div class="empty-state-icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="64" height="64">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+            </svg>
+          </div>
+          <h3>No Courses Enrolled Yet</h3>
+          <p v-if="selectedSemester === 2">
+            This is an upcoming semester. Course enrollment for {{ getCurrentSemesterName() }} has not started yet.
+          </p>
+          <p v-else>
+            No course enrollment data available for this semester.
+          </p>
+          <div class="empty-state-actions" v-if="selectedSemester === 2">
+            <div class="enrollment-info">
+              <div class="info-item">
+                <strong>Course Registration:</strong> Opens January 2025
+              </div>
+              <div class="info-item">
+                <strong>Classes Begin:</strong> February 2025
+              </div>
+              <div class="info-item">
+                <strong>Expected Credits:</strong> 18-21 credits
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -169,93 +156,51 @@
       </div>
 
       <div class="tab-content">
-        <!-- Assignments Tab -->
-        <div v-if="selectedTab === 'assignments'" class="assessment-detail">
+        <!-- All Assessments Tab -->
+        <div v-if="selectedTab === 'all_assessments'" class="assessment-detail">
           <table class="assessment-table">
             <thead>
               <tr>
                 <th>Assessment</th>
-                <th>Due Date</th>
-                <th>Weight</th>
+                <th>Type</th>
+                <th>Weight (%)</th>
                 <th>Marks</th>
                 <th>Grade</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(item, index) in selectedCourse.assessments.assignments" :key="index">
+              <!-- Regular Assessments -->
+              <tr v-for="(item, index) in getAllAssessments()" :key="'assessment-' + index">
                 <td>{{ item.name }}</td>
-                <td>{{ item.dueDate }}</td>
-                <td>{{ item.weight }}%</td>
-                <td>{{ item.earned }}/{{ item.total }}</td>
                 <td>
+                  <span class="assessment-type" :class="getAssessmentTypeClass(item.name)">
+                    {{ getAssessmentType(item.name) }}
+                  </span>
+                </td>
+                <td class="center-align">{{ item.weight }}%</td>
+                <td class="center-align">{{ item.earned }}/{{ item.total }}</td>
+                <td class="center-align">
                   <span :class="getGradeClass(item.grade)">{{ item.grade }}</span>
                 </td>
-                <td>
+                <td class="center-align">
                   <span class="status-badge" :class="item.status.toLowerCase()">
                     {{ item.status }}
                   </span>
                 </td>
               </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Midterms Tab -->
-        <div v-if="selectedTab === 'midterms'" class="assessment-detail">
-          <table class="assessment-table">
-            <thead>
-              <tr>
-                <th>Assessment</th>
-                <th>Date</th>
-                <th>Weight</th>
-                <th>Marks</th>
-                <th>Grade</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(item, index) in selectedCourse.assessments.midterms" :key="index">
+              <!-- Final Exam (if exists) -->
+              <tr v-for="(item, index) in getFinalExam()" :key="'final-' + index" class="final-exam-row">
                 <td>{{ item.name }}</td>
-                <td>{{ item.date }}</td>
-                <td>{{ item.weight }}%</td>
-                <td>{{ item.earned }}/{{ item.total }}</td>
                 <td>
+                  <span class="assessment-type final-exam">Final Exam</span>
+                </td>
+                <td class="center-align">{{ item.weight }}%</td>
+                <td class="center-align">{{ item.earned }}/{{ item.total }}</td>
+                <td class="center-align">
                   <span :class="getGradeClass(item.grade)">{{ item.grade }}</span>
                 </td>
-                <td>
-                  <span class="status-badge" :class="item.status.toLowerCase()">
-                    {{ item.status }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Final Exam Tab -->
-        <div v-if="selectedTab === 'final'" class="assessment-detail">
-          <table class="assessment-table">
-            <thead>
-              <tr>
-                <th>Assessment</th>
-                <th>Date</th>
-                <th>Weight</th>
-                <th>Marks</th>
-                <th>Grade</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(item, index) in selectedCourse.assessments.final" :key="index">
-                <td>{{ item.name }}</td>
-                <td>{{ item.date }}</td>
-                <td>{{ item.weight }}%</td>
-                <td>{{ item.earned }}/{{ item.total }}</td>
-                <td>
-                  <span :class="getGradeClass(item.grade)">{{ item.grade }}</span>
-                </td>
-                <td>
+                <td class="center-align">
                   <span class="status-badge" :class="item.status.toLowerCase()">
                     {{ item.status }}
                   </span>
@@ -280,9 +225,15 @@
       </div>
 
       <div v-if="showNoteForm" class="note-form">
-        <textarea v-model="newNote.content" placeholder="Enter your note here..." rows="4"></textarea>
+        <textarea 
+          v-model="newNote.content" 
+          :placeholder="editingNote ? 'Edit your note here...' : 'Enter your note here...'" 
+          rows="4"
+        ></textarea>
         <div class="form-actions">
-          <button @click="saveNote" class="save-note-btn">Save Note</button>
+          <button @click="saveNote" class="save-note-btn">
+            {{ editingNote ? 'Update Note' : 'Save Note' }}
+          </button>
           <button @click="cancelNote" class="cancel-note-btn">Cancel</button>
         </div>
       </div>
@@ -292,12 +243,12 @@
           <div class="note-header">
             <span class="note-date">{{ note.date }}</span>
             <div class="note-actions">
-              <button class="edit-note-btn">
+              <button class="edit-note-btn" @click="editNote(note)">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
                 </svg>
               </button>
-              <button class="delete-note-btn">
+              <button class="delete-note-btn" @click="deleteNote(note)">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                 </svg>
@@ -342,28 +293,35 @@ export default {
         riskLevel: 'low',
         creditsEarned: 0
       },
-      performanceData: [],
-      selectedCourse: null,      selectedTab: 'assignments',
+      performanceData: {},
+      selectedCourse: null,      selectedTab: 'all_assessments',
       assessmentTabs: [
-        { id: 'assignments', name: 'Assignments' },
-        { id: 'midterms', name: 'Midterms' },
-        { id: 'final', name: 'Final Exam' }
-      ],advisorNotes: [],
+        { id: 'all_assessments', name: 'All Assessments' }
+      ],      advisorNotes: [],
       showNoteForm: false,
+      editingNote: null,
       newNote: {
         content: ''
       },
       selectedSemester: 1,
       semesters: [
         { id: 1, name: 'Semester 1, 2024' },
-        { id: 2, name: 'Semester 2, 2024' }
+        { id: 2, name: 'Semester 2, 2025 (Upcoming)' }
       ]
     }
-  },computed: {
+  },  computed: {
     currentSemesterCourses() {
+      // Return empty array for upcoming semester (Semester 2)
+      if (this.selectedSemester === 2) {
+        return [];
+      }
+      
       // Group courses by semester/year and return current semester
-      return this.performanceData.filter(course => 
-        course.year === 2024 && course.semester === 1
+      if (!this.performanceData || !this.performanceData.courses) {
+        return [];
+      }
+      return this.performanceData.courses.filter(course => 
+        course.academic_year === '2024/2025' && course.semester === 'Current'
       );
     },
     currentSemester() {
@@ -405,15 +363,9 @@ export default {
         averagePercentage: averagePercentage,
         averageGrade: averageGrade
       };
-    },
-    overallGPA() {
-      if (this.performanceData.length === 0) return 0.0;
-      
-      const totalPoints = this.performanceData.reduce((sum, course) => {
-        return sum + this.convertGradeToPoints(course.grade);
-      }, 0);
-      
-      return (totalPoints / this.performanceData.length).toFixed(2);
+    },    overallGPA() {
+      if (!this.performanceData || !this.performanceData.gpa) return 0.0;
+      return this.performanceData.gpa.toFixed(2);
     }
   },
   async created() {
@@ -425,9 +377,9 @@ export default {
     }
     
     await this.fetchStudentPerformance();
+    await this.fetchAdvisorNotes();
   },
-  methods: {
-    async fetchStudentPerformance() {
+  methods: {    async fetchStudentPerformance() {
       this.loading = true;
       this.error = null;
       
@@ -437,16 +389,25 @@ export default {
           this.studentId
         );
           if (response.success) {
-          this.performanceData = response.data || [];
+          this.performanceData = response.data || {};
           console.log('Performance data received:', this.performanceData);
           
-          // Set basic student info from first course data or default
-          if (this.performanceData.length > 0) {
-            // We need to get student basic info separately or from advisee list
-            this.student.id = this.studentId;
-            this.student.cgpa = parseFloat(this.overallGPA);
+          // Set basic student info from the response
+          if (this.performanceData.student) {
+            this.student = {
+              id: this.performanceData.student.id,
+              name: this.performanceData.student.name,
+              studentId: this.performanceData.student.studentId,
+              email: this.performanceData.student.email,
+              year: this.performanceData.student.year,
+              program: this.performanceData.student.program,
+              cgpa: this.performanceData.gpa || 0
+            };
             this.updateRiskLevel();
           }
+          
+          // Calculate total credits earned
+          this.calculateTotalCreditsEarned();
           
           // Also fetch student basic info from advisees
           await this.fetchStudentBasicInfo();
@@ -474,6 +435,10 @@ export default {
             this.student.program = studentInfo.program;
             this.student.yearOfStudy = studentInfo.year;
             this.student.cgpa = studentInfo.gpa;
+            
+            // Calculate total credits earned from performance data
+            this.calculateTotalCreditsEarned();
+            
             this.updateRiskLevel();
           }
         }
@@ -490,6 +455,22 @@ export default {
       } else {
         this.student.riskLevel = 'high';
       }
+    },
+    
+    calculateTotalCreditsEarned() {
+      if (!this.performanceData || !this.performanceData.courses) {
+        this.student.creditsEarned = 0;
+        return;
+      }
+      
+      // Calculate total credits from all enrolled courses (including failed ones)
+      // If you want only passing grades, change this logic back to exclude 'F' grades
+      const totalCredits = this.performanceData.courses.reduce((sum, course) => {
+        const credits = parseInt(course.credit_hours) || 3;
+        return sum + credits;
+      }, 0);
+      
+      this.student.creditsEarned = totalCredits;
     },
       convertGradeToPoints(grade) {
       const gradePoints = {
@@ -512,8 +493,9 @@ export default {
     },
     
     getCurrentSemesterName() {
-      // You can customize this based on your semester naming convention
-      return 'Semester 1, 2024';
+      // Return appropriate semester name based on selection
+      const selectedSem = this.semesters.find(s => s.id === this.selectedSemester);
+      return selectedSem ? selectedSem.name : 'Semester 1, 2024';
     },
     
     getInitials(name) {
@@ -543,37 +525,37 @@ export default {
       
       return totalMarks.toFixed(1);
     },
-    
-    calculateAssessmentPercentage(course) {
-      if (!course.assessment_max_marks || course.assessment_max_marks === 0) {
+      calculateAssessmentPercentage(course) {
+      const assessmentMarks = course.assessment_total || 0;
+      const maxAssessmentMarks = 70; // 70% for assessments
+      
+      if (maxAssessmentMarks === 0) {
         return 0;
       }
       
-      return ((course.assessment_total_marks / course.assessment_max_marks) * 100).toFixed(1);
+      return ((assessmentMarks / maxAssessmentMarks) * 100).toFixed(1);
     },
     
     calculateFinalExamPercentage(course) {
-      if (!course.final_exam_max_mark || course.final_exam_max_mark === 0) {
+      const finalExamWeighted = course.final_exam_weighted || 0;
+      const maxFinalMarks = 30; // 30% for final exam
+      
+      if (maxFinalMarks === 0) {
         return 0;
       }
       
-      return ((course.final_exam_mark / course.final_exam_max_mark) * 100).toFixed(1);
+      return ((finalExamWeighted / maxFinalMarks) * 100).toFixed(1);
     },
       calculateTotalPercentage(course) {
       // The backend already calculates the correct total mark out of 100
-      // We should use the total_mark from backend instead of recalculating
-      if (course.total_mark !== undefined) {
-        return parseFloat(course.total_mark).toFixed(1);
-      }
-      
-      // Fallback calculation (if total_mark is not provided)
-      // Use the weighted scores, not raw percentages
-      const assessmentWeighted = course.assessment_weighted_score || 0;  // Out of 70
-      const finalExamWeighted = course.final_exam_weighted_score || 0;   // Out of 30
-      
-      return (parseFloat(assessmentWeighted) + parseFloat(finalExamWeighted)).toFixed(1);
+      // We should use the total_marks from backend
+      return parseFloat(course.total_marks || 0).toFixed(1);
     },
-    
+
+    formatNumber(value) {
+      return parseFloat(value || 0).toFixed(2);
+    },
+
     getGradeClass(grade) {
       if (grade === 'A+' || grade === 'A') return 'grade-a';
       if (grade === 'A-' || grade === 'B+') return 'grade-b-plus';
@@ -588,63 +570,142 @@ export default {
       return 'progress-concern';
     },
     
-    selectCourse(course) {
-      // Set selected course for detailed breakdown
-      this.selectedCourse = {
-        code: course.course_code,
-        name: course.course_name,
-        assessments: {
-          assignments: [
-            {
-              name: 'Assignment 1',
-              dueDate: '2024-03-15',
-              weight: 20,
-              earned: course.assessment_total_marks * 0.4 || 0,
-              total: course.assessment_max_marks * 0.4 || 40,
-              grade: this.convertPercentageToGrade((course.assessment_total_marks * 0.4 / (course.assessment_max_marks * 0.4)) * 100 || 0),
-              status: 'Completed'
-            },
-            {
-              name: 'Assignment 2',
-              dueDate: '2024-04-15',
-              weight: 30,
-              earned: course.assessment_total_marks * 0.6 || 0,
-              total: course.assessment_max_marks * 0.6 || 60,
-              grade: this.convertPercentageToGrade((course.assessment_total_marks * 0.6 / (course.assessment_max_marks * 0.6)) * 100 || 0),
-              status: 'Completed'
-            }
-          ],
-          midterms: [
-            {
-              name: 'Midterm Exam',
-              date: '2024-04-20',
-              weight: 20,
-              earned: course.assessment_total_marks * 0.2 || 0,
-              total: course.assessment_max_marks * 0.2 || 20,
-              grade: this.convertPercentageToGrade((course.assessment_total_marks * 0.2 / (course.assessment_max_marks * 0.2)) * 100 || 0),
-              status: 'Completed'
-            }
-          ],
-          final: [
-            {
-              name: 'Final Exam',
-              date: '2024-05-15',
-              weight: 30,
-              earned: course.final_exam_mark || 0,
-              total: course.final_exam_max_mark || 100,
-              grade: this.convertPercentageToGrade(this.calculateFinalExamPercentage(course)),
-              status: 'Completed'
-            }
-          ]
-        }
+    async selectCourse(course) {
+      try {
+        // Fetch detailed assessment data for this course
+        const assessmentData = await this.fetchCourseAssessmentData(course.course_code);
+        
+        // Set selected course for detailed breakdown
+        this.selectedCourse = {
+          code: course.course_code,
+          name: course.course_name,
+          assessments: assessmentData
+        };
+      } catch (error) {
+        console.error('Error fetching course assessment data:', error);
+        // Fallback to basic data
+        this.selectedCourse = {
+          code: course.course_code,
+          name: course.course_name,
+          assessments: {
+            assignments: [],
+            midterms: [],
+            final: []
+          }
+        };
+      }
+    },
+
+    async fetchCourseAssessmentData(courseCode) {
+      // Get assessments data from the performance data
+      const courseAssessments = this.performanceData.assessments?.[courseCode] || [];
+      
+      // Process all assessments (no need to categorize into separate tabs)
+      const allAssessments = [];
+      
+      courseAssessments.forEach(assessment => {
+        const assessmentData = {
+          name: assessment.assessment_name,
+          weight: parseFloat(assessment.weightage || 0),
+          earned: parseFloat(assessment.marks_obtained || 0),
+          total: parseFloat(assessment.max_marks || 0),
+          grade: this.calculateAssessmentGrade(assessment.marks_obtained, assessment.max_marks),
+          status: assessment.marks_obtained !== null ? 'Completed' : 'Pending'
+        };
+
+        allAssessments.push(assessmentData);
+      });
+
+      // Get final exam data from course data
+      const selectedCourseData = this.performanceData.courses?.find(c => c.course_code === courseCode);
+      let finalExam = null;
+      
+      if (selectedCourseData && selectedCourseData.final_exam_marks !== null && selectedCourseData.final_exam_marks !== undefined) {
+        finalExam = {
+          name: 'Final Exam',
+          weight: 30,
+          earned: parseFloat(selectedCourseData.final_exam_marks || 0),
+          total: 100,
+          grade: this.convertPercentageToGrade(selectedCourseData.final_exam_marks || 0),
+          status: selectedCourseData.final_exam_marks > 0 ? 'Completed' : 'Pending'
+        };
+      }
+
+      return {
+        allAssessments,
+        finalExam
       };
+    },
+
+    calculateAssessmentGrade(earned, total) {
+      if (!earned || !total) return 'N/A';
+      const percentage = (parseFloat(earned) / parseFloat(total)) * 100;
+      return this.convertPercentageToGrade(percentage);
+    },
+
+    getAllAssessments() {
+      return this.selectedCourse?.assessments?.allAssessments || [];
+    },
+
+    getFinalExam() {
+      const finalExam = this.selectedCourse?.assessments?.finalExam;
+      return finalExam ? [finalExam] : [];
+    },
+
+    getAssessmentType(name) {
+      const lowercaseName = name.toLowerCase();
+      if (lowercaseName.includes('assignment')) return 'Assignment';
+      if (lowercaseName.includes('project')) return 'Project';
+      if (lowercaseName.includes('lab')) return 'Lab';
+      if (lowercaseName.includes('midterm') || lowercaseName.includes('mid')) return 'Midterm';
+      if (lowercaseName.includes('quiz')) return 'Quiz';
+      if (lowercaseName.includes('test')) return 'Test';
+      if (lowercaseName.includes('homework')) return 'Homework';
+      return 'Assessment';
+    },
+
+    getAssessmentTypeClass(name) {
+      const type = this.getAssessmentType(name).toLowerCase();
+      return `type-${type}`;
     },
     
     printReport() {
       window.print();
     },
     
+    async fetchAdvisorNotes() {
+      try {
+        const response = await advisorService.getAdviseeNotes(
+          this.currentUser.id,
+          this.studentId,
+          1 // Default course ID
+        );
+        
+        if (response && Array.isArray(response)) {
+          this.advisorNotes = response.map(note => ({
+            id: note.id,
+            content: note.note,
+            date: new Date(note.created_at).toLocaleDateString('en-US', { 
+              day: '2-digit', 
+              month: 'short', 
+              year: 'numeric' 
+            })
+          }));
+        }
+      } catch (error) {
+        console.error('Error fetching advisor notes:', error);
+      }
+    },
+    
     async addNote() {
+      this.editingNote = null;
+      this.newNote.content = '';
+      this.showNoteForm = true;
+    },
+    
+    async editNote(note) {
+      this.editingNote = note;
+      this.newNote.content = note.content;
       this.showNoteForm = true;
     },
     
@@ -652,37 +713,74 @@ export default {
       if (!this.newNote.content.trim()) return;
       
       try {
-        await advisorService.addAdviseeNote(
-          this.currentUser.id,
-          this.studentId,
-          this.newNote.content,
-          1 // Default course ID
-        );
-        
-        // Add to local notes list
-        const today = new Date();
-        const formattedDate = today.toLocaleDateString('en-US', { 
-          day: '2-digit', 
-          month: 'short', 
-          year: 'numeric' 
-        });
-        
-        this.advisorNotes.unshift({
-          date: formattedDate,
-          content: this.newNote.content
-        });
+        if (this.editingNote) {
+          // Update existing note
+          await advisorService.updateAdviseeNote(
+            this.editingNote.id,
+            this.newNote.content
+          );
+          
+          // Update local notes list
+          const noteIndex = this.advisorNotes.findIndex(n => n.id === this.editingNote.id);
+          if (noteIndex !== -1) {
+            this.advisorNotes[noteIndex].content = this.newNote.content;
+          }
+        } else {
+          // Add new note
+          const response = await advisorService.addAdviseeNote(
+            this.currentUser.id,
+            this.studentId,
+            this.newNote.content,
+            1 // Default course ID
+          );
+          
+          // Add to local notes list
+          const today = new Date();
+          const formattedDate = today.toLocaleDateString('en-US', { 
+            day: '2-digit', 
+            month: 'short', 
+            year: 'numeric' 
+          });
+          
+          this.advisorNotes.unshift({
+            id: response.id,
+            date: formattedDate,
+            content: this.newNote.content
+          });
+        }
         
         this.showNoteForm = false;
         this.newNote.content = '';
+        this.editingNote = null;
       } catch (error) {
         console.error('Error saving note:', error);
         alert('Failed to save note. Please try again.');
       }
     },
     
+    async deleteNote(note) {
+      if (!confirm('Are you sure you want to delete this note?')) {
+        return;
+      }
+      
+      try {
+        await advisorService.deleteAdviseeNote(note.id);
+        
+        // Remove from local notes list
+        const noteIndex = this.advisorNotes.findIndex(n => n.id === note.id);
+        if (noteIndex !== -1) {
+          this.advisorNotes.splice(noteIndex, 1);
+        }
+      } catch (error) {
+        console.error('Error deleting note:', error);
+        alert('Failed to delete note. Please try again.');
+      }
+    },
+    
     cancelNote() {
       this.showNoteForm = false;
       this.newNote.content = '';
+      this.editingNote = null;
     }
   }
 }
@@ -1288,6 +1386,68 @@ export default {
   color: #6c757d;
   padding: 32px 0;
   font-style: italic;
+}
+
+/* Empty State Styles */
+.empty-semester-state {
+  padding: 60px 24px;
+  text-align: center;
+}
+
+.empty-state-content {
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.empty-state-icon {
+  margin-bottom: 24px;
+  color: #9ca3af;
+  display: flex;
+  justify-content: center;
+}
+
+.empty-state-content h3 {
+  color: #374151;
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.empty-state-content p {
+  color: #6b7280;
+  font-size: 16px;
+  line-height: 1.6;
+  margin-bottom: 32px;
+}
+
+.enrollment-info {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: left;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 14px;
+}
+
+.info-item:last-child {
+  border-bottom: none;
+}
+
+.info-item strong {
+  color: #374151;
+  font-weight: 600;
+}
+
+.empty-state-actions {
+  margin-top: 24px;
 }
 
 @media (max-width: 992px) {
