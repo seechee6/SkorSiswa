@@ -1,5 +1,4 @@
 <?php
-error_log("API Request: " . $_SERVER['REQUEST_URI']);
 require __DIR__ . '/../vendor/autoload.php';
 
 use Psr\Http\Message\ResponseInterface as Response;
@@ -23,26 +22,8 @@ $app->add(function ($request, $handler) {
     // Get the origin from the request
     $origin = $request->getHeaderLine('Origin');
     
-    // Allow any localhost origin
-    $allowedOrigin = '*';
-    if (preg_match('/^https?:\/\/localhost(:\d+)?$/', $origin)) {
-        $allowedOrigin = $origin;
-    }
-    
-    return $response
-        ->withHeader('Access-Control-Allow-Origin', $allowedOrigin)
-        ->withHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Origin, Authorization')
-        ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-        ->withHeader('Access-Control-Allow-Credentials', 'true');
-});
-
-// Handle preflight OPTIONS requests for CORS
-$app->options('/{routes:.+}', function ($request, $response, $args) {
-    // Get the origin from the request
-    $origin = $request->getHeaderLine('Origin');
-    
-    // Allow any localhost origin
-    $allowedOrigin = '*';
+    // Allow specific localhost origins when credentials are needed
+    $allowedOrigin = 'http://localhost:8081'; // Your Vue app's origin
     if (preg_match('/^https?:\/\/localhost(:\d+)?$/', $origin)) {
         $allowedOrigin = $origin;
     }
@@ -51,8 +32,12 @@ $app->options('/{routes:.+}', function ($request, $response, $args) {
         ->withHeader('Access-Control-Allow-Origin', $allowedOrigin)
         ->withHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Origin, Authorization')
         ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        ->withHeader('Access-Control-Allow-Credentials', 'true')
-        ->withStatus(204);
+        ->withHeader('Access-Control-Allow-Credentials', 'true');
+});
+
+// Handle preflight OPTIONS requests for CORS
+$app->options('/{routes:.+}', function ($request, $response, $args) {
+    return $response;
 });
 
 // Database connection settings
@@ -1082,1285 +1067,653 @@ $app->delete('/advisor-notes/{id}', function (Request $request, Response $respon
     return $response->withHeader('Content-Type', 'application/json');
 });
 
-// Add this test endpoint to debug the database
-$app->get('/debug/users', function (Request $request, Response $response) use ($pdo) {
+// ===================== ADVISOR ENDPOINTS =====================
+// Get advisor's advisees with their performance data
+$app->get('/advisors/{advisor_id}/advisees', function (Request $request, Response $response, $args) use ($pdo) {
     try {
-        $stmt = $pdo->query('SELECT u.id, u.full_name, u.matric_no, u.staff_id, u.email, r.name as role_name FROM users u JOIN roles r ON u.role_id = r.id LIMIT 10');
-        $users = $stmt->fetchAll();
+        $advisor_id = $args['advisor_id'];
+        
+        // Simplified query to avoid complex subqueries that cause SQL errors
+        $sql = "
+            SELECT 
+                u.id,
+                u.full_name as name,
+                u.matric_no as studentId,
+                u.email,
+                -- Determine academic year based on matric number pattern
+                CASE 
+                    WHEN u.matric_no LIKE '%2021%' THEN 4
+                    WHEN u.matric_no LIKE '%2022%' THEN 3  
+                    WHEN u.matric_no LIKE '%2023%' THEN 2
+                    WHEN u.matric_no LIKE '%2024%' THEN 1
+                    ELSE 1
+                END as year,
+                -- Determine program from matric number
+                CASE 
+                    WHEN u.matric_no LIKE 'CS%' THEN 'CS'
+                    WHEN u.matric_no LIKE 'IS%' THEN 'IS'
+                    WHEN u.matric_no LIKE 'SE%' THEN 'SE'
+                    WHEN u.matric_no LIKE 'IT%' THEN 'IT'
+                    ELSE 'CS'
+                END as program
+            FROM advisors a
+            JOIN users u ON a.student_id = u.id
+            WHERE a.advisor_id = ? AND u.role_id = (SELECT id FROM roles WHERE name = 'student')
+            ORDER BY u.full_name
+        ";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$advisor_id]);
+        $advisees = $stmt->fetchAll();
+        
+        // Calculate GPA and other fields for each advisee separately to avoid complex SQL
+        foreach ($advisees as &$advisee) {
+            // Get GPA calculation
+            $gpa_sql = "
+                SELECT AVG(
+                    CASE 
+                        WHEN total_marks >= 80 THEN 4.0
+                        WHEN total_marks >= 75 THEN 3.7
+                        WHEN total_marks >= 70 THEN 3.3
+                        WHEN total_marks >= 65 THEN 3.0
+                        WHEN total_marks >= 60 THEN 2.7
+                        WHEN total_marks >= 55 THEN 2.3
+                        WHEN total_marks >= 50 THEN 2.0
+                        WHEN total_marks >= 45 THEN 1.7
+                        WHEN total_marks >= 40 THEN 1.3
+                        ELSE 0.0
+                    END
+                ) as gpa
+                FROM (
+                    SELECT 
+                        COALESCE(
+                            (SELECT SUM(am.mark * ass.weight / 100) 
+                             FROM assessment_marks am 
+                             JOIN assessments ass ON am.assessment_id = ass.id 
+                             WHERE am.enrollment_id = e.id), 0
+                        ) + 
+                        COALESCE(
+                            (SELECT fem.mark * 0.6 FROM final_exam_marks fem WHERE fem.enrollment_id = e.id), 0
+                        ) as total_marks
+                    FROM enrollments e 
+                    WHERE e.student_id = ?
+                ) as course_marks
+            ";
+            
+            $gpa_stmt = $pdo->prepare($gpa_sql);
+            $gpa_stmt->execute([$advisee['id']]);
+            $gpa_result = $gpa_stmt->fetch();
+            $advisee['gpa'] = (float) ($gpa_result['gpa'] ?? 0.0);
+            
+            // Get last meeting date
+            $meeting_sql = "SELECT MAX(created_at) as lastMeeting FROM advisor_notes WHERE advisor_id = ? AND student_id = ?";
+            $meeting_stmt = $pdo->prepare($meeting_sql);
+            $meeting_stmt->execute([$advisor_id, $advisee['id']]);
+            $meeting_result = $meeting_stmt->fetch();
+            $advisee['lastMeeting'] = $meeting_result['lastMeeting'] ?? '2024-01-01';
+            $advisee['lastMeetingType'] = 'Academic Review';
+        }
+        
+        // Calculate status based on GPA and bottom 20% logic
+        $advisee_count = count($advisees);
+        $bottom_20_percent_count = max(1, ceil($advisee_count * 0.2)); // At least 1 student
+        
+        // Sort advisees by GPA to find bottom 20%
+        $sorted_by_gpa = $advisees;
+        usort($sorted_by_gpa, function($a, $b) {
+            return $a['gpa'] <=> $b['gpa']; // Sort ascending (lowest first)
+        });
+        
+        // Get the GPA threshold for bottom 20%
+        $bottom_20_threshold = $advisee_count > 0 ? $sorted_by_gpa[$bottom_20_percent_count - 1]['gpa'] : 0.0;
+        
+        foreach ($advisees as &$advisee) {
+            // At-risk if GPA < 2.0 OR in bottom 20%
+            $is_low_gpa = $advisee['gpa'] < 2.0;
+            $is_bottom_20 = $advisee['gpa'] <= $bottom_20_threshold;
+            
+            if ($is_low_gpa || $is_bottom_20) {
+                $advisee['status'] = $advisee['gpa'] < 1.5 ? 'probation' : 'at-risk';
+                $advisee['isAtRisk'] = true;
+                $advisee['atRiskReason'] = [];
+                if ($is_low_gpa) {
+                    $advisee['atRiskReason'][] = 'GPA below 2.0';
+                }
+                if ($is_bottom_20) {
+                    $advisee['atRiskReason'][] = 'Bottom 20% performance';
+                }
+            } elseif ($advisee['gpa'] >= 3.5) {
+                $advisee['status'] = 'excellent';
+                $advisee['isAtRisk'] = false;
+                $advisee['atRiskReason'] = [];
+            } else {
+                $advisee['status'] = 'active';
+                $advisee['isAtRisk'] = false;
+                $advisee['atRiskReason'] = [];
+            }
+            
+            // Convert GPA to float and year to int
+            $advisee['gpa'] = (float) $advisee['gpa'];
+            $advisee['year'] = (int) $advisee['year'];
+        }
+        
         $response->getBody()->write(json_encode([
-            'total_users' => count($users),
-            'users' => $users
+            'success' => true,
+            'data' => $advisees
         ]));
         return $response->withHeader('Content-Type', 'application/json');
+        
     } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'message' => 'Failed to fetch advisees: ' . $e->getMessage()
+        ]));
         return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
     }
 });
 
-// Test endpoint to manually create a notification (for demonstration)
-$app->post('/test/create-notification', function (Request $request, Response $response) use ($pdo) {
-    $data = $request->getParsedBody();
-    
+// Get detailed performance data for a specific advisee
+$app->get('/advisors/{advisor_id}/advisees/{student_id}/performance', function (Request $request, Response $response, $args) use ($pdo) {
     try {
-        createNotification($pdo, $data['user_id'], $data['message']);
+        $advisor_id = $args['advisor_id'];
+        $student_id = $args['student_id'];
         
-        $response->getBody()->write(json_encode(['success' => true, 'message' => 'Notification created']));
+        // Verify this student is actually advised by this advisor
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM advisors WHERE advisor_id = ? AND student_id = ?');
+        $stmt->execute([$advisor_id, $student_id]);
+        if ($stmt->fetchColumn() == 0) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'error' => 'Student is not advised by this advisor'
+            ]));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Get student basic info
+        $stmt = $pdo->prepare('
+            SELECT 
+                u.id,
+                u.full_name as name,
+                u.matric_no as studentId,
+                u.email,
+                CASE 
+                    WHEN u.matric_no LIKE "%2021%" THEN 4
+                    WHEN u.matric_no LIKE "%2022%" THEN 3  
+                    WHEN u.matric_no LIKE "%2023%" THEN 2
+                    WHEN u.matric_no LIKE "%2024%" THEN 1
+                    ELSE 1
+                END as year,
+                CASE 
+                    WHEN u.matric_no LIKE "CS%" THEN "Computer Science"
+                    WHEN u.matric_no LIKE "IS%" THEN "Information Systems"
+                    WHEN u.matric_no LIKE "SE%" THEN "Software Engineering"
+                    WHEN u.matric_no LIKE "IT%" THEN "Information Technology"
+                    ELSE "Computer Science"
+                END as program
+            FROM users u
+            WHERE u.id = ?
+        ');
+        $stmt->execute([$student_id]);
+        $student = $stmt->fetch();
+        
+        if (!$student) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'error' => 'Student not found'
+            ]));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+          // Get course enrollments and marks
+        $stmt = $pdo->prepare('
+            SELECT 
+                c.code as course_code,
+                c.name as course_name,
+                3 as credit_hours,
+                "Current" as semester,
+                "2024/2025" as academic_year,
+                COALESCE(SUM(
+                    CASE 
+                        WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                        ELSE 0 
+                    END
+                ), 0) as assessment_total,
+                COALESCE((fem.mark / 100) * 30, 0) as final_exam_weighted,
+                COALESCE(fem.mark, 0) as final_exam_marks,
+                COALESCE(SUM(
+                    CASE 
+                        WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                        ELSE 0 
+                    END
+                ), 0) + COALESCE((fem.mark / 100) * 30, 0) as total_marks,
+                CASE 
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 80 THEN "A"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 75 THEN "A-"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 70 THEN "B+"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 65 THEN "B"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 60 THEN "B-"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 55 THEN "C+"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 50 THEN "C"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 45 THEN "C-"
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 40 THEN "D"
+                    ELSE "F"
+                END as grade,
+                CASE 
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 80 THEN 4.0
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 75 THEN 3.7
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 70 THEN 3.3
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 65 THEN 3.0
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 60 THEN 2.7
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 55 THEN 2.3
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 50 THEN 2.0
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 45 THEN 1.7
+                    WHEN (COALESCE(SUM(
+                        CASE 
+                            WHEN am.mark IS NOT NULL THEN ((am.mark / a.max_mark) * a.weight)
+                            ELSE 0 
+                        END
+                    ), 0) + COALESCE((fem.mark / 100) * 30, 0)) >= 40 THEN 1.3
+                    ELSE 0.0
+                END as grade_points
+            FROM enrollments e
+            JOIN courses c ON e.course_id = c.id
+            LEFT JOIN assessments a ON c.id = a.course_id
+            LEFT JOIN assessment_marks am ON e.id = am.enrollment_id AND a.id = am.assessment_id
+            LEFT JOIN final_exam_marks fem ON e.id = fem.enrollment_id
+            WHERE e.student_id = ?
+            GROUP BY c.id, c.code, c.name, fem.mark
+            ORDER BY c.code
+        ');
+        $stmt->execute([$student_id]);
+        $courses = $stmt->fetchAll();
+          // Get assessment breakdown for current courses
+        $assessments = [];
+        foreach ($courses as $course) {
+            $stmt = $pdo->prepare('
+                SELECT 
+                    a.name as assessment_name,
+                    "coursework" as assessment_type,
+                    a.max_mark as max_marks,
+                    a.weight as weightage,
+                    am.mark as marks_obtained
+                FROM assessments a
+                LEFT JOIN assessment_marks am ON a.id = am.assessment_id 
+                    AND am.enrollment_id = (
+                        SELECT e.id FROM enrollments e 
+                        WHERE e.student_id = ? AND e.course_id = a.course_id
+                    )
+                WHERE a.course_id = (SELECT id FROM courses WHERE code = ?)
+                ORDER BY a.name
+            ');
+            $stmt->execute([$student_id, $course['course_code']]);
+            $courseAssessments = $stmt->fetchAll();
+            
+            if ($courseAssessments) {
+                $assessments[$course['course_code']] = $courseAssessments;
+            }
+        }
+        
+        // Calculate overall GPA
+        $totalGradePoints = 0;
+        $totalCreditHours = 0;
+        foreach ($courses as $course) {
+            if ($course['total_marks'] !== null) {
+                $totalGradePoints += $course['grade_points'] * $course['credit_hours'];
+                $totalCreditHours += $course['credit_hours'];
+            }
+        }
+        $gpa = $totalCreditHours > 0 ? round($totalGradePoints / $totalCreditHours, 2) : 0;
+        
+        // Get recent meetings
+        $stmt = $pdo->prepare('
+            SELECT 
+                meeting_date,
+                meeting_time,
+                meeting_type,
+                notes,
+                status
+            FROM meetings
+            WHERE advisor_id = ? AND student_id = ?
+            ORDER BY meeting_date DESC, meeting_time DESC
+            LIMIT 5
+        ');
+        $stmt->execute([$advisor_id, $student_id]);
+        $recentMeetings = $stmt->fetchAll();
+        
+        $performanceData = [
+            'student' => $student,
+            'gpa' => $gpa,
+            'courses' => $courses,
+            'assessments' => $assessments,
+            'recent_meetings' => $recentMeetings,
+            'statistics' => [
+                'total_courses' => count($courses),
+                'completed_courses' => count(array_filter($courses, function($c) { return $c['total_marks'] !== null; })),
+                'total_credit_hours' => $totalCreditHours,
+                'average_marks' => $courses ? round(array_sum(array_column(array_filter($courses, function($c) { return $c['total_marks'] !== null; }), 'total_marks')) / count(array_filter($courses, function($c) { return $c['total_marks'] !== null; })), 2) : 0
+            ]
+        ];
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'data' => $performanceData
+        ]));
         return $response->withHeader('Content-Type', 'application/json');
+        
     } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => 'Failed to create notification: ' . $e->getMessage()]));
+        error_log("Error fetching advisee performance: " . $e->getMessage());
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => 'Failed to fetch performance data: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// ===================== MEETINGS MANAGEMENT =====================
+// Schedule a meeting between advisor and student
+$app->post('/advisors/{advisor_id}/meetings', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $data = $request->getParsedBody();
+        $advisor_id = $args['advisor_id'];
+        
+        // Validate required fields
+        if (!isset($data['student_id']) || !isset($data['meeting_date']) || !isset($data['meeting_time'])) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'error' => 'Missing required fields: student_id, meeting_date, and meeting_time are required'
+            ]));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Insert meeting record using separate date and time columns as per database schema
+        $stmt = $pdo->prepare('
+            INSERT INTO meetings (advisor_id, student_id, title, meeting_date, meeting_time, duration, location, meeting_type, meeting_link, agenda, notes, status) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ');
+        
+        $stmt->execute([
+            $advisor_id,
+            $data['student_id'],
+            $data['title'] ?? 'Advisor Meeting',
+            $data['meeting_date'],
+            $data['meeting_time'],
+            $data['duration'] ?? 60,
+            $data['location'] ?? '',
+            $data['meeting_type'] ?? 'academic',
+            $data['meeting_link'] ?? '',
+            $data['agenda'] ?? '',
+            $data['notes'] ?? '',
+            $data['status'] ?? 'scheduled'
+        ]);
+        
+        $meeting_id = $pdo->lastInsertId();
+        
+        // Get student info for notifications
+        $stmt = $pdo->prepare('SELECT full_name, email FROM users WHERE id = ?');
+        $stmt->execute([$data['student_id']]);
+        $student = $stmt->fetch();
+        
+        // Get advisor info
+        $stmt = $pdo->prepare('SELECT full_name FROM users WHERE id = ?');
+        $stmt->execute([$advisor_id]);
+        $advisor = $stmt->fetch();
+        
+        // Create notification for student
+        $meeting_datetime = $data['meeting_date'] . ' ' . $data['meeting_time'];
+        $notification_message = "Meeting scheduled with {$advisor['full_name']} on " . date('F j, Y \a\t g:i A', strtotime($meeting_datetime));
+        if (!empty($data['meeting_link'])) {
+            $notification_message .= ". Meeting link: {$data['meeting_link']}";
+        }
+        createNotification($pdo, $data['student_id'], $notification_message);
+        
+        // Log the activity
+        logSystemActivity($pdo, $advisor_id, "Scheduled meeting with student {$student['full_name']} for {$data['meeting_date']} at {$data['meeting_time']}");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'meeting_id' => $meeting_id,
+            'message' => 'Meeting scheduled successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        error_log("Error scheduling meeting: " . $e->getMessage());
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => 'Failed to schedule meeting: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Get all meetings for an advisor
+$app->get('/advisors/{advisor_id}/meetings', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $stmt = $pdo->prepare('
+            SELECT 
+                m.*,
+                u.full_name as student_name,
+                u.matric_no as student_id,
+                u.email as student_email,
+                CONCAT(m.meeting_date, " ", m.meeting_time) as meeting_datetime
+            FROM meetings m
+            JOIN users u ON m.student_id = u.id
+            WHERE m.advisor_id = ?
+            ORDER BY m.meeting_date DESC, m.meeting_time DESC
+        ');
+        $stmt->execute([$args['advisor_id']]);
+        $meetings = $stmt->fetchAll();
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'meetings' => $meetings
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => 'Failed to fetch meetings: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Update a meeting
+$app->put('/meetings/{meeting_id}', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $data = $request->getParsedBody();
+        $meeting_id = $args['meeting_id'];
+        
+        // Get current meeting data to validate ownership
+        $stmt = $pdo->prepare('SELECT advisor_id, student_id FROM meetings WHERE id = ?');
+        $stmt->execute([$meeting_id]);
+        $meeting = $stmt->fetch();
+        
+        if (!$meeting) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'error' => 'Meeting not found'
+            ]));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Update meeting record
+        $stmt = $pdo->prepare('
+            UPDATE meetings 
+            SET student_id = ?, title = ?, meeting_date = ?, meeting_time = ?, duration = ?, 
+                location = ?, meeting_type = ?, meeting_link = ?, agenda = ?, notes = ?, 
+                action_items = ?, status = ?
+            WHERE id = ?
+        ');
+        
+        $stmt->execute([
+            $data['student_id'] ?? $meeting['student_id'],
+            $data['title'] ?? 'Advisor Meeting',
+            $data['meeting_date'],
+            $data['meeting_time'],
+            $data['duration'] ?? 60,
+            $data['location'] ?? '',
+            $data['meeting_type'] ?? 'academic',
+            $data['meeting_link'] ?? '',
+            $data['agenda'] ?? '',
+            $data['notes'] ?? '',
+            $data['action_items'] ?? '',
+            $data['status'] ?? 'scheduled',
+            $meeting_id
+        ]);
+        
+        // Log the activity
+        logSystemActivity($pdo, $meeting['advisor_id'], "Updated meeting (ID: {$meeting_id})");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Meeting updated successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        error_log("Error updating meeting: " . $e->getMessage());
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => 'Failed to update meeting: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Delete a meeting
+$app->delete('/meetings/{meeting_id}', function (Request $request, Response $response, $args) use ($pdo) {
+    try {
+        $meeting_id = $args['meeting_id'];
+        
+        // Get meeting data to validate ownership and for logging
+        $stmt = $pdo->prepare('
+            SELECT m.advisor_id, m.student_id, m.meeting_date, m.meeting_time, u.full_name as student_name
+            FROM meetings m
+            JOIN users u ON m.student_id = u.id
+            WHERE m.id = ?
+        ');
+        $stmt->execute([$meeting_id]);
+        $meeting = $stmt->fetch();
+        
+        if (!$meeting) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'error' => 'Meeting not found'
+            ]));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+        
+        // Delete the meeting
+        $stmt = $pdo->prepare('DELETE FROM meetings WHERE id = ?');
+        $stmt->execute([$meeting_id]);
+        
+        // Log the activity
+        logSystemActivity($pdo, $meeting['advisor_id'], "Deleted meeting with {$meeting['student_name']} scheduled for {$meeting['meeting_date']} at {$meeting['meeting_time']}");
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Meeting deleted successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        error_log("Error deleting meeting: " . $e->getMessage());
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => 'Failed to delete meeting: ' . $e->getMessage()
+        ]));
         return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
     }
 });
 
 // Include student routes
 require __DIR__ . '/../src/routes/student.php';
-
-// Simple test endpoint for debugging
-$app->get('/test', function (Request $request, Response $response) {
-    $response->getBody()->write(json_encode(['message' => 'Backend is working!', 'timestamp' => date('Y-m-d H:i:s')]));
-    return $response->withHeader('Content-Type', 'application/json');
-});
-
-// ===================== ADMIN USER MANAGEMENT =====================
-// Get all users (Admin only)
-$app->get('/api/admin/users', function (Request $request, Response $response) use ($pdo) {
-    try {
-        $stmt = $pdo->query('
-            SELECT u.id, u.full_name as name, u.matric_no, u.staff_id, u.email, 
-                   r.name as role, u.created_at, u.status
-            FROM users u 
-            JOIN roles r ON u.role_id = r.id 
-            ORDER BY u.created_at DESC
-        ');
-        $users = $stmt->fetchAll();
-        
-        $response->getBody()->write(json_encode($users));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Create new user (Admin only)
-$app->post('/api/admin/users', function (Request $request, Response $response) use ($pdo) {
-    try {
-        $data = $request->getParsedBody();
-        
-        // Get role ID from role name
-        $stmt = $pdo->prepare('SELECT id FROM roles WHERE name = ?');
-        $stmt->execute([$data['role']]);
-        $role = $stmt->fetch();
-        
-        if (!$role) {
-            $response->getBody()->write(json_encode(['error' => 'Invalid role']));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Hash password
-        $hashedPassword = password_hash($data['password'], PASSWORD_DEFAULT);
-        
-        // Insert user based on role
-        if ($data['role'] === 'student') {
-            $stmt = $pdo->prepare('
-                INSERT INTO users (full_name, matric_no, email, password_hash, role_id) 
-                VALUES (?, ?, ?, ?, ?)
-            ');
-            $stmt->execute([$data['name'], $data['matric_no'], $data['email'], $hashedPassword, $role['id']]);
-        } else {
-            // For non-students, use staff_id (can be generated or provided)
-            $staff_id = isset($data['staff_id']) ? $data['staff_id'] : 'STAFF' . str_pad(rand(1000, 9999), 4, '0', STR_PAD_LEFT);
-            $stmt = $pdo->prepare('
-                INSERT INTO users (full_name, staff_id, email, password_hash, role_id) 
-                VALUES (?, ?, ?, ?, ?)
-            ');
-            $stmt->execute([$data['name'], $staff_id, $data['email'], $hashedPassword, $role['id']]);
-        }
-        
-        $userId = $pdo->lastInsertId();
-        logSystemActivity($pdo, $userId, 'User created by admin');
-        
-        $response->getBody()->write(json_encode(['success' => true, 'id' => $userId]));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Update user (Admin only)
-$app->put('/api/admin/users/{id}', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $data = $request->getParsedBody();
-        $userId = $args['id'];
-        
-        // Get role ID from role name
-        $stmt = $pdo->prepare('SELECT id FROM roles WHERE name = ?');
-        $stmt->execute([$data['role']]);
-        $role = $stmt->fetch();
-        
-        if (!$role) {
-            $response->getBody()->write(json_encode(['error' => 'Invalid role']));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        $stmt = $pdo->prepare('
-            UPDATE users 
-            SET full_name = ?, email = ?, role_id = ? 
-            WHERE id = ?
-        ');
-        $stmt->execute([$data['name'], $data['email'], $role['id'], $userId]);
-        
-        logSystemActivity($pdo, $userId, 'User updated by admin');
-        
-        $response->getBody()->write(json_encode(['success' => true]));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Toggle user status (Admin only) - Since there's no is_active column, we'll just return success
-$app->patch('/api/admin/users/{id}/status', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $userId = $args['id'];
-        
-        // For now, just log the action since there's no is_active column in the database
-        logSystemActivity($pdo, $userId, 'User status toggle requested by admin');
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'User status feature not yet implemented in database schema'
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Deactivate user (Admin only) - Actually update the user status to inactive
-$app->patch('/api/admin/users/{id}/deactivate', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $userId = $args['id'];
-        
-        // Check if the user exists and get current status
-        $stmt = $pdo->prepare('SELECT id, full_name, matric_no, staff_id, status FROM users WHERE id = ?');
-        $stmt->execute([$userId]);
-        $user = $stmt->fetch();
-        
-        if (!$user) {
-            $response->getBody()->write(json_encode(['error' => 'User not found']));
-            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-        }
-        
-        if ($user['status'] === 'inactive') {
-            $response->getBody()->write(json_encode(['error' => 'User is already inactive']));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Update user status to inactive
-        $stmt = $pdo->prepare('UPDATE users SET status = "inactive" WHERE id = ?');
-        $stmt->execute([$userId]);
-        
-        // Log the action
-        logSystemActivity($pdo, $userId, 'User deactivated by admin');
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'User deactivated successfully',
-            'user' => [
-                'id' => $user['id'],
-                'name' => $user['full_name'],
-                'identifier' => $user['matric_no'] ?: $user['staff_id'],
-                'status' => 'inactive'
-            ]
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Reactivate user (Admin only) - Update the user status back to active
-$app->patch('/api/admin/users/{id}/reactivate', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $userId = $args['id'];
-        
-        // Check if the user exists and get current status
-        $stmt = $pdo->prepare('SELECT id, full_name, matric_no, staff_id, status FROM users WHERE id = ?');
-        $stmt->execute([$userId]);
-        $user = $stmt->fetch();
-        
-        if (!$user) {
-            $response->getBody()->write(json_encode(['error' => 'User not found']));
-            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-        }
-        
-        if ($user['status'] === 'active') {
-            $response->getBody()->write(json_encode(['error' => 'User is already active']));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Update user status to active
-        $stmt = $pdo->prepare('UPDATE users SET status = "active" WHERE id = ?');
-        $stmt->execute([$userId]);
-        
-        // Log the action
-        logSystemActivity($pdo, $userId, 'User reactivated by admin');
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'User reactivated successfully',
-            'user' => [
-                'id' => $user['id'],
-                'name' => $user['full_name'],
-                'identifier' => $user['matric_no'] ?: $user['staff_id'],
-                'status' => 'active'
-            ]
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Reset user password (Admin only)
-// Set new password for user (admin)
-$app->put('/api/admin/users/{id}/password', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $userId = $args['id'];
-        $data = $request->getParsedBody();
-        
-        if (!isset($data['new_password']) || empty($data['new_password'])) {
-            $response->getBody()->write(json_encode(['error' => 'New password is required']));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        if (strlen($data['new_password']) < 6) {
-            $response->getBody()->write(json_encode(['error' => 'Password must be at least 6 characters long']));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Get user information for logging
-        $stmt = $pdo->prepare('SELECT full_name, email FROM users WHERE id = ?');
-        $stmt->execute([$userId]);
-        $user = $stmt->fetch();
-        
-        if (!$user) {
-            $response->getBody()->write(json_encode(['error' => 'User not found']));
-            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Hash the new password
-        $hashedPassword = password_hash($data['new_password'], PASSWORD_DEFAULT);
-        
-        // Update the password
-        $stmt = $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
-        $stmt->execute([$hashedPassword, $userId]);
-        
-        // Log the activity
-        logSystemActivity($pdo, $userId, "Password updated by admin for user: {$user['full_name']} ({$user['email']})");
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Password updated successfully'
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        error_log("Password update error: " . $e->getMessage());
-        $response->getBody()->write(json_encode(['error' => 'Failed to update password']));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Legacy reset-password endpoint (kept for backward compatibility)
-$app->post('/api/admin/users/{id}/reset-password', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $userId = $args['id'];
-        
-        // Generate a temporary password
-        $tempPassword = 'temp' . rand(1000, 9999);
-        $hashedPassword = password_hash($tempPassword, PASSWORD_DEFAULT);
-        
-        $stmt = $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
-        $stmt->execute([$hashedPassword, $userId]);
-        
-        logSystemActivity($pdo, $userId, 'Password reset by admin');
-        
-        // In a real system, you'd send an email here
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Password reset successful',
-            'temp_password' => $tempPassword // Remove this in production
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');    }
-});
-
-// Admin change own password
-$app->put('/api/admin/change-my-password', function (Request $request, Response $response) use ($pdo) {
-    try {
-        $data = $request->getParsedBody();
-        
-        if (!isset($data['current_password']) || !isset($data['new_password'])) {
-            $response->getBody()->write(json_encode(['error' => 'Current password and new password are required']));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        if (strlen($data['new_password']) < 6) {
-            $response->getBody()->write(json_encode(['error' => 'New password must be at least 6 characters long']));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // For this example, we'll use a simple session check
-        // In a real app, you'd get the user ID from the session/JWT token
-        // For now, let's assume we get it from a header or find the admin user
-          // Get admin user (assuming there's only one admin for this demo)
-        $stmt = $pdo->prepare('SELECT u.id, u.full_name, u.password_hash FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name = "admin" LIMIT 1');
-        $stmt->execute();
-        $admin = $stmt->fetch();
-        
-        if (!$admin) {
-            $response->getBody()->write(json_encode(['error' => 'Admin user not found']));
-            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Verify current password
-        if (!password_verify($data['current_password'], $admin['password_hash'])) {
-            $response->getBody()->write(json_encode(['error' => 'Current password is incorrect']));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Check if new password is different from current
-        if (password_verify($data['new_password'], $admin['password_hash'])) {
-            $response->getBody()->write(json_encode(['error' => 'New password must be different from current password']));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Hash the new password
-        $hashedPassword = password_hash($data['new_password'], PASSWORD_DEFAULT);
-        
-        // Update the password
-        $stmt = $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
-        $stmt->execute([$hashedPassword, $admin['id']]);
-        
-        // Log the activity
-        logSystemActivity($pdo, $admin['id'], "Admin {$admin['full_name']} changed their own password");
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Password changed successfully'
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        error_log("Admin password change error: " . $e->getMessage());
-        $response->getBody()->write(json_encode(['error' => 'Failed to change password']));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Get current admin info
-$app->get('/api/admin/current-admin', function (Request $request, Response $response) use ($pdo) {
-    try {
-        // Get admin user (assuming there's only one admin for this demo)
-        $stmt = $pdo->prepare('SELECT u.id, u.full_name, u.email FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name = "admin" LIMIT 1');
-        $stmt->execute();
-        $admin = $stmt->fetch();
-        
-        if (!$admin) {
-            $response->getBody()->write(json_encode(['error' => 'Admin user not found']));
-            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-        }
-          $response->getBody()->write(json_encode($admin));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        error_log("Get current admin error: " . $e->getMessage());
-        $response->getBody()->write(json_encode(['error' => 'Failed to get admin info']));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Delete user (Admin only)
-$app->delete('/api/admin/users/{id}', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $userId = $args['id'];
-        
-        // Get user information before deletion for logging
-        $stmt = $pdo->prepare('SELECT full_name, email, role_id FROM users WHERE id = ?');
-        $stmt->execute([$userId]);
-        $user = $stmt->fetch();
-        
-        if (!$user) {
-            $response->getBody()->write(json_encode(['error' => 'User not found']));
-            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Check if user has associated data that would prevent deletion
-        // Check enrollments
-        $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM enrollments WHERE student_id = ?');
-        $stmt->execute([$userId]);
-        $enrollmentCount = $stmt->fetch()['count'];
-        
-        // Check if user is assigned as lecturer to any courses
-        $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM courses WHERE lecturer_id = ?');
-        $stmt->execute([$userId]);
-        $courseCount = $stmt->fetch()['count'];
-        
-        if ($enrollmentCount > 0 || $courseCount > 0) {
-            $response->getBody()->write(json_encode([
-                'error' => 'Cannot delete user. User has associated enrollments or courses.'
-            ]));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Delete the user
-        $stmt = $pdo->prepare('DELETE FROM users WHERE id = ?');
-        $stmt->execute([$userId]);
-        
-        // Log the deletion
-        logSystemActivity($pdo, $userId, "User deleted by admin: {$user['full_name']} ({$user['email']})");
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'User deleted successfully'
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        error_log("User deletion error: " . $e->getMessage());
-        $response->getBody()->write(json_encode(['error' => 'Failed to delete user']));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// ===================== ADMIN COURSE MANAGEMENT =====================
-// Get all courses (admin view)
-$app->get('/api/admin/courses', function (Request $request, Response $response) use ($pdo) {
-    try {
-        $stmt = $pdo->query('SELECT c.*, u.full_name AS lecturer_name FROM courses c LEFT JOIN users u ON c.lecturer_id = u.id ORDER BY c.code');
-        $courses = $stmt->fetchAll();
-        
-        $response->getBody()->write(json_encode($courses));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Create new course (admin only)
-$app->post('/api/admin/courses', function (Request $request, Response $response) use ($pdo) {
-    try {
-        $data = $request->getParsedBody();
-        
-        $stmt = $pdo->prepare('INSERT INTO courses (code, name, lecturer_id, semester, year) VALUES (?, ?, ?, ?, ?)');
-        $stmt->execute([
-            $data['code'],
-            $data['name'],
-            $data['lecturer_id'] ?? null,
-            $data['semester'],
-            $data['year']
-        ]);
-        
-        $courseId = $pdo->lastInsertId();
-        
-        // Log the activity
-        logSystemActivity($pdo, 1, "Created course: {$data['code']} - {$data['name']}");
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Course created successfully',
-            'course_id' => $courseId
-        ]));
-        return $response->withStatus(201)->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Update course (admin only)
-$app->put('/api/admin/courses/{id}', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $courseId = $args['id'];
-        $data = $request->getParsedBody();
-        
-        $stmt = $pdo->prepare('UPDATE courses SET code = ?, name = ?, lecturer_id = ?, semester = ?, year = ? WHERE id = ?');
-        $stmt->execute([
-           
-            $data['code'],
-            $data['name'],
-            $data['lecturer_id'] ?? null,
-            $data['semester'],
-            $data['year'],
-            $courseId
-        ]);
-        
-        // Log the activity
-        logSystemActivity($pdo, 1, "Updated course ID: {$courseId}");
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Course updated successfully'
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Delete course (admin only)
-$app->delete('/api/admin/courses/{id}', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $courseId = $args['id'];
-        
-        // First check if course has enrollments
-        $stmt = $pdo->prepare('SELECT COUNT(*) as enrollment_count FROM enrollments WHERE course_id = ?');
-        $stmt->execute([$courseId]);
-        $result = $stmt->fetch();
-        
-        if ($result['enrollment_count'] > 0) {
-            $response->getBody()->write(json_encode([
-                'success' => false,
-                'message' => 'Cannot delete course with existing enrollments'
-            ]));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Get course details for logging
-        $stmt = $pdo->prepare('SELECT code, name FROM courses WHERE id = ?');
-        $stmt->execute([$courseId]);
-        $course = $stmt->fetch();
-        
-        if (!$course) {
-            $response->getBody()->write(json_encode([
-                'success' => false,
-                'message' => 'Course not found'
-            ]));
-            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Delete the course
-        $stmt = $pdo->prepare('DELETE FROM courses WHERE id = ?');
-        $stmt->execute([$courseId]);
-        
-        // Log the activity
-        logSystemActivity($pdo, 1, "Deleted course: {$course['code']} - {$course['name']}");
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Course deleted successfully'
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// ===================== ADMIN ENROLLMENT MANAGEMENT =====================
-// Get all enrollments (admin view)
-$app->get('/api/admin/enrollments', function (Request $request, Response $response) use ($pdo) {
-    try {
-        $stmt = $pdo->query('
-            SELECT e.*, 
-                   u.full_name AS student_name, u.matric_no, u.email,
-                   c.name as course_name, c.code as course_code, c.semester, c.year,
-                   l.full_name as lecturer_name,
-                   e.id as enrollment_id, e.created_at as enrollment_date
-            FROM enrollments e 
-            JOIN users u ON e.student_id = u.id 
-            JOIN courses c ON e.course_id = c.id
-            LEFT JOIN users l ON c.lecturer_id = l.id
-            ORDER BY e.created_at DESC
-        ');
-        $enrollments = $stmt->fetchAll();
-        
-        $response->getBody()->write(json_encode($enrollments));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Create new enrollment (admin only)
-$app->post('/api/admin/enrollments', function (Request $request, Response $response) use ($pdo) {
-    try {
-        $data = $request->getParsedBody();
-        
-        // Check if student is already enrolled in this course
-        $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM enrollments WHERE student_id = ? AND course_id = ?');
-        $stmt->execute([$data['student_id'], $data['course_id']]);
-        $result = $stmt->fetch();
-        
-        if ($result['count'] > 0) {
-            $response->getBody()->write(json_encode([
-                'success' => false,
-                'message' => 'Student is already enrolled in this course'
-            ]));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Create the enrollment
-        $stmt = $pdo->prepare('INSERT INTO enrollments (student_id, course_id, created_at) VALUES (?, ?, NOW())');
-        $stmt->execute([$data['student_id'], $data['course_id']]);
-        
-        $enrollmentId = $pdo->lastInsertId();
-        
-        // Get student and course names for logging
-        $stmt = $pdo->prepare('
-            SELECT u.full_name as student_name, c.code as course_code, c.name as course_name
-            FROM enrollments e
-            JOIN users u ON e.student_id = u.id
-            JOIN courses c ON e.course_id = c.id
-            WHERE e.id = ?
-        ');
-        $stmt->execute([$enrollmentId]);
-        $enrollmentInfo = $stmt->fetch();
-        
-        // Log the activity
-        logSystemActivity($pdo, 1, "Enrolled {$enrollmentInfo['student_name']} in {$enrollmentInfo['course_code']} - {$enrollmentInfo['course_name']}");
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Student enrolled successfully',
-            'enrollment_id' => $enrollmentId
-        ]));
-        return $response->withStatus(201)->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Delete enrollment (admin only)
-$app->delete('/api/admin/enrollments/{id}', function (Request $request, Response $response, $args) use ($pdo) {
-    try {
-        $enrollmentId = $args['id'];
-        
-        // Get enrollment details for logging before deletion
-        $stmt = $pdo->prepare('
-            SELECT u.full_name as student_name, c.code as course_code, c.name as course_name
-            FROM enrollments e
-            JOIN users u ON e.student_id = u.id
-            JOIN courses c ON e.course_id = c.id
-            WHERE e.id = ?
-        ');
-        $stmt->execute([$enrollmentId]);
-        $enrollmentInfo = $stmt->fetch();
-        
-        if (!$enrollmentInfo) {
-            $response->getBody()->write(json_encode([
-                'success' => false,
-                'message' => 'Enrollment not found'
-            ]));
-            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Delete related records first
-        // 1. Delete assessment marks
-        $stmt = $pdo->prepare('DELETE FROM assessment_marks WHERE enrollment_id = ?');
-        $stmt->execute([$enrollmentId]);
-        
-        // 2. Delete final exam marks
-        $stmt = $pdo->prepare('DELETE FROM final_exam_marks WHERE enrollment_id = ?');
-        $stmt->execute([$enrollmentId]);
-        
-        // 3. Delete feedback remarks
-        $stmt = $pdo->prepare('DELETE FROM feedback_remarks WHERE enrollment_id = ?');
-        $stmt->execute([$enrollmentId]);
-        
-        // 4. Delete remark requests
-        $stmt = $pdo->prepare('DELETE FROM remark_requests WHERE enrollment_id = ?');
-        $stmt->execute([$enrollmentId]);
-        
-        // 5. Delete mark update notifications
-        $stmt = $pdo->prepare('DELETE FROM mark_update_notifications WHERE enrollment_id = ?');
-        $stmt->execute([$enrollmentId]);
-        
-        // 6. Finally delete the enrollment
-        $stmt = $pdo->prepare('DELETE FROM enrollments WHERE id = ?');
-        $stmt->execute([$enrollmentId]);
-        
-        // Log the activity
-        logSystemActivity($pdo, 1, "Unenrolled {$enrollmentInfo['student_name']} from {$enrollmentInfo['course_code']} - {$enrollmentInfo['course_name']}");
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Student unenrolled successfully'
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// ===== SYSTEM LOGS API ROUTES =====
-
-// Get system logs for admin dashboard
-$app->get('/api/admin/system-logs', function (Request $request, Response $response) use ($pdo) {
-    try {
-        // Get query parameters for filtering
-        $queryParams = $request->getQueryParams();
-        $activityType = $queryParams['type'] ?? '';
-        $dateFilter = $queryParams['date'] ?? '';
-        $limit = (int)($queryParams['limit'] ?? 50);
-        $offset = (int)($queryParams['offset'] ?? 0);
-
-        // Base query to get system logs with user information
-        $sql = "SELECT 
-                    sl.id,
-                    sl.created_at as timestamp,
-                    COALESCE(u.full_name, 'System') as user,
-                    sl.action as description,
-                    sl.user_id
-                FROM system_logs sl 
-                LEFT JOIN users u ON sl.user_id = u.id 
-                WHERE 1=1";
-        
-        $params = [];
-        
-        // Add date filter if provided
-        if ($dateFilter) {
-            $sql .= " AND DATE(sl.created_at) = ?";
-            $params[] = $dateFilter;
-        }
-        
-        // Add activity type filter based on action content
-        if ($activityType) {
-            switch ($activityType) {
-                case 'user':
-                    $sql .= " AND (sl.action LIKE '%user%' OR sl.action LIKE '%User%' OR sl.action LIKE '%login%' OR sl.action LIKE '%register%')";
-                    break;
-                case 'course':
-                    $sql .= " AND (sl.action LIKE '%course%' OR sl.action LIKE '%Course%')";
-                    break;
-                case 'enrollment':
-                    $sql .= " AND (sl.action LIKE '%enroll%' OR sl.action LIKE '%Enroll%')";
-                    break;
-                case 'grade':
-                    $sql .= " AND (sl.action LIKE '%grade%' OR sl.action LIKE '%mark%' OR sl.action LIKE '%Grade%' OR sl.action LIKE '%Mark%')";
-                    break;
-                case 'system':
-                    $sql .= " AND (sl.user_id IS NULL OR sl.action LIKE '%system%' OR sl.action LIKE '%System%' OR sl.action LIKE '%backup%')";
-                    break;
-            }
-        }
-        
-        // Order by most recent first
-        $sql .= " ORDER BY sl.created_at DESC";
-        
-        // Add pagination
-        $sql .= " LIMIT ? OFFSET ?";
-        $params[] = $limit;
-        $params[] = $offset;
-        
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-        $logs = $stmt->fetchAll();
-        
-        // Transform the data to match frontend expectations
-        $transformedLogs = array_map(function($log) {
-            // Determine activity type based on action description
-            $type = 'system'; // default
-            $action = strtolower($log['description']);
-            
-            if (strpos($action, 'user') !== false || strpos($action, 'login') !== false || strpos($action, 'register') !== false) {
-                $type = 'user';
-            } elseif (strpos($action, 'course') !== false) {
-                $type = 'course';
-            } elseif (strpos($action, 'enroll') !== false) {
-                $type = 'enrollment';
-            } elseif (strpos($action, 'grade') !== false || strpos($action, 'mark') !== false) {
-                $type = 'grade';
-            }
-            
-            // Determine status - for now, assume success unless indicated otherwise
-            $status = 'success';
-            if (strpos($action, 'failed') !== false || strpos($action, 'error') !== false) {
-                $status = 'error';
-            } elseif (strpos($action, 'warning') !== false || strpos($action, 'retry') !== false) {
-                $status = 'warning';
-            }
-            
-            return [
-                'id' => (int)$log['id'],
-                'timestamp' => $log['timestamp'],
-                'user' => $log['user'],
-                'type' => $type,
-                'description' => $log['description'],
-                'status' => $status,
-                'reviewed' => false // For now, all logs are unreviewed
-            ];
-        }, $logs);
-        
-        // Get total count for pagination
-        $countSql = "SELECT COUNT(*) as total FROM system_logs sl LEFT JOIN users u ON sl.user_id = u.id WHERE 1=1";
-        $countParams = [];
-        
-        if ($dateFilter) {
-            $countSql .= " AND DATE(sl.created_at) = ?";
-            $countParams[] = $dateFilter;
-        }
-        
-        if ($activityType) {
-            switch ($activityType) {
-                case 'user':
-                    $countSql .= " AND (sl.action LIKE '%user%' OR sl.action LIKE '%User%' OR sl.action LIKE '%login%' OR sl.action LIKE '%register%')";
-                    break;
-                case 'course':
-                    $countSql .= " AND (sl.action LIKE '%course%' OR sl.action LIKE '%Course%')";
-                    break;
-                case 'enrollment':
-                    $countSql .= " AND (sl.action LIKE '%enroll%' OR sl.action LIKE '%Enroll%')";
-                    break;
-                case 'grade':
-                    $countSql .= " AND (sl.action LIKE '%grade%' OR sl.action LIKE '%mark%' OR sl.action LIKE '%Grade%' OR sl.action LIKE '%Mark%')";
-                    break;
-                case 'system':
-                    $countSql .= " AND (sl.user_id IS NULL OR sl.action LIKE '%system%' OR sl.action LIKE '%System%' OR sl.action LIKE '%backup%')";
-                    break;
-            }
-        }
-        
-        $countStmt = $pdo->prepare($countSql);
-        $countStmt->execute($countParams);
-        $totalCount = $countStmt->fetch()['total'];
-        
-        $responseData = [
-            'success' => true,
-            'logs' => $transformedLogs,
-            'total' => (int)$totalCount,
-            'limit' => $limit,
-            'offset' => $offset
-        ];
-        
-        $response->getBody()->write(json_encode($responseData));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        error_log("System logs API error: " . $e->getMessage());
-        $response->getBody()->write(json_encode([
-            'success' => false,
-            'error' => 'Failed to fetch system logs: ' . $e->getMessage()
-        ]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Simple test route
-$app->get('/api/test', function (Request $request, Response $response) {
-    $response->getBody()->write(json_encode(['message' => 'API is working']));
-    return $response->withHeader('Content-Type', 'application/json');
-});
-
-// ===================== REMARK REQUESTS =====================
-// Get all remark requests for a student
-$app->get('/students/{student_id}/remark-requests', function (Request $request, Response $response, $args) use ($pdo) {
-    $studentId = $args['student_id'];
-    
-    try {
-        $stmt = $pdo->prepare('
-            SELECT 
-                rr.*,
-                a.name as assessment_name,
-                a.max_mark,
-                c.code as course_code,
-                c.name as course_name,
-                u.full_name as lecturer_name
-            FROM remark_requests rr
-            JOIN assessments a ON rr.assessment_id = a.id
-            JOIN enrollments e ON rr.enrollment_id = e.id
-            JOIN courses c ON e.course_id = c.id
-            JOIN users u ON c.lecturer_id = u.id
-            WHERE rr.student_id = ?
-            ORDER BY rr.created_at DESC
-        ');
-        $stmt->execute([$studentId]);
-        $requests = $stmt->fetchAll();
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'requests' => $requests
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Create a new remark request
-$app->post('/remark-requests', function (Request $request, Response $response) use ($pdo) {
-    $data = $request->getParsedBody();
-    
-    try {
-        // Validate required fields
-        if (!isset($data['student_id'], $data['assessment_id'], $data['justification'], $data['requested_mark'])) {
-            $response->getBody()->write(json_encode(['error' => 'Missing required fields']));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Get enrollment ID and current mark
-        $stmt = $pdo->prepare('
-            SELECT e.id as enrollment_id, am.mark as current_mark, c.lecturer_id, a.max_mark
-            FROM enrollments e
-            JOIN courses c ON e.course_id = c.id
-            JOIN assessments a ON a.course_id = c.id
-            LEFT JOIN assessment_marks am ON am.enrollment_id = e.id AND am.assessment_id = a.id
-            WHERE e.student_id = ? AND a.id = ?
-        ');
-        $stmt->execute([$data['student_id'], $data['assessment_id']]);
-        $enrollmentData = $stmt->fetch();
-        
-        if (!$enrollmentData) {
-            $response->getBody()->write(json_encode(['error' => 'Invalid assessment or enrollment not found']));
-            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Check if there's already a pending request for this assessment
-        $stmt = $pdo->prepare('
-            SELECT id FROM remark_requests 
-            WHERE student_id = ? AND assessment_id = ? AND status IN ("pending", "under_review")
-        ');
-        $stmt->execute([$data['student_id'], $data['assessment_id']]);
-        $existingRequest = $stmt->fetch();
-        
-        if ($existingRequest) {
-            $response->getBody()->write(json_encode(['error' => 'You already have a pending remark request for this assessment']));
-            return $response->withStatus(409)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Validate requested mark
-        if ($data['requested_mark'] > $enrollmentData['max_mark'] || $data['requested_mark'] < 0) {
-            $response->getBody()->write(json_encode(['error' => 'Requested mark must be between 0 and maximum mark']));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Create the remark request
-        $stmt = $pdo->prepare('
-            INSERT INTO remark_requests 
-            (student_id, enrollment_id, assessment_id, current_mark, requested_mark, justification, lecturer_id) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ');
-        $stmt->execute([
-            $data['student_id'],
-            $enrollmentData['enrollment_id'],
-            $data['assessment_id'],
-            $enrollmentData['current_mark'] ?? 0,
-            $data['requested_mark'],
-            $data['justification'],
-            $enrollmentData['lecturer_id']
-        ]);
-        
-        $requestId = $pdo->lastInsertId();
-        
-        // Create notification for lecturer
-        $stmt = $pdo->prepare('
-            SELECT a.name as assessment_name, c.code as course_code, u.full_name as student_name
-            FROM assessments a
-            JOIN courses c ON a.course_id = c.id
-            JOIN users u ON u.id = ?
-            WHERE a.id = ?
-        ');
-        $stmt->execute([$data['student_id'], $data['assessment_id']]);
-        $notificationData = $stmt->fetch();
-        
-        $message = "New remark request from {$notificationData['student_name']} for {$notificationData['assessment_name']} in {$notificationData['course_code']}";
-        createNotification($pdo, $enrollmentData['lecturer_id'], $message);
-        
-        // Create notification for student
-        createNotification($pdo, $data['student_id'], "Your remark request for {$notificationData['assessment_name']} has been submitted and is under review");
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'request_id' => $requestId,
-            'message' => 'Remark request submitted successfully'
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Update a remark request (student can edit pending requests)
-$app->put('/remark-requests/{id}', function (Request $request, Response $response, $args) use ($pdo) {
-    $requestId = $args['id'];
-    $data = $request->getParsedBody();
-    
-    try {
-        // Check if request exists and is editable
-        $stmt = $pdo->prepare('SELECT * FROM remark_requests WHERE id = ? AND status = "pending"');
-        $stmt->execute([$requestId]);
-        $existingRequest = $stmt->fetch();
-        
-        if (!$existingRequest) {
-            $response->getBody()->write(json_encode(['error' => 'Remark request not found or cannot be edited']));
-            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Validate student ownership
-        if ($existingRequest['student_id'] != $data['student_id']) {
-            $response->getBody()->write(json_encode(['error' => 'Unauthorized to edit this request']));
-            return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Update the request
-        $stmt = $pdo->prepare('
-            UPDATE remark_requests 
-            SET requested_mark = ?, justification = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        ');
-        $stmt->execute([$data['requested_mark'], $data['justification'], $requestId]);
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Remark request updated successfully'
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Cancel a remark request
-$app->delete('/remark-requests/{id}', function (Request $request, Response $response, $args) use ($pdo) {
-    $requestId = $args['id'];
-    $data = $request->getParsedBody();
-    
-    try {
-        // Check if request exists and is cancellable
-        $stmt = $pdo->prepare('SELECT * FROM remark_requests WHERE id = ? AND status IN ("pending", "under_review")');
-        $stmt->execute([$requestId]);
-        $existingRequest = $stmt->fetch();
-        
-        if (!$existingRequest) {
-            $response->getBody()->write(json_encode(['error' => 'Remark request not found or cannot be cancelled']));
-            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Validate student ownership
-        if ($existingRequest['student_id'] != $data['student_id']) {
-            $response->getBody()->write(json_encode(['error' => 'Unauthorized to cancel this request']));
-            return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Delete the request
-        $stmt = $pdo->prepare('DELETE FROM remark_requests WHERE id = ?');
-        $stmt->execute([$requestId]);
-        
-        // Notify lecturer about cancellation
-        createNotification($pdo, $existingRequest['lecturer_id'], "A remark request has been cancelled by the student");
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Remark request cancelled successfully'
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Get remark requests for lecturer to review
-$app->get('/lecturers/{lecturer_id}/remark-requests', function (Request $request, Response $response, $args) use ($pdo) {
-    $lecturerId = $args['lecturer_id'];
-    
-    try {
-        $stmt = $pdo->prepare('
-            SELECT 
-                rr.*,
-                a.name as assessment_name,
-                a.max_mark,
-                c.code as course_code,
-                c.name as course_name,
-                u.full_name as student_name,
-                u.matric_no as student_matric
-            FROM remark_requests rr
-            JOIN assessments a ON rr.assessment_id = a.id
-            JOIN enrollments e ON rr.enrollment_id = e.id
-            JOIN courses c ON e.course_id = c.id
-            JOIN users u ON rr.student_id = u.id
-            WHERE rr.lecturer_id = ?
-            ORDER BY rr.created_at DESC
-        ');
-        $stmt->execute([$lecturerId]);
-        $requests = $stmt->fetchAll();
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'requests' => $requests
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Lecturer responds to remark request
-$app->post('/remark-requests/{id}/respond', function (Request $request, Response $response, $args) use ($pdo) {
-    $requestId = $args['id'];
-    $data = $request->getParsedBody();
-    
-    try {
-        // Validate required fields
-        if (!isset($data['status'], $data['lecturer_response'])) {
-            $response->getBody()->write(json_encode(['error' => 'Status and response are required']));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Validate status
-        if (!in_array($data['status'], ['approved', 'rejected', 'under_review'])) {
-            $response->getBody()->write(json_encode(['error' => 'Invalid status']));
-            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Get the request
-        $stmt = $pdo->prepare('SELECT * FROM remark_requests WHERE id = ?');
-        $stmt->execute([$requestId]);
-        $remarkRequest = $stmt->fetch();
-        
-        if (!$remarkRequest) {
-            $response->getBody()->write(json_encode(['error' => 'Remark request not found']));
-            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Validate lecturer ownership
-        if ($remarkRequest['lecturer_id'] != $data['lecturer_id']) {
-            $response->getBody()->write(json_encode(['error' => 'Unauthorized to respond to this request']));
-            return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
-        }
-        
-        // Start transaction
-        $pdo->beginTransaction();
-        
-        // Update the request
-        $stmt = $pdo->prepare('
-            UPDATE remark_requests 
-            SET status = ?, lecturer_response = ?, reviewed_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        ');
-        $stmt->execute([$data['status'], $data['lecturer_response'], $requestId]);
-        
-        // If approved, update the actual mark
-        if ($data['status'] === 'approved') {
-            $stmt = $pdo->prepare('
-                UPDATE assessment_marks 
-                SET mark = ? 
-                WHERE enrollment_id = ? AND assessment_id = ?
-            ');
-            $stmt->execute([
-                $remarkRequest['requested_mark'],
-                $remarkRequest['enrollment_id'],
-                $remarkRequest['assessment_id']
-            ]);
-            
-            // Create notification for mark update
-            $stmt = $pdo->prepare('
-                SELECT a.name as assessment_name, c.code as course_code
-                FROM assessments a
-                JOIN courses c ON a.course_id = c.id
-                WHERE a.id = ?
-            ');
-            $stmt->execute([$remarkRequest['assessment_id']]);
-            $assessmentInfo = $stmt->fetch();
-            
-            $message = "Your remark request for {$assessmentInfo['assessment_name']} in {$assessmentInfo['course_code']} has been approved. Your mark has been updated to {$remarkRequest['requested_mark']}.";
-        } else {
-            $message = "Your remark request has been {$data['status']}. Please check the lecturer's response for details.";
-        }
-        
-        // Create notification for student
-        createNotification($pdo, $remarkRequest['student_id'], $message);
-        
-        $pdo->commit();
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Response submitted successfully'
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
-
-// Get student's courses with assessment details for remark request form
-$app->get('/students/{student_id}/courses-with-assessments', function (Request $request, Response $response, $args) use ($pdo) {
-    $studentId = $args['student_id'];
-    
-    try {
-        $stmt = $pdo->prepare('
-            SELECT 
-                c.id as course_id,
-                c.code,
-                c.name as course_name,
-                a.id as assessment_id,
-                a.name as assessment_name,
-                a.max_mark,
-                am.mark as current_mark
-            FROM enrollments e
-            JOIN courses c ON e.course_id = c.id
-            JOIN assessments a ON a.course_id = c.id
-            LEFT JOIN assessment_marks am ON am.enrollment_id = e.id AND am.assessment_id = a.id
-            WHERE e.student_id = ? AND am.mark IS NOT NULL
-            ORDER BY c.code, a.name
-        ');
-        $stmt->execute([$studentId]);
-        $results = $stmt->fetchAll();
-        
-        // Group by course
-        $courses = [];
-        foreach ($results as $row) {
-            $courseId = $row['course_id'];
-            if (!isset($courses[$courseId])) {
-                $courses[$courseId] = [
-                    'id' => $courseId,
-                    'code' => $row['code'],
-                    'name' => $row['course_name'],
-                    'assessments' => []
-                ];
-            }
-            
-            $courses[$courseId]['assessments'][] = [
-                'id' => $row['assessment_id'],
-                'name' => $row['assessment_name'],
-                'max_mark' => $row['max_mark'],
-                'current_mark' => $row['current_mark']
-            ];
-        }
-        
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'courses' => array_values($courses)
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
-        
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode(['error' => 'Database error: ' . $e->getMessage()]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-});
 
 $app->run();

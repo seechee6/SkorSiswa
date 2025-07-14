@@ -259,9 +259,8 @@ export default {
             user_name: activity.user || activity.user_name,
             created_at: activity.created_at || activity.timestamp
           }));
-        } catch (logError) {
-          // If system logs endpoint not available, create some activity from recent users
-          this.recentActivity = this.recentUsers.slice(0, 5).map((user, index) => ({
+        } catch (logError) {          // If system logs endpoint not available, create some activity from recent users
+          this.recentActivity = this.recentUsers.slice(0, 5).map((user) => ({
             id: `user-${user.id}`,
             type: 'user',
             description: `User ${user.name} registered`,
