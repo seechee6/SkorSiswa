@@ -1716,4 +1716,319 @@ $app->delete('/meetings/{meeting_id}', function (Request $request, Response $res
 // Include student routes
 require __DIR__ . '/../src/routes/student.php';
 
+// ===========================================
+// SETUP AND UTILITY ENDPOINTS
+// ===========================================
+
+// Database setup endpoint - creates meetings table and advisor relationships
+$app->post('/setup/meetings', function (Request $request, Response $response) use ($pdo) {
+    try {
+        // Create meetings table
+        $pdo->exec("CREATE TABLE IF NOT EXISTS meetings (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            advisor_id INT NOT NULL,
+            student_id INT NOT NULL,
+            title VARCHAR(255) NOT NULL DEFAULT 'Advisor Meeting',
+            meeting_date DATE NOT NULL,
+            meeting_time TIME NOT NULL,
+            duration INT DEFAULT 60,
+            location VARCHAR(255) DEFAULT '',
+            meeting_type ENUM('academic', 'career', 'personal', 'crisis', 'routine') DEFAULT 'academic',
+            status ENUM('scheduled', 'completed', 'cancelled', 'rescheduled') DEFAULT 'scheduled',
+            agenda TEXT,
+            notes TEXT,
+            action_items TEXT,
+            next_meeting_date DATE NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            
+            FOREIGN KEY (advisor_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+            
+            INDEX idx_advisor_id (advisor_id),
+            INDEX idx_student_id (student_id),
+            INDEX idx_meeting_date (meeting_date),
+            INDEX idx_status (status)
+        )");
+
+        // Ensure advisors table exists
+        $pdo->exec("CREATE TABLE IF NOT EXISTS advisors (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            advisor_id INT NOT NULL,
+            student_id INT NOT NULL,
+            assigned_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            
+            UNIQUE KEY unique_advisor_student (advisor_id, student_id),
+            FOREIGN KEY (advisor_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
+        )");
+
+        // Insert test advisor-student relationships
+        $pdo->exec("INSERT IGNORE INTO advisors (advisor_id, student_id) VALUES 
+        (10, 4),
+        (10, 5), 
+        (10, 6)");
+
+        // Insert sample meetings for testing
+        $pdo->exec("INSERT IGNORE INTO meetings (advisor_id, student_id, title, meeting_date, meeting_time, meeting_type, status, agenda) VALUES
+        (10, 4, 'Academic Progress Review', '2024-12-25', '10:00:00', 'academic', 'scheduled', 'Review semester progress and plan for next semester'),
+        (10, 4, 'Career Planning Session', '2024-12-30', '14:00:00', 'career', 'scheduled', 'Discuss internship opportunities and career goals'),
+        (10, 5, 'Check-in Meeting', '2024-12-27', '11:00:00', 'routine', 'scheduled', 'Regular student check-in and support')");
+
+        // Get sample data
+        $stmt = $pdo->query("SELECT m.id, u1.full_name as advisor, u2.full_name as student, m.title, m.meeting_date, m.status 
+                            FROM meetings m
+                            JOIN users u1 ON m.advisor_id = u1.id
+                            JOIN users u2 ON m.student_id = u2.id
+                            LIMIT 5");
+        $sampleMeetings = $stmt->fetchAll();
+
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Meetings table and advisor relationships setup completed successfully',
+            'sample_meetings' => $sampleMeetings
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => 'Setup failed: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Insert semester 2 test data endpoint
+$app->post('/setup/semester2-data', function (Request $request, Response $response) use ($pdo) {
+    try {
+        // Check what students exist
+        $stmt = $pdo->query("SELECT id, full_name, matric_no FROM users WHERE role_id = (SELECT id FROM roles WHERE name = 'student') LIMIT 3");
+        $students = $stmt->fetchAll();
+        
+        // Define semester 2 courses
+        $semester2Courses = [
+            ['code' => 'CSC2103', 'name' => 'Data Structures and Algorithms', 'credits' => 3],
+            ['code' => 'CSC2203', 'name' => 'Object-Oriented Programming', 'credits' => 4],
+            ['code' => 'CSC2303', 'name' => 'Database Systems', 'credits' => 3],
+            ['code' => 'MAT2101', 'name' => 'Discrete Mathematics', 'credits' => 3],
+            ['code' => 'ENG2101', 'name' => 'Technical Writing', 'credits' => 2]
+        ];
+        
+        $insertedCourses = [];
+        $enrollmentCount = 0;
+        
+        // Get or create courses
+        foreach ($semester2Courses as $courseData) {
+            // Check if course exists
+            $stmt = $pdo->prepare("SELECT id FROM courses WHERE code = ?");
+            $stmt->execute([$courseData['code']]);
+            $course = $stmt->fetch();
+            
+            if (!$course) {
+                // Create course with lecturer_id = 2 (assuming lecturer exists)
+                $stmt = $pdo->prepare("INSERT INTO courses (code, name, semester, year, lecturer_id) VALUES (?, ?, 'Semester 2', '2024/2025', 2)");
+                $stmt->execute([$courseData['code'], $courseData['name']]);
+                $courseId = $pdo->lastInsertId();
+                $insertedCourses[] = $courseData['code'];
+            } else {
+                $courseId = $course['id'];
+            }
+            
+            // Enroll students in semester 2 courses
+            foreach ($students as $student) {
+                // Check if enrollment exists
+                $stmt = $pdo->prepare("SELECT id FROM enrollments WHERE student_id = ? AND course_id = ?");
+                $stmt->execute([$student['id'], $courseId]);
+                $enrollment = $stmt->fetch();
+                
+                if (!$enrollment) {
+                    // Create enrollment
+                    $stmt = $pdo->prepare("INSERT INTO enrollments (student_id, course_id) VALUES (?, ?)");
+                    $stmt->execute([$student['id'], $courseId]);
+                    $enrollmentId = $pdo->lastInsertId();
+                    $enrollmentCount++;
+                } else {
+                    $enrollmentId = $enrollment['id'];
+                }
+                
+                // Create sample assessments for semester 2
+                $assessments = [
+                    ['name' => 'Assignment 1', 'max_marks' => 20, 'weightage' => 15],
+                    ['name' => 'Assignment 2', 'max_marks' => 20, 'weightage' => 15],
+                    ['name' => 'Mid-term Test', 'max_marks' => 30, 'weightage' => 20],
+                    ['name' => 'Project', 'max_marks' => 30, 'weightage' => 20]
+                ];
+                
+                foreach ($assessments as $assessment) {
+                    // Check if assessment exists
+                    $stmt = $pdo->prepare("SELECT id FROM assessments WHERE course_id = ? AND name = ?");
+                    $stmt->execute([$courseId, $assessment['name']]);
+                    $existingAssessment = $stmt->fetch();
+                    
+                    if (!$existingAssessment) {
+                        // Create assessment
+                        $stmt = $pdo->prepare("INSERT INTO assessments (course_id, name, max_mark, weight) VALUES (?, ?, ?, ?)");
+                        $stmt->execute([$courseId, $assessment['name'], $assessment['max_marks'], $assessment['weightage']]);
+                        $assessmentId = $pdo->lastInsertId();
+                    } else {
+                        $assessmentId = $existingAssessment['id'];
+                    }
+                    
+                    // Generate realistic marks (70-95% performance)
+                    $performance = 0.7 + (mt_rand() / mt_getrandmax()) * 0.25; // 70%-95%
+                    $studentMark = round($assessment['max_marks'] * $performance, 1);
+                    
+                    // Insert or update student marks
+                    $stmt = $pdo->prepare("
+                        INSERT INTO assessment_marks (enrollment_id, assessment_id, mark) 
+                        VALUES (?, ?, ?) 
+                        ON DUPLICATE KEY UPDATE mark = VALUES(mark)
+                    ");
+                    $stmt->execute([$enrollmentId, $assessmentId, $studentMark]);
+                }
+                
+                // Add final exam marks
+                $finalExamPerformance = 0.65 + (mt_rand() / mt_getrandmax()) * 0.3; // 65%-95%
+                $finalExamMark = round(100 * $finalExamPerformance, 1);
+                
+                $stmt = $pdo->prepare("
+                    INSERT INTO final_exam_marks (enrollment_id, mark) 
+                    VALUES (?, ?) 
+                    ON DUPLICATE KEY UPDATE mark = VALUES(mark)
+                ");
+                $stmt->execute([$enrollmentId, $finalExamMark]);
+            }
+        }
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Semester 2 test data inserted successfully',
+            'students_processed' => count($students),
+            'courses_created' => $insertedCourses,
+            'enrollments_created' => $enrollmentCount
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => 'Semester 2 data setup failed: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Test meeting insert endpoint
+$app->post('/test/meeting-insert', function (Request $request, Response $response) use ($pdo) {
+    try {
+        // Test inserting a meeting with location
+        $stmt = $pdo->prepare('
+            INSERT INTO meetings (advisor_id, student_id, title, meeting_date, meeting_time, duration, location, meeting_type, meeting_link, agenda, notes, status) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ');
+        
+        $result = $stmt->execute([
+            10, // advisor_id
+            4,  // student_id
+            'Test Meeting',
+            '2025-06-27',
+            '10:00:00',
+            60,
+            'Office Room 123', // location
+            'academic',
+            'https://zoom.us/j/test',
+            'Test agenda',
+            'Test notes',
+            'scheduled'
+        ]);
+        
+        if ($result) {
+            $meetingId = $pdo->lastInsertId();
+            
+            // Fetch it back to verify
+            $stmt = $pdo->prepare('SELECT * FROM meetings WHERE id = ?');
+            $stmt->execute([$meetingId]);
+            $meeting = $stmt->fetch();
+            
+            $response->getBody()->write(json_encode([
+                'success' => true,
+                'message' => 'Meeting inserted successfully',
+                'meeting_id' => $meetingId,
+                'meeting_data' => [
+                    'title' => $meeting['title'],
+                    'location' => $meeting['location'],
+                    'meeting_link' => $meeting['meeting_link'],
+                    'duration' => $meeting['duration']
+                ]
+            ]));
+        } else {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'message' => 'Failed to insert meeting'
+            ]));
+            return $response->withStatus(500);
+        }
+        
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => 'Meeting test failed: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
+// Add meeting_link column to meetings table endpoint
+$app->post('/setup/add-meeting-link', function (Request $request, Response $response) use ($pdo) {
+    try {
+        // Add meeting_link column if it doesn't exist
+        $sql = "ALTER TABLE meetings ADD COLUMN meeting_link VARCHAR(500) DEFAULT '' AFTER location";
+        
+        try {
+            $pdo->exec($sql);
+            $message = "Meeting link field added successfully.";
+            $columnAdded = true;
+        } catch (Exception $e) {
+            if (strpos($e->getMessage(), 'Duplicate column name') !== false) {
+                $message = "Meeting link field already exists.";
+                $columnAdded = false;
+            } else {
+                throw $e;
+            }
+        }
+
+        // Get updated table structure
+        $stmt = $pdo->query('DESCRIBE meetings');
+        $tableStructure = [];
+        while ($row = $stmt->fetch()) {
+            $tableStructure[] = [
+                'field' => $row['Field'],
+                'type' => $row['Type'],
+                'null' => $row['Null'],
+                'key' => $row['Key'],
+                'default' => $row['Default'],
+                'extra' => $row['Extra']
+            ];
+        }
+
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => $message,
+            'column_added' => $columnAdded,
+            'table_structure' => $tableStructure
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => 'Database update failed: ' . $e->getMessage()
+        ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+});
+
 $app->run();
